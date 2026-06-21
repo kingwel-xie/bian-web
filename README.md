@@ -90,42 +90,6 @@ data/
 
 `jobs.json` 是任务历史，可能包含抓取结果摘要；数据量会随任务数量增长。
 
-## 隐私和推送前检查
-
-不要提交这些内容：
-
-- `data/`
-- `email.env`
-- `.env`
-- `*.har`
-- `*.pem`
-- `*.key`
-- `*.p12`
-- `*.crt`
-- `*.db`
-- `*.sqlite`
-
-HAR 文件尤其敏感，可能包含浏览器请求里的 cookie、token 或会话字段。旧备份目录已移到项目外：
-
-```text
-/root/docker/bian-web-private-backups/.cleanup_backup_20260621_042454
-```
-
-SMTP 配置请复制示例文件再本地填写：
-
-```bash
-cp email.env.example email.env
-chmod 600 email.env
-```
-
-推送前建议执行：
-
-```bash
-find . -type f \( -name '*.har' -o -name '*.env' -o -name 'email.env' -o -name '*.pem' -o -name '*.key' -o -name '*.p12' -o -name '*.crt' \)
-```
-
-如果有真实密钥、邮箱授权码、HAR 文件，不要提交。
-
 ## 命令行抓取
 
 示例：
@@ -164,4 +128,3 @@ python3 send_exports_email.py --env-file email.env --dry-run
 ```
 
 确认无误后去掉 `--dry-run`。
-
