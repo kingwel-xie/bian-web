@@ -1,0 +1,9 @@
+{
+  "name": "binance-leaderboard-workflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automated Binance trading competition leaderboard capture and market-volume ratio workflow.",
+  "dependencies": {
+    "playwright": "^1.56.1"
+  }
+}

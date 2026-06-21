@@ -1,0 +1,16 @@
+*.har
+*.harf
+*.env
+email.env
+data/
+.cleanup_backup_*/
+__pycache__/
+.pytest_cache/
+.leaderboard_cache/
+.playwright-cli/
+node_modules/
+*.pyc
+*.png
+*.csv
+*.json
+!package.json

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Binance Leaderboard Capture</title>
+    <link rel="stylesheet" href="/css888/styles.css?v=20260621f" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">BINANCE LEADERBOARD CAPTURE</p>
+          <h1>纯抓榜任务台</h1>
+          <p class="subtitle">粘贴 Binance 活动 URL，自动发现 resourceId，抓取前 1000 名并在线预览。</p>
+        </div>
+      </header>
+
+      <section class="capture-card">
+        <form id="scrapeForm" class="capture-form">
+          <label>
+            <span>活动 URL</span>
+            <input name="url" required autocomplete="off" placeholder="https://www.binance.com/zh-CN/activity/trading-competition/..." />
+          </label>
+          <button type="submit">开始抓取 Top 1000</button>
+          <input name="browserWaitMs" type="hidden" value="30000" />
+          <input name="proxy" type="hidden" value="auto" />
+        </form>
+        <details class="search-fold">
+          <summary>昵称搜索</summary>
+          <div class="search-row">
+            <label class="nickname-search">
+              <span>昵称搜索</span>
+              <input id="nicknameSearch" name="nicknameSearch" autocomplete="off" placeholder="输入昵称关键词" />
+            </label>
+            <button id="nicknameSearchBtn" class="ghost" type="button">搜索昵称</button>
+          </div>
+        </details>
+        <div id="derivedBox" class="derived">粘贴活动 URL 后自动识别 spot/um 和 symbol。</div>
+      </section>
+
+      <section class="grid">
+        <section class="panel preview-panel">
+          <div class="current-task-bar">
+            <button id="rerunCurrentBtn" class="ghost" type="button">再次抓取当前任务</button>
+          </div>
+          <div class="panel-head">
+            <div>
+              <h2>在线预览</h2>
+              <p id="previewMeta">暂无数据。</p>
+            </div>
+            <div id="downloadLinks" class="downloads"></div>
+          </div>
+          <div id="deltaCharts" class="delta-charts"></div>
+          <div class="table-wrap">
+            <table>
+              <colgroup>
+                <col class="col-rank" />
+                <col class="col-nick" />
+                <col class="col-user" />
+                <col class="col-score" />
+                <col class="col-volume" />
+                <col class="col-delta" />
+                <col class="col-region" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th class="col-nick">Nickname</th>
+                  <th class="col-user">User ID</th>
+                  <th class="col-score">分数</th>
+                  <th class="col-volume">真实成交量</th>
+                  <th class="col-delta">增量</th>
+                  <th class="col-region">Region</th>
+                </tr>
+              </thead>
+              <tbody id="previewRows">
+                <tr><td colspan="7" class="empty">还没有抓取结果。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <details class="panel jobs-panel history-panel">
+          <summary>
+            <span>快捷任务</span>
+            <b id="jobCount">0</b>
+          </summary>
+          <div id="jobList" class="job-list"></div>
+        </details>
+      </section>
+    </main>
+
+    <script src="/css888/app.js?v=20260621f"></script>
+  </body>
+</html>

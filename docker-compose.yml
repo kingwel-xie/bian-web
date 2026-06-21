@@ -1,0 +1,13 @@
+services:
+  leaderboard:
+    build: .
+    image: binance-leaderboard-workflow:latest
+    network_mode: host
+    environment:
+      DATA_ROOT: /data
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "48234"
+    volumes:
+      - ./data:/data
+      - ./web:/app/web:ro
+    restart: unless-stopped
