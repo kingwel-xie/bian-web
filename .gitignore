@@ -27,3 +27,4 @@ email.env
 nul
 playwright.tgz
 
+*.cjs
