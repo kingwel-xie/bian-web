@@ -94,10 +94,13 @@ async function updateDerived() {
   try {
     const derived = inferFromUrl(url);
     state.activeQuery = { ...derived, url };
+    const formData = Object.fromEntries(new FormData(form).entries());
+    state.activeQuery = { ...derived, url, resourceId: formData.resourceId || undefined };
+    const rid = state.activeQuery.resourceId ? ` · ID ${state.activeQuery.resourceId}` : "";
     $("#derivedBox").innerHTML = `
       <strong>${escapeHtml(derived.market.toUpperCase())}</strong>
       <span>${escapeHtml(derived.symbol)}</span>
-      <span>Top 1000</span>
+      <span>Top 1000${escapeHtml(rid)}</span>
       <code>${escapeHtml(url)}</code>
     `;
   } catch (error) {
@@ -148,12 +151,15 @@ async function rerunQuickTask(job) {
   const inferred = inferFromUrl(url);
   const market = payload.market || inferred.market;
   const symbol = payload.symbol || inferred.symbol;
+  const resourceId = payload.resourceId || undefined;
   const form = $("#scrapeForm");
   form.elements.url.value = url;
+  if (form.elements.resourceId) form.elements.resourceId.value = resourceId || "";
   state.activeQuery = {
     market,
     symbol,
     url,
+    resourceId,
   };
   await updateDerived();
   await api("/api/scrape/jobs", {
@@ -162,6 +168,7 @@ async function rerunQuickTask(job) {
       url,
       market,
       symbol,
+      resourceId,
       browserWaitMs: 30000,
       proxy: "auto",
       mode: "scrape",
@@ -178,6 +185,7 @@ async function rerunCurrentTask() {
       url: state.activeQuery.url || undefined,
       market: state.activeQuery.market,
       symbol: state.activeQuery.symbol,
+      resourceId: state.activeQuery.resourceId || undefined,
       browserWaitMs: 30000,
       proxy: "auto",
       mode: "scrape",
@@ -197,6 +205,7 @@ function renderJobs(jobs) {
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/1000 rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
+    const idsText = progress.candidateResourceIds ? ` · ID [${progress.candidateResourceIds.join(", ")}]` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
     const url = normalizeTaskUrl(payload.url);
     return `
@@ -213,12 +222,12 @@ function renderJobs(jobs) {
         </div>
         <div class="progress">
           <div class="progress-line">
-            <span>${escapeHtml(progress.label || "等待进度")}${escapeHtml(pagesText)}${escapeHtml(rowsText)}</span>
+            <span>${escapeHtml(progress.label || "等待进度")}${escapeHtml(pagesText)}${escapeHtml(rowsText)}${escapeHtml(idsText)}</span>
             <b>${escapeHtml(percent)}%</b>
           </div>
           <div class="progress-track"><i style="width:${percent}%"></i></div>
         </div>
-        ${job.stderr && job.status === "failed" ? `<pre>${escapeHtml(job.stderr.slice(-900))}</pre>` : ""}
+        ${job.stderr && job.status === "failed" ? `<pre class="stderr">${escapeHtml(job.stderr.slice(-900))}</pre>` : ""}
       </article>
     `;
   }).join("") || `<div class="empty box">没有快捷任务。</div>`;
@@ -258,7 +267,7 @@ async function createScrapeJob(event) {
     $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
     return;
   }
-  state.activeQuery = { market: payload.market, symbol: payload.symbol, url: payload.url };
+  state.activeQuery = { market: payload.market, symbol: payload.symbol, url: payload.url, resourceId: payload.resourceId || undefined };
   await updateDerived();
   await api("/api/scrape/jobs", {
     method: "POST",
