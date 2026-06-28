@@ -1279,6 +1279,16 @@ def api_create_job() -> Response:
         return jsonify({"error": str(exc)}), 400
 
 
+@app.route("/api/jobs/<job_id>", methods=["DELETE"])
+def api_delete_job(job_id: str) -> Response:
+    jobs = load_jobs()
+    new_jobs = [job for job in jobs if job.get("id") != job_id]
+    if len(new_jobs) == len(jobs):
+        return jsonify({"error": "任务不存在"}), 404
+    save_jobs(new_jobs)
+    return jsonify({"ok": True})
+
+
 @app.get("/api/schedules")
 def api_schedules() -> Response:
     return jsonify({"schedules": load_schedules()})

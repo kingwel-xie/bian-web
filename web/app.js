@@ -133,10 +133,10 @@ function renderPreview(preview) {
   const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
   meta.textContent = `${preview.name || "leaderboard"} · rows ${preview.count || allRows.length || 0}${searchText} · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
   links.innerHTML = [
-    preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}" target="_blank" rel="noreferrer">下载 XLSX</a>` : "",
-    preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}" target="_blank" rel="noreferrer">下载 CSV</a>` : "",
-    preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}" target="_blank" rel="noreferrer">查看 JSON</a>` : "",
-    preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}" target="_blank" rel="noreferrer">Discovery</a>` : "",
+    preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
+    preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
+    preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
+    preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
   ].filter(Boolean).join("");
   charts.innerHTML = preview.delta?.combinedChartUrl ? `
     <figure>
@@ -273,6 +273,7 @@ function renderJobs(jobs) {
         <div class="job-actions">
           <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}" ${url ? "" : "disabled"}>再次抓取</button>
           <button class="ghost mini" type="button" data-preview="${escapeHtml(job.id)}" ${preview ? "" : "disabled"}>预览</button>
+          <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
         <div class="progress">
           <div class="progress-line">
@@ -296,6 +297,13 @@ function renderJobs(jobs) {
     button.addEventListener("click", async () => {
       const job = jobs.find((item) => item.id === button.dataset.rerun);
       if (job) await rerunQuickTask(job);
+    });
+  });
+  $("#jobList").querySelectorAll("[data-delete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!confirm("确认删除此快捷任务？")) return;
+      await api(`/api/jobs/${button.dataset.delete}`, { method: "DELETE" });
+      await loadJobs();
     });
   });
 }

@@ -197,6 +197,12 @@ button:disabled {
   font-size: 12px;
 }
 
+.mini.danger:hover {
+  border-color: var(--bad);
+  background: rgba(196, 81, 69, 0.12);
+  color: var(--bad);
+}
+
 .derived {
   display: flex;
   flex-wrap: wrap;
