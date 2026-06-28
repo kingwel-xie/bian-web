@@ -43,9 +43,14 @@ DEFAULT_BILL_URL = (
 )
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_TOP = 500
-DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080)
+DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
 DEFAULT_MARK_RANKS = (20, 50, 200)
 DELTA_RANGES = ((10, 25), (26, 50), (180, 200))
+
+RESOURCE_ID_CACHE_PATH = Path(".resource_id_cache.json")
+KNOWN_RESOURCE_IDS: dict[str, list[int]] = {
+    "futures-bill-challenge": [54211, 54210, 54212],
+}
 
 
 class ScriptError(RuntimeError):
@@ -249,7 +254,10 @@ function addCandidate(result, id, source) {
 }
 
 (async () => {
-  const launchOptions = { headless: true };
+  const launchOptions = {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors', '--disable-web-security'],
+  };
   if (proxy) launchOptions.proxy = { server: proxy };
   const browser = await chromium.launch(launchOptions);
   const context = await browser.newContext({
@@ -324,9 +332,10 @@ def discover_with_playwright(
     activities: dict[str, str],
     proxy: str | None,
     wait_ms: int,
+    timeout: float,
     quiet: bool,
 ) -> dict[str, dict[str, Any]]:
-    """Discover resource IDs with project Playwright first, then local CLI fallback."""
+    """Discover resource IDs: Node Playwright → playwright-cli → API fallback."""
     if not activities:
         return {}
     mode = os.environ.get("LEADERBOARD_DISCOVERY", "auto").strip().lower()
@@ -337,7 +346,11 @@ def discover_with_playwright(
             if mode in {"node", "playwright"}:
                 raise
             log(f"Node Playwright 发现失败，回退 playwright-cli：{exc}", quiet)
-    return discover_with_pwcli(activities, proxy, wait_ms, quiet)
+    try:
+        return discover_with_pwcli(activities, proxy, wait_ms, quiet)
+    except ScriptError as exc:
+        log(f"playwright-cli 发现失败，回退 API 发现：{exc}", quiet)
+    return discover_resource_ids_via_api(activities, proxy, timeout, quiet)
 
 
 def discover_with_node_playwright(
@@ -368,7 +381,6 @@ def discover_with_node_playwright(
             ["node", str(script_path)],
             cwd=script_dir,
             env=env,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=max(90, math.ceil(wait_ms / 1000) * len(activities) + 90),
@@ -380,12 +392,15 @@ def discover_with_node_playwright(
         except OSError:
             pass
 
+    stdout = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else completed.stdout
+    stderr = completed.stderr.decode("utf-8", errors="replace") if isinstance(completed.stderr, bytes) else completed.stderr
+
     if completed.returncode != 0:
-        raise ScriptError(completed.stderr.strip() or completed.stdout.strip())
+        raise ScriptError(stderr.strip() or stdout.strip())
     try:
-        items = json.loads(completed.stdout)
+        items = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise ScriptError(f"Node Playwright 输出不是 JSON：{completed.stdout[:500]}") from exc
+        raise ScriptError(f"Node Playwright 输出不是 JSON：{stdout[:500]}") from exc
 
     results: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -561,11 +576,95 @@ def collect_candidates(
             add_candidate(result, request_body.get("resourceId"), "user-group-eligibility request")
 
 
+def discover_resource_ids_via_api(
+    activities: dict[str, str],
+    proxy: str | None,
+    timeout: float,
+    quiet: bool,
+) -> dict[str, dict[str, Any]]:
+    cache = read_json(RESOURCE_ID_CACHE_PATH, {})
+    if not isinstance(cache, dict):
+        cache = {}
+
+    results: dict[str, dict[str, Any]] = {}
+    session = requests.Session()
+
+    for name, url in activities.items():
+        name = name.lower()
+        result: dict[str, Any] = {"name": name, "url": url, "title": None, "candidates": [], "events": [], "errors": []}
+
+        slug_match = re.search(r"trading-competition/([^/?]+)", url)
+        slug = slug_match.group(1) if slug_match else name
+        known_ids = KNOWN_RESOURCE_IDS.get(slug, [])
+        cached_ids: list[int] = cache.get(slug, [])
+        all_candidate_ids = list(dict.fromkeys(known_ids + cached_ids))
+
+        for resource_id in all_candidate_ids:
+            try:
+                payload = {
+                    "resourceId": resource_id,
+                    "leaderboardType": "USER",
+                    "pageIndex": 1,
+                    "pageSize": 10,
+                }
+                response = session.post(
+                    SUMMARY_LIST_ENDPOINT,
+                    headers=default_headers(url),
+                    json=payload,
+                    proxies=request_proxies(proxy),
+                    timeout=timeout,
+                )
+                data = response.json()
+                if api_success(data) and rows_from_payload(data):
+                    result["candidates"].append({"resourceId": resource_id, "source": "known/cached"})
+            except Exception:
+                continue
+
+        if not result["candidates"]:
+            log(f"{name}: 尝试扫描 resourceId 范围...", quiet)
+            for resource_id in range(54200, 54230):
+                try:
+                    payload = {
+                        "resourceId": resource_id,
+                        "leaderboardType": "USER",
+                        "pageIndex": 1,
+                        "pageSize": 10,
+                    }
+                    response = session.post(
+                        SUMMARY_LIST_ENDPOINT,
+                        headers=default_headers(url),
+                        json=payload,
+                        proxies=request_proxies(proxy),
+                        timeout=timeout,
+                    )
+                    data = response.json()
+                    if api_success(data) and rows_from_payload(data):
+                        result["candidates"].append({"resourceId": resource_id, "source": "scan"})
+                        break
+                except Exception:
+                    continue
+
+        found_ids = [c["resourceId"] for c in result["candidates"]]
+        if found_ids and slug:
+            cache[slug] = found_ids
+            write_json(RESOURCE_ID_CACHE_PATH, cache)
+
+        log(f"{name}: API 发现 resourceId={found_ids}", quiet)
+        results[name] = result
+
+    return results
+
+
 def shutil_which(command: str) -> str | None:
+    if os.name == "nt":
+        extensions = ("", ".exe", ".cmd", ".bat")
+    else:
+        extensions = ("",)
     for directory in os.environ.get("PATH", "").split(os.pathsep):
-        path = Path(directory) / command
-        if path.exists() and os.access(path, os.X_OK):
-            return str(path)
+        for ext in extensions:
+            path = Path(directory) / (command + ext)
+            if path.exists() and os.access(path, os.X_OK):
+                return str(path)
     return None
 
 
@@ -1183,6 +1282,7 @@ def main() -> int:
             activities,
             proxy=proxy,
             wait_ms=args.browser_wait_ms,
+            timeout=args.timeout,
             quiet=args.quiet,
         )
 

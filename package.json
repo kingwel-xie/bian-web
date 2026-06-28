@@ -4,6 +4,7 @@
   "private": true,
   "description": "Automated Binance trading competition leaderboard capture and market-volume ratio workflow.",
   "dependencies": {
-    "playwright": "^1.56.1"
+    "playwright": "1.35.1",
+    "playwright-core": "1.35.1"
   }
 }
