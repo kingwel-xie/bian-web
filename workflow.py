@@ -107,22 +107,23 @@ def updated_time_bj(meta: dict[str, Any]) -> datetime:
 def run_json(command: list[str], quiet: bool) -> Any:
     completed = subprocess.run(
         command,
-        text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
     )
-    if completed.stderr and not quiet:
-        print(completed.stderr, file=sys.stderr, end="" if completed.stderr.endswith("\n") else "\n")
+    stdout = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else completed.stdout or ""
+    stderr = completed.stderr.decode("utf-8", errors="replace") if isinstance(completed.stderr, bytes) else completed.stderr or ""
+    if stderr and not quiet:
+        print(stderr, file=sys.stderr, end="" if stderr.endswith("\n") else "\n")
     if completed.returncode != 0:
         raise ScriptError(
             f"命令失败：{' '.join(command)}\n"
-            + (completed.stderr.strip() or completed.stdout.strip())
+            + (stderr.strip() or stdout.strip())
         )
     try:
-        return json.loads(completed.stdout)
+        return json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise ScriptError(f"命令输出不是 JSON：{completed.stdout[:500]}") from exc
+        raise ScriptError(f"命令输出不是 JSON：{stdout[:500]}") from exc
 
 
 def snapshot_candidates(directory: Path, name: str, top: int) -> list[dict[str, Any]]:

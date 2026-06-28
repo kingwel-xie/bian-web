@@ -1163,12 +1163,16 @@ def scheduler_loop() -> None:
 @app.get("/css888")
 @app.get("/css888/")
 def index() -> Response:
-    return send_from_directory(app.static_folder, "index.html")
+    response = send_from_directory(app.static_folder, "index.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.get("/css888/<path:filename>")
 def css888_static(filename: str) -> Response:
-    return send_from_directory(app.static_folder, filename)
+    response = send_from_directory(app.static_folder, filename)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.get("/api/overview")
@@ -1287,6 +1291,31 @@ def api_delete_job(job_id: str) -> Response:
         return jsonify({"error": "任务不存在"}), 404
     save_jobs(new_jobs)
     return jsonify({"ok": True})
+
+
+@app.get("/api/jobs/<job_id>/preview")
+def api_job_preview(job_id: str) -> Response:
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    if job.get("status") != "completed":
+        return jsonify({"error": "任务未完成"}), 400
+    result = job.get("result")
+    if not isinstance(result, list) or not result:
+        return jsonify({"error": "没有预览数据"}), 400
+    item = result[0]
+    json_path = item.get("json")
+    if json_path:
+        try:
+            preview = scrape_preview_from_json(Path(str(json_path)), limit=1000)
+            payload = job.get("payload") or {}
+            preview["market"] = payload.get("market", "").upper()
+            preview["symbol"] = payload.get("symbol", "")
+            return jsonify(preview)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+    return jsonify({"error": "没有预览数据"}), 400
 
 
 @app.get("/api/schedules")

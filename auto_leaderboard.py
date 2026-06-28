@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import math
 import os
@@ -31,6 +32,11 @@ try:
     import requests
 except ImportError as exc:  # pragma: no cover - environment guard
     raise SystemExit("缺少依赖 requests，请先安装：python3 -m pip install requests") from exc
+
+if sys.platform == "win32":
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 SUMMARY_LIST_ENDPOINT = (
@@ -325,6 +331,12 @@ function addCandidate(result, id, source) {
 """
 
 
+def has_candidates(results: dict[str, dict[str, Any]]) -> bool:
+    return any(
+        item.get("candidates") for item in results.values() if isinstance(item, dict)
+    )
+
+
 def discover_with_playwright(
     activities: dict[str, str],
     proxy: str | None,
@@ -332,19 +344,25 @@ def discover_with_playwright(
     timeout: float,
     quiet: bool,
 ) -> dict[str, dict[str, Any]]:
-    """Discover resource IDs: project Playwright → playwright-cli → API fallback."""
+    """Discover resource IDs: Node Playwright → playwright-cli → API fallback."""
     if not activities:
         return {}
     mode = os.environ.get("LEADERBOARD_DISCOVERY", "auto").strip().lower()
     if mode in {"auto", "node", "playwright"} and node_playwright_available():
         try:
-            return discover_with_node_playwright(activities, proxy, wait_ms, quiet)
+            node_result = discover_with_node_playwright(activities, proxy, wait_ms, quiet)
+            if has_candidates(node_result):
+                return node_result
+            log("Node Playwright 未发现候选，回退 playwright-cli", quiet)
         except ScriptError as exc:
             if mode in {"node", "playwright"}:
                 raise
             log(f"Node Playwright 发现失败，回退 playwright-cli：{exc}", quiet)
     try:
-        return discover_with_pwcli(activities, proxy, wait_ms, quiet)
+        pwcli_result = discover_with_pwcli(activities, proxy, wait_ms, quiet)
+        if has_candidates(pwcli_result):
+            return pwcli_result
+        log("playwright-cli 未发现候选，回退 API 发现", quiet)
     except (ScriptError, PermissionError, OSError) as exc:
         log(f"playwright-cli 发现失败，回退 API 发现：{exc}", quiet)
     return discover_resource_ids_via_api(activities, proxy, timeout, quiet)
@@ -500,7 +518,6 @@ def run_pwcli(
         completed = subprocess.run(
             [pwcli, *args],
             env=env,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout,
@@ -510,12 +527,15 @@ def run_pwcli(
         if check:
             raise ScriptError(f"playwright-cli {' '.join(args)} 超时：{timeout}s") from exc
         return subprocess.CompletedProcess([pwcli, *args], returncode=124, stdout="", stderr=str(exc))
-    if check and completed.returncode != 0:
+    stdout = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else completed.stdout or ""
+    stderr = completed.stderr.decode("utf-8", errors="replace") if isinstance(completed.stderr, bytes) else completed.stderr or ""
+    result = subprocess.CompletedProcess(completed.args, completed.returncode, stdout, stderr)
+    if check and result.returncode != 0:
         raise ScriptError(
             f"playwright-cli {' '.join(args)} 失败：\n"
-            + (completed.stderr.strip() or completed.stdout.strip())
+            + (result.stderr.strip() or result.stdout.strip())
         )
-    return completed
+    return result
 
 
 def parse_growth_request_indexes(output: str) -> list[tuple[int, str]]:

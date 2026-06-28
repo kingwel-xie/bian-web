@@ -52,59 +52,59 @@
     </div>
   </div>
 <script>
-const params = new URLSearchParams(location.search);
-const jobId = params.get("job");
-if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const jobId = params.get("job");
+  if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
 
-function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
+  function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
 
-async function load() {
-  const resp = await fetch("/api/jobs");
-  const data = await resp.json();
-  const jobs = data.jobs || [];
-  const job = jobs.find(j => j.id === jobId);
-  if (!job) { document.getElementById("meta").textContent = "任务不存在。"; return; }
+  try {
+    const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/preview");
+    const preview = await resp.json();
+    if (!resp.ok || preview.error) throw new Error(preview.error || "加载失败");
 
-  const result = Array.isArray(job.result) ? job.result[0] : null;
-  const preview = result?.preview || null;
-  if (!preview) { document.getElementById("meta").textContent = "没有预览数据。"; return; }
+    const allRows = preview.rows || [];
+    const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
+    const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
+    const marketSymbol = [preview.market, preview.symbol].filter(Boolean).join(" ");
+    const heading = marketSymbol || preview.name || "排行榜预览";
+    document.title = heading + " — 排行榜预览";
+    document.getElementById("title").textContent = heading;
+    document.getElementById("meta").textContent = `${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
 
-  const allRows = preview.rows || [];
-  const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
-  const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
-  document.getElementById("title").textContent = preview.name || "排行榜预览";
-  document.getElementById("meta").textContent = `${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
+    document.getElementById("downloadLinks").innerHTML = [
+      preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
+      preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
+      preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
+      preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
+    ].filter(Boolean).join("");
 
-  document.getElementById("downloadLinks").innerHTML = [
-    preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
-    preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
-    preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
-    preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
-  ].filter(Boolean).join("");
+    document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
+      <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
+      <figcaption>增量图 · 10-25 / 26-50 / 180-200</figcaption></figure>` : "";
 
-  document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
-    <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
-    <figcaption>增量图 · 10-25 / 26-50 / 180-200</figcaption></figure>` : "";
+    function render(query) {
+      const q = query.trim().toLowerCase();
+      const rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
+      document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
+        <tr><td class="rank">${escapeHtml(r.rank)}</td>
+        <td>${escapeHtml(r.nickname || "—")}</td>
+        <td>${escapeHtml(r.userId || "—")}</td>
+        <td class="num">${fmtNumber(r.grade)}</td>
+        <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
+        <td class="num">${r.deltaRestoredTradingVolume == null ? "—" : fmtNumber(r.deltaRestoredTradingVolume)}</td>
+        <td>${escapeHtml(r.region || "—")}</td></tr>
+      `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
+    }
+    render("");
 
-  function render(query) {
-    const q = query.trim().toLowerCase();
-    const rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
-    document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
-      <tr><td class="rank">${escapeHtml(r.rank)}</td>
-      <td>${escapeHtml(r.nickname || "—")}</td>
-      <td>${escapeHtml(r.userId || "—")}</td>
-      <td class="num">${fmtNumber(r.grade)}</td>
-      <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
-      <td class="num">${r.deltaRestoredTradingVolume == null ? "—" : fmtNumber(r.deltaRestoredTradingVolume)}</td>
-      <td>${escapeHtml(r.region || "—")}</td></tr>
-    `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
+    document.getElementById("searchInput").addEventListener("input", e => render(e.target.value));
+  } catch (err) {
+    document.getElementById("meta").textContent = err.message;
   }
-  render("");
-
-  document.getElementById("searchInput").addEventListener("input", e => render(e.target.value));
-}
-load().catch(err => { document.getElementById("meta").textContent = err.message; });
+})();
 </script>
 </body>
 </html>

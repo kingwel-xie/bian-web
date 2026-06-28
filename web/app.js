@@ -277,10 +277,16 @@ function bind() {
 async function boot() {
   bind();
   await updateDerived();
-  loadJobs().catch((error) => {
+  try {
+    await loadJobs();
+  } catch (error) {
     $("#jobList").innerHTML = `<div class="empty box">${escapeHtml(error.message)}</div>`;
-  });
-  state.pollTimer = setInterval(loadJobs, 5000);
+  }
+  state.pollTimer = setInterval(() => {
+    loadJobs().catch((error) => {
+      console.warn("loadJobs poll error:", error);
+    });
+  }, 5000);
 }
 
 boot().catch((error) => {
