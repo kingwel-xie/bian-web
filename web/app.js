@@ -1,7 +1,6 @@
 const state = {
   activeQuery: null,
   currentPreview: null,
-  nicknameQuery: "",
   pollTimer: null,
 };
 
@@ -106,69 +105,6 @@ async function updateDerived() {
   }
 }
 
-function previewFromJob(job) {
-  const result = Array.isArray(job.result) ? job.result[0] : null;
-  return result?.preview || null;
-}
-
-function renderPreview(preview) {
-  const meta = $("#previewMeta");
-  const links = $("#downloadLinks");
-  const charts = $("#deltaCharts");
-  const body = $("#previewRows");
-  state.currentPreview = preview;
-  if (!preview) {
-    meta.textContent = "暂无数据。";
-    links.innerHTML = "";
-    charts.innerHTML = "";
-    body.innerHTML = `<tr><td colspan="7" class="empty">还没有抓取结果。</td></tr>`;
-    return;
-  }
-
-  const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
-  const allRows = preview.rows || [];
-  const query = state.nicknameQuery.trim().toLowerCase();
-  const rows = query ? allRows.filter((row) => String(row.nickname || "").toLowerCase().includes(query)) : allRows;
-  const searchText = query ? ` · search "${state.nicknameQuery}" ${rows.length}/${allRows.length}` : "";
-  const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
-  meta.textContent = `${preview.name || "leaderboard"} · rows ${preview.count || allRows.length || 0}${searchText} · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
-  links.innerHTML = [
-    preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
-    preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
-    preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
-    preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
-  ].filter(Boolean).join("");
-  charts.innerHTML = preview.delta?.combinedChartUrl ? `
-    <figure>
-      <img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
-      <figcaption>增量图 · 10-25 / 26-50 / 180-200</figcaption>
-    </figure>
-  ` : "";
-
-  body.innerHTML = rows.map((row) => `
-    <tr>
-      <td class="rank">${escapeHtml(row.rank)}</td>
-      <td>${escapeHtml(row.nickname || "—")}</td>
-      <td>${escapeHtml(row.userId || "—")}</td>
-      <td class="num">${escapeHtml(fmtNumber(row.grade))}</td>
-      <td class="num">${escapeHtml(fmtNumber(row.restoredTradingVolume || row.tradingVolume))}</td>
-      <td class="num">${escapeHtml(row.deltaRestoredTradingVolume == null ? "—" : fmtNumber(row.deltaRestoredTradingVolume))}</td>
-      <td>${escapeHtml(row.region || "—")}</td>
-    </tr>
-  `).join("") || `<tr><td colspan="7" class="empty">${query ? "没有匹配昵称。" : "结果文件没有 rows。"}</td></tr>`;
-}
-
-async function loadLatestForActiveQuery() {
-  if (!state.activeQuery) return;
-  const query = new URLSearchParams({
-    market: state.activeQuery.market,
-    symbol: state.activeQuery.symbol,
-  });
-  if (state.activeQuery.label) query.set("label", state.activeQuery.label);
-  const payload = await api(`/api/scrape/latest?${query.toString()}`);
-  renderPreview(payload.result);
-}
-
 function normalizeTaskUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -256,7 +192,7 @@ function renderJobs(jobs) {
   $("#jobList").innerHTML = groups.slice(0, 20).map((group) => {
     const job = group.latest;
     const payload = job.payload || {};
-    const preview = previewFromJob(job);
+    const preview = null;
     const progress = job.progress || {};
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/1000 rows` : "";
@@ -272,7 +208,7 @@ function renderJobs(jobs) {
         </div>
         <div class="job-actions">
           <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}" ${url ? "" : "disabled"}>再次抓取</button>
-          <button class="ghost mini" type="button" data-preview="${escapeHtml(job.id)}" ${preview ? "" : "disabled"}>预览</button>
+          <button class="ghost mini" type="button" data-preview="${escapeHtml(job.id)}">预览</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
         <div class="progress">
@@ -289,8 +225,7 @@ function renderJobs(jobs) {
 
   $("#jobList").querySelectorAll("[data-preview]").forEach((button) => {
     button.addEventListener("click", () => {
-      const job = jobs.find((item) => item.id === button.dataset.preview);
-      renderPreview(previewFromJob(job));
+      window.open(`/preview.html?job=${button.dataset.preview}`, "_blank");
     });
   });
   $("#jobList").querySelectorAll("[data-rerun]").forEach((button) => {
@@ -311,14 +246,6 @@ function renderJobs(jobs) {
 async function loadJobs() {
   const payload = await api("/api/jobs");
   renderJobs(payload.jobs || []);
-}
-
-async function loadDefaultPreview() {
-  const payload = await api("/api/scrape/latest?market=um&symbol=REUSDT");
-  if (payload.result) {
-    state.activeQuery = { market: "um", symbol: "REUSDT", url: payload.result.url || "" };
-    renderPreview(payload.result);
-  }
 }
 
 async function createScrapeJob(event) {
@@ -345,24 +272,11 @@ function bind() {
   form.addEventListener("submit", createScrapeJob);
   form.addEventListener("input", updateDerived);
   form.addEventListener("change", updateDerived);
-  $("#nicknameSearchBtn").addEventListener("click", () => {
-    state.nicknameQuery = $("#nicknameSearch").value.trim();
-    renderPreview(state.currentPreview);
-  });
-  $("#nicknameSearch").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      state.nicknameQuery = event.currentTarget.value.trim();
-      renderPreview(state.currentPreview);
-    }
-  });
-  $("#rerunCurrentBtn").addEventListener("click", rerunCurrentTask);
 }
 
 async function boot() {
   bind();
   await updateDerived();
-  await loadDefaultPreview();
   loadJobs().catch((error) => {
     $("#jobList").innerHTML = `<div class="empty box">${escapeHtml(error.message)}</div>`;
   });

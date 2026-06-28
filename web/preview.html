@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>排行榜预览</title>
+<link rel="stylesheet" href="/css888/styles.css?v=20260621f" />
+<style>
+  body { padding: 14px; }
+  .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
+  .preview-head p { color: var(--muted); font-size: 12px; margin-top: 5px; }
+  .preview-meta { color: var(--muted); font-size: 12px; }
+  .delta-charts { display: grid; gap: 8px; margin-bottom: 10px; }
+  .delta-charts:empty { display: none; }
+  .delta-charts figure { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
+  .delta-charts img { display: block; width: 100%; max-height: 760px; object-fit: contain; background: #fffdf8; }
+  .delta-charts figcaption { border-top: 1px solid var(--line); padding: 6px 8px; color: var(--muted); font-size: 12px; }
+  table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
+  th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
+  th { position: sticky; top: 0; z-index: 1; background: #eee7d9; color: var(--accent); font-size: 12px; text-transform: uppercase; }
+  .col-rank { width: 56px; } .col-nick { width: 130px; } .col-user { width: 110px; }
+  .col-score { width: 100px; } .col-volume { width: 150px; } .col-delta { width: 130px; } .col-region { width: 80px; }
+  .rank { color: var(--accent-2); font-weight: 900; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; }
+  .downloads a { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 16px; cursor: pointer; font-weight: 900; font-size: 12px; text-decoration: none; }
+  .downloads a:hover { background: #e1f3f6; color: var(--accent-2); }
+  .err { color: var(--bad); font-weight: 900; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; }
+  #searchInput { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; color: var(--ink); padding: 0 12px; outline: none; font: inherit; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="panel" style="padding:14px">
+    <div class="preview-head">
+      <div>
+        <h2 style="font-size:18px;margin:0" id="title">排行榜预览</h2>
+        <p class="preview-meta" id="meta">加载中...</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="searchInput" placeholder="搜索昵称" />
+        <div class="downloads" id="downloadLinks"></div>
+      </div>
+    </div>
+    <div id="deltaCharts" class="delta-charts"></div>
+    <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
+      <table>
+        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
+        <thead><tr><th>#</th><th>Nickname</th><th>User ID</th><th>分数</th><th>真实成交量</th><th>增量</th><th>Region</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+<script>
+const params = new URLSearchParams(location.search);
+const jobId = params.get("job");
+if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
+
+function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
+
+async function load() {
+  const resp = await fetch("/api/jobs");
+  const data = await resp.json();
+  const jobs = data.jobs || [];
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) { document.getElementById("meta").textContent = "任务不存在。"; return; }
+
+  const result = Array.isArray(job.result) ? job.result[0] : null;
+  const preview = result?.preview || null;
+  if (!preview) { document.getElementById("meta").textContent = "没有预览数据。"; return; }
+
+  const allRows = preview.rows || [];
+  const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
+  const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
+  document.getElementById("title").textContent = preview.name || "排行榜预览";
+  document.getElementById("meta").textContent = `${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
+
+  document.getElementById("downloadLinks").innerHTML = [
+    preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
+    preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
+    preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
+    preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
+  ].filter(Boolean).join("");
+
+  document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
+    <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
+    <figcaption>增量图 · 10-25 / 26-50 / 180-200</figcaption></figure>` : "";
+
+  function render(query) {
+    const q = query.trim().toLowerCase();
+    const rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
+    document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
+      <tr><td class="rank">${escapeHtml(r.rank)}</td>
+      <td>${escapeHtml(r.nickname || "—")}</td>
+      <td>${escapeHtml(r.userId || "—")}</td>
+      <td class="num">${fmtNumber(r.grade)}</td>
+      <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
+      <td class="num">${r.deltaRestoredTradingVolume == null ? "—" : fmtNumber(r.deltaRestoredTradingVolume)}</td>
+      <td>${escapeHtml(r.region || "—")}</td></tr>
+    `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
+  }
+  render("");
+
+  document.getElementById("searchInput").addEventListener("input", e => render(e.target.value));
+}
+load().catch(err => { document.getElementById("meta").textContent = err.message; });
+</script>
+</body>
+</html>

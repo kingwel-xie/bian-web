@@ -240,26 +240,7 @@ button:disabled {
   padding: 10px;
 }
 
-.current-task-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.current-task-bar button {
-  min-height: 34px;
-  font-size: 12px;
-}
-
-.panel-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-#jobCount {
+.history-panel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -311,21 +292,6 @@ button:disabled {
 #previewMeta {
   margin-top: 5px;
   color: var(--muted);
-  font-size: 12px;
-}
-
-.downloads {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.downloads a {
-  min-height: 34px;
-  border: 1px solid var(--line);
-  background: #eee7d9;
-  color: var(--ink);
   font-size: 12px;
 }
 
@@ -490,54 +456,18 @@ td:nth-child(2) {
   text-overflow: ellipsis;
 }
 
-.delta-charts {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
-}
+@media (max-width: 980px) {
+  .hero {
+    display: grid;
+  }
 
-.delta-charts:empty {
-  display: none;
-}
+  .capture-form {
+    grid-template-columns: 1fr;
+  }
 
-.delta-charts figure {
-  min-width: 0;
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fffdf8;
-  overflow: hidden;
-}
-
-.delta-charts img {
-  display: block;
-  width: 100%;
-  max-height: 760px;
-  object-fit: contain;
-  background: #fffdf8;
-}
-
-.delta-charts figcaption {
-  border-top: 1px solid var(--line);
-  padding: 6px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.rank,
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
-.rank {
-  color: var(--accent-2);
-  font-weight: 900;
-}
-
-.num {
-  text-align: right;
+  .table-wrap {
+    max-height: 70vh;
+  }
 }
 
 .empty {
@@ -554,19 +484,4 @@ td:nth-child(2) {
 .err {
   color: var(--bad);
   font-weight: 900;
-}
-
-@media (max-width: 980px) {
-  .hero,
-  .panel-head {
-    display: grid;
-  }
-
-  .capture-form {
-    grid-template-columns: 1fr;
-  }
-
-  .table-wrap {
-    max-height: 70vh;
-  }
 }
