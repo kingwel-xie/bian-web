@@ -378,7 +378,6 @@ def discover_with_node_playwright(
             ["node", str(script_path)],
             cwd=script_dir,
             env=env,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=max(90, math.ceil(wait_ms / 1000) * len(activities) + 90),
@@ -390,12 +389,15 @@ def discover_with_node_playwright(
         except OSError:
             pass
 
+    stdout = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else completed.stdout or ""
+    stderr = completed.stderr.decode("utf-8", errors="replace") if isinstance(completed.stderr, bytes) else completed.stderr or ""
+
     if completed.returncode != 0:
-        raise ScriptError(completed.stderr.strip() or completed.stdout.strip())
+        raise ScriptError(stderr.strip() or stdout.strip())
     try:
-        items = json.loads(completed.stdout)
+        items = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise ScriptError(f"Node Playwright 输出不是 JSON：{completed.stdout[:500]}") from exc
+        raise ScriptError(f"Node Playwright 输出不是 JSON：{stdout[:500]}") from exc
 
     results: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -413,7 +415,6 @@ def node_playwright_available() -> bool:
     completed = subprocess.run(
         ["node", "-e", "require.resolve('playwright')"],
         cwd=script_dir,
-        text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=10,
