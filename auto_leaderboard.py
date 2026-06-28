@@ -348,7 +348,7 @@ def discover_with_playwright(
             log(f"Node Playwright 发现失败，回退 playwright-cli：{exc}", quiet)
     try:
         return discover_with_pwcli(activities, proxy, wait_ms, quiet)
-    except (ScriptError, PermissionError, OSError) as exc:
+    except ScriptError as exc:
         log(f"playwright-cli 发现失败，回退 API 发现：{exc}", quiet)
     return discover_resource_ids_via_api(activities, proxy, timeout, quiet)
 
