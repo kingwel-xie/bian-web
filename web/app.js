@@ -43,6 +43,13 @@ function formPayload(form) {
     if (data[key] === "") delete data[key];
   }
   delete data.nicknameSearch;
+  if (data.resourceId && !data.url) {
+    data.market = data.market || "um";
+    data.symbol = data.symbol || "manual";
+    data.mode = "scrape";
+    if (data.browserWaitMs) data.browserWaitMs = Number(data.browserWaitMs);
+    return data;
+  }
   const inferred = inferFromUrl(data.url);
   data.market = inferred.market;
   data.symbol = inferred.symbol;
@@ -86,11 +93,37 @@ function inferFromUrl(rawUrl) {
 
 async function updateDerived() {
   const form = $("#scrapeForm");
-  const url = new FormData(form).get("url");
-  if (!url) {
-    $("#derivedBox").textContent = "粘贴活动 URL 后自动识别 spot/um 和 symbol。";
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const url = formData.url;
+  const resourceId = formData.resourceId;
+  if (!url && !resourceId) {
+    $("#derivedBox").textContent = "粘贴活动 URL 或填写 Resource ID 开始。";
+    state.activeQuery = null;
     return;
   }
+  if (!url && resourceId) {
+    state.activeQuery = { market: "um", symbol: "manual", resourceId, url: "" };
+    $("#derivedBox").innerHTML = `
+      <strong>UM</strong>
+      <span>manual</span>
+      <span>Top 1000 · ID ${escapeHtml(resourceId)}</span>
+    `;
+    return;
+  }
+  try {
+    const derived = inferFromUrl(url);
+    state.activeQuery = { ...derived, url, resourceId: resourceId || undefined };
+    const rid = state.activeQuery.resourceId ? ` · ID ${state.activeQuery.resourceId}` : "";
+    $("#derivedBox").innerHTML = `
+      <strong>${escapeHtml(derived.market.toUpperCase())}</strong>
+      <span>${escapeHtml(derived.symbol)}</span>
+      <span>Top 1000${escapeHtml(rid)}</span>
+      <code>${escapeHtml(url)}</code>
+    `;
+  } catch (error) {
+    $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
+  }
+}
   try {
     const derived = inferFromUrl(url);
     state.activeQuery = { ...derived, url };
@@ -147,11 +180,11 @@ function groupQuickTasks(jobs) {
 async function rerunQuickTask(job) {
   const payload = job.payload || {};
   const url = payload.url || "";
-  if (!url) return;
-  const inferred = inferFromUrl(url);
+  const resourceId = payload.resourceId || undefined;
+  if (!url && !resourceId) return;
+  const inferred = url ? inferFromUrl(url) : { market: "um", symbol: "manual" };
   const market = payload.market || inferred.market;
   const symbol = payload.symbol || inferred.symbol;
-  const resourceId = payload.resourceId || undefined;
   const form = $("#scrapeForm");
   form.elements.url.value = url;
   if (form.elements.resourceId) form.elements.resourceId.value = resourceId || "";
