@@ -10,7 +10,15 @@
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
   .preview-head p { color: var(--muted); font-size: 12px; margin-top: 5px; }
   .preview-meta { color: var(--muted); font-size: 12px; }
-  .delta-charts { display: grid; gap: 8px; margin-bottom: 10px; }
+  .preview-body { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+  .stats-panel { flex: 0 0 340px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
+  .stats-panel h3 { margin: 0; padding: 10px 12px; font-size: 13px; background: #eee7d9; color: var(--accent); }
+  .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .stats-table th, .stats-table td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid rgba(46,42,36,0.08); }
+  .stats-table th { background: transparent; color: var(--muted); font-weight: 700; position: static; text-transform: none; }
+  .stats-table td.num { font-variant-numeric: tabular-nums; }
+  .chart-panel { flex: 1; min-width: 0; }
+  .delta-charts { display: grid; gap: 8px; }
   .delta-charts:empty { display: none; }
   .delta-charts figure { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
   .delta-charts img { display: block; width: 100%; max-height: 760px; object-fit: contain; background: #fffdf8; }
@@ -42,7 +50,18 @@
         <div class="downloads" id="downloadLinks"></div>
       </div>
     </div>
-    <div id="deltaCharts" class="delta-charts"></div>
+    <div class="preview-body">
+      <div class="stats-panel">
+        <h3>基础统计</h3>
+        <table class="stats-table">
+          <thead><tr><th>排名</th><th>人数</th><th>总成交量</th><th>均值</th></tr></thead>
+          <tbody id="statsBody"></tbody>
+        </table>
+      </div>
+      <div class="chart-panel">
+        <div id="deltaCharts" class="delta-charts"></div>
+      </div>
+    </div>
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
@@ -80,6 +99,35 @@
       preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
       preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
     ].filter(Boolean).join("");
+
+    function rangeStats(rows, ranges) {
+      return ranges.map(([label, min, max]) => {
+        const items = rows.filter(r => { const k = Number(r.rank); return k >= min && k <= max; });
+        const count = items.length;
+        const total = items.reduce((s, r) => s + (Number(r.restoredTradingVolume) || 0), 0);
+        const avg = count ? total / count : 0;
+        return { label, count, total, avg };
+      });
+    }
+
+    function fmtVolume(v) {
+      if (!Number.isFinite(v)) return "—";
+      if (v >= 100000000) return (v / 100000000).toFixed(2) + "B";
+      if (v >= 10000) return (v / 10000).toFixed(2) + "w";
+      return v.toFixed(2);
+    }
+
+    const ranges = [
+      ["1~5", 1, 5],
+      ["6~20", 6, 20],
+      ["21~50", 21, 50],
+      ["51~200", 51, 200],
+      ["201~1000", 201, 1000],
+    ];
+    const stats = rangeStats(allRows, ranges);
+    document.getElementById("statsBody").innerHTML = stats.map(s => `
+      <tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${fmtVolume(s.avg)}</td></tr>
+    `).join("");
 
     document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
       <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
