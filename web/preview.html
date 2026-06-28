@@ -17,7 +17,7 @@
   .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
   .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 22%; } .stats-table .c-count { width: 18%; } .stats-table .c-total { width: 30%; } .stats-table .c-avg { width: 30%; }
+  .stats-table .c-rank { width: 18%; } .stats-table .c-count { width: 14%; } .stats-table .c-total { width: 24%; } .stats-table .c-pct { width: 18%; } .stats-table .c-avg { width: 26%; }
   .chart-panel { min-width: 0; }
   .delta-charts { display: grid; gap: 8px; }
   .delta-charts:empty { display: none; }
@@ -55,8 +55,8 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-avg" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">均值</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-avg" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">均值</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -129,10 +129,11 @@
     const stats = rangeStats(allRows, ranges);
     const totalCount = allRows.length;
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.restoredTradingVolume) || 0), 0);
-    document.getElementById("statsBody").innerHTML = stats.map(s => `
-      <tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${fmtVolume(s.avg)}</td></tr>
-    `).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">—</td></tr>`;
+    document.getElementById("statsBody").innerHTML = stats.map(s => {
+      const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
+      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${fmtVolume(s.avg)}</td></tr>`;
+    }).join("") + `
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td></tr>`;
 
     document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
       <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
