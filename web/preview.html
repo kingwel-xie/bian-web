@@ -10,14 +10,15 @@
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
   .preview-head p { color: var(--muted); font-size: 12px; margin-top: 5px; }
   .preview-meta { color: var(--muted); font-size: 12px; }
-  .preview-body { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
-  .stats-panel { flex: 0 0 340px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
-  .stats-panel h3 { margin: 0; padding: 10px 12px; font-size: 13px; background: #eee7d9; color: var(--accent); }
+  .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+  .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; width: 67%; margin: 0 auto; }
+  .stats-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); }
   .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .stats-table th, .stats-table td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid rgba(46,42,36,0.08); }
-  .stats-table th { background: transparent; color: var(--muted); font-weight: 700; position: static; text-transform: none; }
-  .stats-table td.num { font-variant-numeric: tabular-nums; }
-  .chart-panel { flex: 1; min-width: 0; }
+  .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
+  .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
+  .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .stats-table .c-rank { width: 22%; } .stats-table .c-count { width: 18%; } .stats-table .c-total { width: 30%; } .stats-table .c-avg { width: 30%; }
+  .chart-panel { min-width: 0; }
   .delta-charts { display: grid; gap: 8px; }
   .delta-charts:empty { display: none; }
   .delta-charts figure { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
@@ -54,7 +55,8 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <thead><tr><th>排名</th><th>人数</th><th>总成交量</th><th>均值</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-avg" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">均值</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -125,9 +127,12 @@
       ["201~1000", 201, 1000],
     ];
     const stats = rangeStats(allRows, ranges);
+    const totalCount = allRows.length;
+    const totalVolume = allRows.reduce((s, r) => s + (Number(r.restoredTradingVolume) || 0), 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => `
       <tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${fmtVolume(s.avg)}</td></tr>
-    `).join("");
+    `).join("") + `
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">—</td></tr>`;
 
     document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
       <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
