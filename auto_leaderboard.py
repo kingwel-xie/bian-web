@@ -629,28 +629,8 @@ def discover_resource_ids_via_api(
                 continue
 
         if not result["candidates"]:
-            log(f"{name}: 尝试扫描 resourceId 范围...", quiet)
-            for resource_id in range(54200, 54230):
-                try:
-                    payload = {
-                        "resourceId": resource_id,
-                        "leaderboardType": "USER",
-                        "pageIndex": 1,
-                        "pageSize": 10,
-                    }
-                    response = session.post(
-                        SUMMARY_LIST_ENDPOINT,
-                        headers=default_headers(url),
-                        json=payload,
-                        proxies=request_proxies(proxy),
-                        timeout=timeout,
-                    )
-                    data = response.json()
-                    if api_success(data) and rows_from_payload(data):
-                        result["candidates"].append({"resourceId": resource_id, "source": "scan"})
-                        break
-                except Exception:
-                    continue
+            result["errors"].append(f"已知 ID {all_candidate_ids} 均无效，请手动指定 --resource-id 或提供 HAR 文件")
+            log(f"{name}: 没有找到可用 resourceId", quiet)
 
         found_ids = [c["resourceId"] for c in result["candidates"]]
         if found_ids and slug:
