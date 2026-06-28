@@ -93,7 +93,18 @@
     const heading = marketSymbol || preview.name || "排行榜预览";
     document.title = heading + " — 排行榜预览";
     document.getElementById("title").textContent = heading;
-    document.getElementById("meta").textContent = `${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum} · updated ${updated}`;
+    const eligibleVolume = preview.meta?.eligibleTradingVolume;
+    const eligibleText = eligibleVolume ? fmtNumber(eligibleVolume) : "—";
+    const totalUsers = preview.meta?.total;
+    document.getElementById("meta").innerHTML = `
+      <span style="font-weight:700;font-size:15px">${updated}</span>
+      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
+      <span style="font-size:15px">合格交易量 <b style="font-size:16px">${eligibleText}</b></span>
+      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
+      <span style="font-size:15px">合格用户 <b style="font-size:16px">${totalUsers ?? "—"}</b></span>
+      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
+      <span style="opacity:0.5;font-size:13px">${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum}</span>
+    `;
 
     document.getElementById("downloadLinks").innerHTML = [
       preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
