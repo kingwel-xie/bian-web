@@ -23,4 +23,7 @@ email.env
 *.csv
 *.xlsx
 *.log
+.chromium-temp/
+nul
+playwright.tgz
 

@@ -36,7 +36,7 @@ BJ = timezone(timedelta(hours=8))
 FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
-DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080)
+DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
 SCRAPE_TOP = 1000
 SCRAPE_PAGE_SIZE = 100
 SCRAPE_MARKETS = {"um", "spot"}
