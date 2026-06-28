@@ -36,7 +36,7 @@ BJ = timezone(timedelta(hours=8))
 FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
-DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
+DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080)
 SCRAPE_TOP = 1000
 SCRAPE_PAGE_SIZE = 100
 SCRAPE_MARKETS = {"um", "spot"}
@@ -1038,40 +1038,23 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
     process = subprocess.Popen(
         command,
         cwd=APP_DIR,
+        text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        bufsize=1,
     )
-
-    stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
-
-    def read_stream(stream, chunks, is_stderr=False):
-        for raw in iter(lambda: stream.read(4096), b""):
-            text = raw.decode("utf-8", errors="replace")
-            chunks.append(text)
-            if is_stderr:
-                stderr_tail = "".join(chunks)[-12000:]
-                update_job(
-                    job_id,
-                    stderr=stderr_tail,
-                    progress=progress_from_stderr(stderr_tail, "running"),
-                )
-
-    threads = []
-    if process.stdout:
-        t = threading.Thread(target=read_stream, args=(process.stdout, stdout_chunks, False), daemon=True)
-        t.start()
-        threads.append(t)
-    if process.stderr:
-        t = threading.Thread(target=read_stream, args=(process.stderr, stderr_chunks, True), daemon=True)
-        t.start()
-        threads.append(t)
-
+    assert process.stderr is not None
+    for line in process.stderr:
+        stderr_chunks.append(line)
+        stderr_tail = "".join(stderr_chunks)[-12000:]
+        update_job(
+            job_id,
+            stderr=stderr_tail,
+            progress=progress_from_stderr(stderr_tail, "running"),
+        )
+    stdout = process.stdout.read() if process.stdout is not None else ""
     return_code = process.wait()
-    for t in threads:
-        t.join(timeout=5)
-
-    stdout = "".join(stdout_chunks)
     stderr_text = "".join(stderr_chunks)
     result: Any = None
     if stdout.strip():

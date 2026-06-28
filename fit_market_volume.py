@@ -27,7 +27,7 @@ except ImportError as exc:
 
 
 BJ = timezone(timedelta(hours=8))
-DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
+DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080)
 FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 
 
