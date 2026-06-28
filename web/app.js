@@ -124,22 +124,6 @@ async function updateDerived() {
     $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
   }
 }
-  try {
-    const derived = inferFromUrl(url);
-    state.activeQuery = { ...derived, url };
-    const formData = Object.fromEntries(new FormData(form).entries());
-    state.activeQuery = { ...derived, url, resourceId: formData.resourceId || undefined };
-    const rid = state.activeQuery.resourceId ? ` · ID ${state.activeQuery.resourceId}` : "";
-    $("#derivedBox").innerHTML = `
-      <strong>${escapeHtml(derived.market.toUpperCase())}</strong>
-      <span>${escapeHtml(derived.symbol)}</span>
-      <span>Top 1000${escapeHtml(rid)}</span>
-      <code>${escapeHtml(url)}</code>
-    `;
-  } catch (error) {
-    $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
-  }
-}
 
 function normalizeTaskUrl(value) {
   const raw = String(value || "").trim();
