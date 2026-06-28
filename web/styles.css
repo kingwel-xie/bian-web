@@ -240,7 +240,7 @@ button:disabled {
   padding: 10px;
 }
 
-.history-panel {
+#jobCount {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -252,41 +252,18 @@ button:disabled {
   font-weight: 900;
 }
 
-.history-panel {
-  padding: 0;
-  overflow: hidden;
-}
-
-.history-panel summary {
+.jobs-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px;
-  cursor: pointer;
+  margin-bottom: 8px;
   font-weight: 900;
-  list-style: none;
 }
 
-.history-panel summary::-webkit-details-marker {
-  display: none;
-}
-
-.history-panel summary::before {
-  content: "展开";
-  border-radius: 999px;
-  background: #eee7d9;
-  color: var(--muted);
-  padding: 7px 10px;
-  font-size: 12px;
-}
-
-.history-panel[open] summary::before {
-  content: "收起";
-}
-
-.history-panel .job-list {
-  padding: 0 14px 14px;
+.job-list {
+  display: grid;
+  gap: 8px;
 }
 
 #previewMeta {
