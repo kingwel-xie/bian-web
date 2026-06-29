@@ -31,6 +31,7 @@
   .col-score { width: 100px; } .col-volume { width: 150px; } .col-delta { width: 130px; } .col-region { width: 80px; }
   .rank { color: var(--accent-2); font-weight: 900; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tl { text-align: left; }
   .downloads { display: flex; flex-wrap: wrap; gap: 8px; }
   .downloads a { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 16px; cursor: pointer; font-weight: 900; font-size: 12px; text-decoration: none; }
   .downloads a:hover { background: #e1f3f6; color: var(--accent-2); }
@@ -79,7 +80,7 @@
   if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
 
   function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
+  function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 
   try {
     const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/preview");
@@ -154,13 +155,13 @@
       const q = query.trim().toLowerCase();
       const rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
       document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
-        <tr><td class="rank">${escapeHtml(r.rank)}</td>
-        <td>${escapeHtml(r.nickname || "—")}</td>
-        <td>${escapeHtml(r.userId || "—")}</td>
+        <tr><td class="num">${escapeHtml(r.rank)}</td>
+        <td class="tl">${escapeHtml(r.nickname || "—")}</td>
+        <td class="tl">${escapeHtml(r.userId || "—")}</td>
         <td class="num">${fmtNumber(r.grade)}</td>
         <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
         <td class="num">${r.deltaRestoredTradingVolume == null ? "—" : fmtNumber(r.deltaRestoredTradingVolume)}</td>
-        <td>${escapeHtml(r.region || "—")}</td></tr>
+        <td class="num">${escapeHtml(r.region || "—")}</td></tr>
       `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
     }
     render("");
