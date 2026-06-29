@@ -1,7 +1,9 @@
 const state = {
-  activeQuery: null,
-  currentPreview: null,
+  currentUrl: null,
+  discoveredMarket: null,
+  discoveredSymbol: null,
   pollTimer: null,
+  editingJobId: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -32,30 +34,18 @@ async function api(path, options) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || response.statusText);
-  return payload;
-}
-
-function formPayload(form) {
-  const data = Object.fromEntries(new FormData(form).entries());
-  for (const key of Object.keys(data)) {
-    if (data[key] === "") delete data[key];
+  if (!response.ok) {
+    let errorText;
+    try {
+      const payload = await response.json();
+      errorText = payload.error || response.statusText;
+    } catch {
+      const body = await response.text().catch(() => "");
+      errorText = `HTTP ${response.status}: ${body.slice(0, 200)}`;
+    }
+    throw new Error(errorText);
   }
-  delete data.nicknameSearch;
-  if (data.resourceId && !data.url) {
-    data.market = data.market || "um";
-    data.symbol = data.symbol || "manual";
-    data.mode = "scrape";
-    if (data.browserWaitMs) data.browserWaitMs = Number(data.browserWaitMs);
-    return data;
-  }
-  const inferred = inferFromUrl(data.url);
-  data.market = inferred.market;
-  data.symbol = inferred.symbol;
-  if (data.browserWaitMs) data.browserWaitMs = Number(data.browserWaitMs);
-  data.mode = "scrape";
-  return data;
+  return await response.json();
 }
 
 function inferFromUrl(rawUrl) {
@@ -91,40 +81,6 @@ function inferFromUrl(rawUrl) {
   return { market, symbol: token.toUpperCase() };
 }
 
-async function updateDerived() {
-  const form = $("#scrapeForm");
-  const formData = Object.fromEntries(new FormData(form).entries());
-  const url = formData.url;
-  const resourceId = formData.resourceId;
-  if (!url && !resourceId) {
-    $("#derivedBox").textContent = "粘贴活动 URL 或填写 Resource ID 开始。";
-    state.activeQuery = null;
-    return;
-  }
-  if (!url && resourceId) {
-    state.activeQuery = { market: "um", symbol: "manual", resourceId, url: "" };
-    $("#derivedBox").innerHTML = `
-      <strong>UM</strong>
-      <span>manual</span>
-      <span>Top 1000 · ID ${escapeHtml(resourceId)}</span>
-    `;
-    return;
-  }
-  try {
-    const derived = inferFromUrl(url);
-    state.activeQuery = { ...derived, url, resourceId: resourceId || undefined };
-    const rid = state.activeQuery.resourceId ? ` · ID ${state.activeQuery.resourceId}` : "";
-    $("#derivedBox").innerHTML = `
-      <strong>${escapeHtml(derived.market.toUpperCase())}</strong>
-      <span>${escapeHtml(derived.symbol)}</span>
-      <span>Top 1000${escapeHtml(rid)}</span>
-      <code>${escapeHtml(url)}</code>
-    `;
-  } catch (error) {
-    $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
-  }
-}
-
 function normalizeTaskUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -138,55 +94,71 @@ function normalizeTaskUrl(value) {
   }
 }
 
-function quickTaskKey(job) {
-  const payload = job.payload || {};
-  const urlKey = normalizeTaskUrl(payload.url);
-  if (urlKey) return `url:${urlKey}`;
-  return `job:${job.id}`;
-}
-
-function groupQuickTasks(jobs) {
-  const groups = new Map();
-  for (const job of jobs) {
-    const key = quickTaskKey(job);
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        latest: job,
-        jobs: [],
-      });
-    }
-    groups.get(key).jobs.push(job);
+async function discoverResourceIds() {
+  const url = String($("#urlInput")?.value || "").trim();
+  if (!url) return;
+  state.currentUrl = url;
+  const discoverBtn = $("#discoverBtn");
+  const resultsEl = $("#discoveryResults");
+  discoverBtn.disabled = true;
+  discoverBtn.textContent = "发现中...";
+  resultsEl.innerHTML = `<div class="empty box">正在打开浏览器发现 resourceId...</div>`;
+  try {
+    const inferred = inferFromUrl(url);
+    state.discoveredMarket = inferred.market;
+    state.discoveredSymbol = inferred.symbol;
+    const result = await api("/api/discover", {
+      method: "POST",
+      body: JSON.stringify({ url, proxy: "auto", browserWaitMs: 30000 }),
+    });
+    renderDiscoveryCards(result, inferred);
+  } catch (error) {
+    resultsEl.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
+  } finally {
+    discoverBtn.disabled = false;
+    discoverBtn.textContent = "发现 resourceId";
   }
-  return [...groups.values()];
 }
 
-async function rerunQuickTask(job) {
-  const payload = job.payload || {};
-  const url = payload.url || "";
-  const resourceId = payload.resourceId || undefined;
-  if (!url && !resourceId) return;
-  const inferred = url ? inferFromUrl(url) : { market: "um", symbol: "manual" };
-  const market = payload.market || inferred.market;
-  const symbol = payload.symbol || inferred.symbol;
-  const form = $("#scrapeForm");
-  form.elements.url.value = url;
-  if (form.elements.resourceId) form.elements.resourceId.value = resourceId || "";
-  state.activeQuery = {
-    market,
-    symbol,
-    url,
-    resourceId,
-  };
-  await updateDerived();
+function renderDiscoveryCards(result, inferred) {
+  const candidates = result.candidates || [];
+  const title = result.title || "";
+  const el = $("#discoveryResults");
+  if (!candidates.length) {
+    el.innerHTML = `<div class="empty box">未发现 resourceId。</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="discovery-meta">
+      <strong>${escapeHtml(inferred.market.toUpperCase())}</strong>
+      <span>${escapeHtml(inferred.symbol)}</span>
+      ${title ? `<code>${escapeHtml(title)}</code>` : ""}
+    </div>
+    <div class="discovery-grid">
+      ${candidates.map((id) => `
+        <button class="discovery-card" data-rid="${escapeHtml(String(id))}">
+          <span class="dc-id">${escapeHtml(String(id))}</span>
+          <span class="dc-meta">${escapeHtml(inferred.market.toUpperCase())} · ${escapeHtml(inferred.symbol)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+  el.querySelectorAll(".discovery-card").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const rid = btn.dataset.rid;
+      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl);
+    });
+  });
+}
+
+async function startScrapeJob(resourceId, market, symbol, url) {
   await api("/api/scrape/jobs", {
     method: "POST",
     body: JSON.stringify({
-      url,
+      resourceId,
       market,
       symbol,
-      resourceId,
-      browserWaitMs: 30000,
+      url,
       proxy: "auto",
       mode: "scrape",
     }),
@@ -194,52 +166,54 @@ async function rerunQuickTask(job) {
   await loadJobs();
 }
 
-async function rerunCurrentTask() {
-  if (!state.activeQuery?.market || !state.activeQuery?.symbol) return;
-  await api("/api/scrape/jobs", {
-    method: "POST",
-    body: JSON.stringify({
-      url: state.activeQuery.url || undefined,
-      market: state.activeQuery.market,
-      symbol: state.activeQuery.symbol,
-      resourceId: state.activeQuery.resourceId || undefined,
-      browserWaitMs: 30000,
-      proxy: "auto",
-      mode: "scrape",
-    }),
-  });
-  await loadJobs();
+async function editJobName(jobId, currentName) {
+  const newName = prompt("编辑任务名称：", currentName);
+  if (!newName || newName === currentName) return;
+  try {
+    await api(`/api/jobs/${jobId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: newName }),
+    });
+    await loadJobs();
+  } catch (error) {
+    alert(`编辑失败：${error.message}`);
+  }
+}
+
+function groupJobs(jobs) {
+  return jobs.slice(0, 50);
 }
 
 function renderJobs(jobs) {
-  const groups = groupQuickTasks(jobs);
-  $("#jobCount").textContent = groups.length;
-  $("#jobList").innerHTML = groups.slice(0, 20).map((group) => {
-    const job = group.latest;
+  const list = groupJobs(jobs);
+  $("#jobCount").textContent = list.length;
+  $("#jobList").innerHTML = list.map((job) => {
     const payload = job.payload || {};
-    const preview = null;
     const progress = job.progress || {};
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/1000 rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
-    const idsText = progress.candidateResourceIds ? ` · ID [${progress.candidateResourceIds.join(", ")}]` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
     const url = normalizeTaskUrl(payload.url);
+    const jobName = job.name || payload.name || payload.resourceId || job.id;
     return `
       <article class="job ${statusClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
-          <strong>${escapeHtml((payload.market || "").toUpperCase())} ${escapeHtml(payload.symbol || "")} · ${escapeHtml(payload.name || "")}</strong>
-          <p>${escapeHtml(url || "无 URL")}</p>
-          <small>最新 ${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · finished ${escapeHtml(fmtTime(job.finishedAt))}` : ""} · 历史 ${group.jobs.length} 次</small>
+          <strong>
+            <span class="job-name" data-edit="${escapeHtml(job.id)}">${escapeHtml(String(jobName))}</span>
+          </strong>
+          <p>${escapeHtml(url || "无 URL")} · ${escapeHtml((payload.market || "").toUpperCase())} ${escapeHtml(payload.symbol || "")}</p>
+          <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""} · resourceId ${escapeHtml(String(payload.resourceId || ""))}</small>
         </div>
         <div class="job-actions">
-          <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}" ${url ? "" : "disabled"}>再次抓取</button>
+          <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>
           <button class="ghost mini" type="button" data-preview="${escapeHtml(job.id)}">预览</button>
+          <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">改名</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
         <div class="progress">
           <div class="progress-line">
-            <span>${escapeHtml(progress.label || "等待进度")}${escapeHtml(pagesText)}${escapeHtml(rowsText)}${escapeHtml(idsText)}</span>
+            <span>${escapeHtml(progress.label || "等待进度")}${escapeHtml(pagesText)}${escapeHtml(rowsText)}</span>
             <b>${escapeHtml(percent)}%</b>
           </div>
           <div class="progress-track"><i style="width:${percent}%"></i></div>
@@ -247,7 +221,7 @@ function renderJobs(jobs) {
         ${job.stderr && job.status === "failed" ? `<pre class="stderr">${escapeHtml(job.stderr.slice(-900))}</pre>` : ""}
       </article>
     `;
-  }).join("") || `<div class="empty box">没有快捷任务。</div>`;
+  }).join("") || `<div class="empty box">没有任务。</div>`;
 
   $("#jobList").querySelectorAll("[data-preview]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -257,12 +231,22 @@ function renderJobs(jobs) {
   $("#jobList").querySelectorAll("[data-rerun]").forEach((button) => {
     button.addEventListener("click", async () => {
       const job = jobs.find((item) => item.id === button.dataset.rerun);
-      if (job) await rerunQuickTask(job);
+      if (!job) return;
+      const p = job.payload || {};
+      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url);
+    });
+  });
+  $("#jobList").querySelectorAll("[data-rename]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const job = jobs.find((item) => item.id === button.dataset.rename);
+      if (!job) return;
+      const current = job.name || job.payload?.name || job.payload?.resourceId || job.id;
+      await editJobName(job.id, String(current));
     });
   });
   $("#jobList").querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (!confirm("确认删除此快捷任务？")) return;
+      if (!confirm("确认删除此任务？")) return;
       await api(`/api/jobs/${button.dataset.delete}`, { method: "DELETE" });
       await loadJobs();
     });
@@ -274,35 +258,18 @@ async function loadJobs() {
   renderJobs(payload.jobs || []);
 }
 
-async function createScrapeJob(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  let payload;
-  try {
-    payload = formPayload(form);
-  } catch (error) {
-    $("#derivedBox").innerHTML = `<span class="err">${escapeHtml(error.message)}</span>`;
-    return;
-  }
-  state.activeQuery = { market: payload.market, symbol: payload.symbol, url: payload.url, resourceId: payload.resourceId || undefined };
-  await updateDerived();
-  await api("/api/scrape/jobs", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  await loadJobs();
-}
-
 function bind() {
-  const form = $("#scrapeForm");
-  form.addEventListener("submit", createScrapeJob);
-  form.addEventListener("input", updateDerived);
-  form.addEventListener("change", updateDerived);
+  $("#discoverBtn").addEventListener("click", discoverResourceIds);
+  $("#urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      discoverResourceIds();
+    }
+  });
 }
 
 async function boot() {
   bind();
-  await updateDerived();
   try {
     await loadJobs();
   } catch (error) {

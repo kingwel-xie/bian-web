@@ -91,8 +91,7 @@
     const allRows = preview.rows || [];
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
     const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
-    const marketSymbol = [preview.market, preview.symbol].filter(Boolean).join(" ");
-    const heading = marketSymbol || preview.name || "排行榜预览";
+    const heading = preview.taskName || [preview.market, preview.symbol].filter(Boolean).join(" ") || preview.name || "排行榜预览";
     document.title = heading + " — 排行榜预览";
     document.getElementById("title").textContent = heading;
     const eligibleVolume = preview.meta?.eligibleTradingVolume;

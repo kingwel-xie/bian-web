@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import socket
@@ -41,7 +42,7 @@ SCRAPE_TOP = 1000
 SCRAPE_PAGE_SIZE = 100
 SCRAPE_MARKETS = {"um", "spot"}
 
-app = Flask(__name__, static_folder="web", static_url_path="")
+app = Flask(__name__, static_folder="web", static_url_path="/_static")
 state_lock = threading.Lock()
 live_states_lock = threading.Lock()
 live_kline_states: dict[tuple[str, int, str], dict[str, Any]] = {}
@@ -73,43 +74,24 @@ def normalize_scrape_market(raw_market: Any) -> str:
     return market
 
 
-def scrape_activity_url(market: str, token: str) -> str:
-    prefix = "futures" if market == "um" else "spot"
-    return (
-        "https://www.binance.com/zh-CN/activity/trading-competition/"
-        f"{prefix}-{token}-challenge?utm_source=appanns"
-    )
-
-
-def normalize_scrape_label(raw_label: Any) -> str | None:
-    label = str(raw_label or "").lower().strip()
-    if not label:
-        return None
-    label = re.sub(r"[^a-z0-9_-]+", "-", label).strip("-")
-    if not label:
-        return None
-    return label[:32]
 
 
 def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
     market = normalize_scrape_market(payload.get("market"))
     token, symbol = normalize_scrape_symbol(payload.get("symbol"))
-    label = normalize_scrape_label(payload.get("label") or payload.get("snapshotLabel"))
-    name = f"{market}_{token}_{label}" if label else f"{market}_{token}"
-    url = str(payload.get("url") or scrape_activity_url(market, token)).strip()
+    url = str(payload.get("url") or "").strip()
     resource_id = str(payload.get("resourceId") or "").strip()
-    if resource_id and not re.fullmatch(r"\d{1,12}", resource_id):
+    if not resource_id or not re.fullmatch(r"\d{1,12}", resource_id):
         raise ScriptError("resourceId 必须是数字。")
     return {
         **payload,
         "mode": "scrape",
         "market": market,
         "token": token,
-        "label": label,
         "symbol": symbol,
-        "name": name,
+        "name": resource_id,
         "url": url,
-        "resourceId": resource_id or None,
+        "resourceId": resource_id,
         "top": SCRAPE_TOP,
         "pageSize": SCRAPE_PAGE_SIZE,
         "refresh": True,
@@ -712,8 +694,6 @@ def workflow_command(payload: dict[str, Any]) -> list[str]:
         command.append("--refresh")
     if payload.get("proxy"):
         command.extend(["--proxy", str(payload["proxy"])])
-    if payload.get("snapshotLabel"):
-        command.extend(["--snapshot-label", str(payload["snapshotLabel"])])
     return command
 
 
@@ -730,25 +710,20 @@ def scrape_command(payload: dict[str, Any]) -> list[str]:
         str(SCRAPE_PAGE_SIZE),
         "--output-root",
         str(DATA_ROOT),
-        "--browser-wait-ms",
-        str(normalized.get("browserWaitMs") or 30000),
-        "--refresh",
+        "--no-browser",
+        "--resource-id",
+        f"{normalized['name']}={normalized['resourceId']}",
         "--no-charts",
     ]
     if normalized.get("proxy"):
         command.extend(["--proxy", str(normalized["proxy"])])
-    if normalized.get("resourceId"):
-        command.append("--no-browser")
-        command.extend(["--resource-id", f"{normalized['name']}={normalized['resourceId']}"])
-    if normalized.get("snapshotLabel"):
-        command.extend(["--snapshot-label", str(normalized["snapshotLabel"])])
     return command
 
 
 def job_command(payload: dict[str, Any]) -> list[str]:
-    if payload.get("mode") == "scrape" or payload.get("market"):
-        return scrape_command(payload)
-    return workflow_command(payload)
+    if payload.get("mode") == "workflow":
+        return workflow_command(payload)
+    return scrape_command(payload)
 
 
 def public_file_or_none(path_value: Any) -> str | None:
@@ -1100,10 +1075,11 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
 
 
 def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any]:
-    if payload.get("mode") == "scrape" or payload.get("market"):
+    if payload.get("mode") == "workflow":
+        if not payload.get("url"):
+            raise ScriptError("缺少 url。")
+    else:
         payload = normalize_scrape_payload(payload)
-    elif not payload.get("url"):
-        raise ScriptError("缺少 url。")
     job = {
         "id": uuid.uuid4().hex[:12],
         "source": source,
@@ -1146,6 +1122,7 @@ def scheduler_loop() -> None:
                 minute = int(schedule.get("minute", 15))
                 if now.hour > hour or (now.hour == hour and now.minute >= minute):
                     payload = {
+                        "mode": "workflow",
                         "url": schedule["url"],
                         "name": schedule.get("name"),
                         "symbol": schedule.get("symbol"),
@@ -1180,38 +1157,16 @@ def css888_static(filename: str) -> Response:
     return response
 
 
+@app.get("/preview.html")
+def preview_html() -> Response:
+    response = send_from_directory(app.static_folder, "preview.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 @app.get("/api/overview")
 def api_overview() -> Response:
     return jsonify({"dataRoot": str(DATA_ROOT), "activities": discover_activities()})
-
-
-@app.get("/api/scrape/derive")
-def api_scrape_derive() -> Response:
-    try:
-        payload = normalize_scrape_payload(
-            {
-                "market": request.args.get("market"),
-                "symbol": request.args.get("symbol"),
-                "label": request.args.get("label"),
-                "url": request.args.get("url"),
-                "resourceId": request.args.get("resourceId"),
-            }
-        )
-        return jsonify(
-            {
-                "market": payload["market"],
-                "token": payload["token"],
-                "symbol": payload["symbol"],
-                "label": payload["label"],
-                "name": payload["name"],
-                "url": payload["url"],
-                "resourceId": payload["resourceId"],
-                "top": SCRAPE_TOP,
-                "pageSize": SCRAPE_PAGE_SIZE,
-            }
-        )
-    except ScriptError as exc:
-        return jsonify({"error": str(exc)}), 400
 
 
 @app.get("/api/scrape/latest")
@@ -1230,6 +1185,45 @@ def api_scrape_latest() -> Response:
         return jsonify({"query": payload, "result": preview})
     except ScriptError as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/discover")
+def api_discover() -> Response:
+    try:
+        payload = request.get_json(force=True) or {}
+        url = str(payload.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "缺少 url"}), 400
+        tmp_name = f"_d{uuid.uuid4().hex[:6]}"
+        command = [
+            sys.executable,
+            str(APP_DIR / "auto_leaderboard.py"),
+            "--discover-only",
+            "--quiet",
+            "--activity",
+            f"{tmp_name}={url}",
+        ]
+        proxy = str(payload.get("proxy", "auto"))
+        if proxy:
+            command.extend(["--proxy", proxy])
+        browser_wait_ms = int(payload.get("browserWaitMs", 30000))
+        command.extend(["--browser-wait-ms", str(browser_wait_ms)])
+        completed = subprocess.run(
+            command,
+            cwd=APP_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(120, math.ceil(browser_wait_ms / 1000) + 60),
+        )
+        if completed.returncode != 0:
+            stderr_text = completed.stderr.decode("utf-8", errors="replace")[-2000:]
+            return jsonify({"error": stderr_text}), 500
+        result = json.loads(completed.stdout)
+        return jsonify(result)
+    except ScriptError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.post("/api/scrape/jobs")
@@ -1271,9 +1265,33 @@ def api_kline_snapshot(symbol: str) -> Response:
 def api_jobs() -> Response:
     jobs = []
     for job in load_jobs():
-        current = dict(job)
-        if current.get("status") == "completed":
-            current["result"] = attach_scrape_preview(current.get("result"))
+        payload = job.get("payload") or {}
+        current = {
+            "id": job.get("id"),
+            "name": job.get("name") or payload.get("name"),
+            "status": job.get("status"),
+            "progress": {
+                "stage": job.get("progress", {}).get("stage"),
+                "label": job.get("progress", {}).get("label"),
+                "percent": job.get("progress", {}).get("percent", 0),
+                "rowsFetched": job.get("progress", {}).get("rowsFetched"),
+                "currentPage": job.get("progress", {}).get("currentPage"),
+                "totalPages": job.get("progress", {}).get("totalPages"),
+            },
+            "createdAt": job.get("createdAt"),
+            "startedAt": job.get("startedAt"),
+            "finishedAt": job.get("finishedAt"),
+            "updatedAt": job.get("updatedAt"),
+            "payload": {
+                "market": payload.get("market"),
+                "symbol": payload.get("symbol"),
+                "resourceId": payload.get("resourceId"),
+                "url": payload.get("url"),
+            },
+        }
+        if job.get("status") == "failed":
+            stderr_text = job.get("stderr") or ""
+            current["stderr"] = stderr_text[-500:]
         jobs.append(current)
     return jsonify({"jobs": list(reversed(jobs))})
 
@@ -1298,6 +1316,22 @@ def api_delete_job(job_id: str) -> Response:
     return jsonify({"ok": True})
 
 
+@app.route("/api/jobs/<job_id>", methods=["PATCH"])
+def api_update_job(job_id: str) -> Response:
+    payload = request.get_json(force=True) or {}
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "缺少 name"}), 400
+    jobs = load_jobs()
+    for job in jobs:
+        if job.get("id") == job_id:
+            job["name"] = name
+            job["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_jobs(jobs)
+            return jsonify({"job": job})
+    return jsonify({"error": "任务不存在"}), 404
+
+
 @app.get("/api/jobs/<job_id>/preview")
 def api_job_preview(job_id: str) -> Response:
     jobs = load_jobs()
@@ -1317,6 +1351,7 @@ def api_job_preview(job_id: str) -> Response:
             payload = job.get("payload") or {}
             preview["market"] = payload.get("market", "").upper()
             preview["symbol"] = payload.get("symbol", "")
+            preview["taskName"] = job.get("name") or payload.get("name") or payload.get("resourceId") or ""
             return jsonify(preview)
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500

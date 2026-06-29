@@ -121,6 +121,7 @@ def parse_args() -> argparse.Namespace:
         help="手动指定资源 ID 兜底，例如 --resource-id bill=54211",
     )
     parser.add_argument("--no-charts", action="store_true", help="只导 CSV/JSON，不出图")
+    parser.add_argument("--discover-only", action="store_true", help="只发现 resourceId，不抓取排行榜，输出 JSON 到 stdout")
     parser.add_argument("--quiet", action="store_true", help="减少进度输出")
     return parser.parse_args()
 
@@ -1213,6 +1214,20 @@ def main() -> int:
             wait_ms=args.browser_wait_ms,
             quiet=args.quiet,
         )
+
+    if args.discover_only:
+        for name, url in activities.items():
+            discovered = discovery.get(name, {})
+            result = {
+                "url": url,
+                "title": discovered.get("title"),
+                "candidates": sorted(set(
+                    c.get("resourceId") for c in discovered.get("candidates", [])
+                    if c.get("resourceId")
+                )),
+            }
+            print(json.dumps(result, ensure_ascii=False))
+        return 0
 
     summaries = []
     for name, url in activities.items():

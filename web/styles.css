@@ -462,3 +462,80 @@ td:nth-child(2) {
   color: var(--bad);
   font-weight: 900;
 }
+
+.discovery-section {
+  min-height: 20px;
+  margin-top: 12px;
+}
+
+.discovery-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.discovery-meta strong,
+.discovery-meta span,
+.discovery-meta code {
+  border: 1px solid rgba(46, 42, 36, 0.12);
+  border-radius: 999px;
+  background: #fff8ea;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.discovery-meta code {
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.discovery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.discovery-card {
+  display: grid;
+  gap: 4px;
+  min-width: 140px;
+  padding: 14px 18px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf8;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.discovery-card:hover {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(14, 116, 122, 0.12);
+}
+
+.dc-id {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--accent-2);
+  line-height: 1.1;
+}
+
+.dc-meta {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.job-name {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--muted);
+}
+
+.job-name:hover {
+  color: var(--accent-2);
+  border-bottom-color: var(--accent-2);
+}

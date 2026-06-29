@@ -12,31 +12,25 @@
         <div>
           <p class="eyebrow">BINANCE LEADERBOARD CAPTURE</p>
           <h1>纯抓榜任务台</h1>
-          <p class="subtitle">粘贴 Binance 活动 URL，自动发现 resourceId，抓取前 1000 名并在线预览。</p>
+          <p class="subtitle">粘贴 Binance 活动 URL 发现 resourceId，点击后抓取前 1000 名并在线预览。</p>
         </div>
       </header>
 
       <section class="capture-card">
-        <form id="scrapeForm" class="capture-form">
+        <div class="capture-form">
           <label>
-            <span>活动 URL <small style="opacity:0.5;font-weight:400">(填 ID 时可选)</small></span>
-            <input name="url" autocomplete="off" placeholder="https://www.binance.com/zh-CN/activity/trading-competition/..." />
+            <span>活动 URL</span>
+            <input id="urlInput" autocomplete="off" placeholder="https://www.binance.com/zh-CN/activity/trading-competition/..." />
           </label>
-          <label style="max-width:160px">
-            <span>Resource ID <small style="opacity:0.5;font-weight:400">(可选)</small></span>
-            <input name="resourceId" autocomplete="off" placeholder="留空自动发现" style="height:42px;font-size:13px" />
-          </label>
-          <button type="submit">开始抓取 Top 1000</button>
-          <input name="browserWaitMs" type="hidden" value="30000" />
-          <input name="proxy" type="hidden" value="auto" />
-        </form>
-        <div id="derivedBox" class="derived">粘贴活动 URL 后自动识别 spot/um 和 symbol。</div>
+          <button id="discoverBtn" type="button">发现 resourceId</button>
+        </div>
+        <div id="discoveryResults" class="discovery-section"></div>
       </section>
 
       <section class="grid">
         <section class="panel jobs-panel">
           <div class="jobs-header">
-            <span>快捷任务</span>
+            <span>任务列表</span>
             <b id="jobCount">0</b>
           </div>
           <div id="jobList" class="job-list"></div>
