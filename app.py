@@ -95,7 +95,6 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "resourceId": resource_id,
         "top": SCRAPE_TOP,
         "pageSize": SCRAPE_PAGE_SIZE,
-        "refresh": True,
     }
 
 
@@ -189,7 +188,7 @@ def safe_child(root: Path, relative: str) -> Path:
 
 
 def infer_name_from_file(path: Path) -> str | None:
-    match = re.match(r"\d{4}-\d{2}-\d{2}(?:_\d{4})?_([a-z0-9]+)_top\d+\.json$", path.name)
+    match = re.match(r"\d{4}-\d{2}-\d{2}(?:T\d{6}|_\d{4})?_([a-z0-9]+)_top\d+\.json$", path.name)
     return match.group(1) if match else None
 
 
@@ -734,6 +733,9 @@ def scrape_command(payload: dict[str, Any]) -> list[str]:
     ]
     if normalized.get("proxy"):
         command.extend(["--proxy", str(normalized["proxy"])])
+    last_ts = normalized.get("lastUpdated")
+    if last_ts:
+        command.extend(["--last-updated", str(last_ts)])
     return command
 
 
@@ -1017,7 +1019,9 @@ def progress_from_stderr(stderr_text: str, status: str = "running") -> dict[str,
             }
         )
 
-    if status == "completed":
+    if "无变化，跳过抓取" in stderr_text:
+        progress.update({"stage": "skipped", "label": "无更新，跳过", "percent": 100})
+    elif status == "completed":
         progress.update({"stage": "completed", "label": "抓取完成", "percent": 100})
     elif status == "failed":
         progress.update({"stage": "failed", "label": "抓取失败", "percent": progress.get("percent", 0)})
@@ -1078,17 +1082,43 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
     if return_code == 0:
         result = attach_scrape_preview(result)
     status = "completed" if return_code == 0 else "failed"
+    combined_stderr = stderr_text[-12000:]
     update_job(
         job_id,
         status=status,
         command=command,
         returnCode=return_code,
         stdout=stdout[-12000:],
-        stderr=stderr_text[-12000:],
-        progress=progress_from_stderr(stderr_text, status),
+        stderr=combined_stderr,
+        progress=progress_from_stderr(combined_stderr, status),
         result=result,
         finishedAt=datetime.now(timezone.utc).isoformat(),
     )
+
+    if return_code == 0 and isinstance(result, list):
+        for item in result:
+            json_path = item.get("json") if isinstance(item, dict) else None
+            if json_path:
+                json_name = Path(str(json_path)).stem
+                ts_match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{6})_", json_name)
+                snapshot_ts = ts_match.group(1) if ts_match else json_name
+                snapshot = {
+                    "timestamp": snapshot_ts,
+                    "json": str(json_path),
+                    "csv": str(item.get("csv", "")),
+                    "rows": item.get("rows", 0),
+                    "sum": item.get("sum"),
+                    "restoredTradingVolumeSum": item.get("restoredTradingVolumeSum"),
+                }
+                with state_lock:
+                    jobs = load_jobs()
+                    for job in jobs:
+                        if job.get("id") == job_id:
+                            snapshots = job.setdefault("snapshots", [])
+                            if not snapshots or snapshots[-1].get("timestamp") != snapshot_ts:
+                                snapshots.append(snapshot)
+                            save_jobs(jobs)
+                            break
 
 
 def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any]:
@@ -1097,19 +1127,53 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             raise ScriptError("缺少 url。")
     else:
         payload = normalize_scrape_payload(payload)
-    job = {
-        "id": uuid.uuid4().hex[:12],
-        "source": source,
-        "status": "queued",
-        "payload": payload,
-        "progress": progress_from_stderr("", "queued"),
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
-    }
+
+    rid = payload.get("resourceId", "").strip()
     with state_lock:
         jobs = load_jobs()
-        jobs.append(job)
+        existing = next(
+            (j for j in reversed(jobs) if str(j.get("payload", {}).get("resourceId") or "").strip() == rid and rid),
+            None,
+        )
+        if rid:
+            keep_ids = {existing["id"]} if existing else set()
+            def job_rid(j):
+                val = j.get("payload", {}).get("resourceId")
+                return str(val).strip() if val is not None else ""
+            jobs[:] = [j for j in jobs if job_rid(j) != rid or j["id"] in keep_ids or not job_rid(j)]
+            existing = next(
+                (j for j in jobs if j.get("id") in keep_ids),
+                None,
+            )
+        if existing:
+            if existing.get("status") == "running":
+                raise ScriptError("该活动正在抓取中，请等待完成。")
+            existing["status"] = "queued"
+            existing["progress"] = progress_from_stderr("", "queued")
+            existing["stderr"] = ""
+            existing["result"] = None
+            existing["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            existing["startedAt"] = None
+            existing["finishedAt"] = None
+            job = existing
+        else:
+            job = {
+                "id": uuid.uuid4().hex[:12],
+                "source": source,
+                "status": "queued",
+                "payload": payload,
+                "progress": progress_from_stderr("", "queued"),
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "snapshots": [],
+            }
+            jobs.append(job)
         save_jobs(jobs)
+
+    snapshots = job.get("snapshots") or []
+    if snapshots:
+        payload["lastUpdated"] = snapshots[-1]["timestamp"]
+
     thread = threading.Thread(target=run_job, args=(job["id"], payload), daemon=True)
     thread.start()
     return job
@@ -1355,10 +1419,12 @@ def api_jobs() -> Response:
                 "resourceId": payload.get("resourceId"),
                 "url": payload.get("url"),
             },
+            "snapshotCount": len(job.get("snapshots") or []),
+            "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
         }
-        if job.get("status") == "failed":
-            stderr_text = job.get("stderr") or ""
-            current["stderr"] = stderr_text[-500:]
+        stderr_text = job.get("stderr") or ""
+        if stderr_text:
+            current["stderr"] = stderr_text[-900:]
         jobs.append(current)
     return jsonify({"jobs": list(reversed(jobs))})
 
@@ -1397,6 +1463,24 @@ def api_update_job(job_id: str) -> Response:
             save_jobs(jobs)
             return jsonify({"job": job})
     return jsonify({"error": "任务不存在"}), 404
+
+
+@app.get("/api/jobs/<job_id>/snapshots")
+def api_job_snapshots(job_id: str) -> Response:
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    snapshots = job.get("snapshots", [])
+    enriched = []
+    for snap in snapshots:
+        json_path = snap.get("json")
+        entry = dict(snap)
+        if json_path:
+            entry["jsonUrl"] = public_file_or_none(json_path)
+            entry["csvUrl"] = public_file_or_none(snap.get("csv"))
+        enriched.append(entry)
+    return jsonify({"snapshots": enriched})
 
 
 @app.get("/api/jobs/<job_id>/preview")

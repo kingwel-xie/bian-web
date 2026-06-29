@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--date",
-        help="手动指定文件日期；默认使用接口 updatedTime 对应的北京时间日期",
+        help="手动指定文件时间戳前缀；默认使用接口 updatedTime 对应的北京时间时间戳",
     )
     parser.add_argument(
         "--snapshot-label",
@@ -123,30 +123,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-charts", action="store_true", help="只导 CSV/JSON，不出图")
     parser.add_argument("--discover-only", action="store_true", help="只发现 resourceId，不抓取排行榜，输出 JSON 到 stdout")
     parser.add_argument("--quiet", action="store_true", help="减少进度输出")
+    parser.add_argument(
+        "--last-updated",
+        help="上次抓取的 updatedTime 时间戳 (YYYY-MM-DDTHHmmss)，匹配则跳过",
+    )
     return parser.parse_args()
 
 
 def log(message: str, quiet: bool = False) -> None:
     if not quiet:
-        print(message, file=sys.stderr)
+        print(message, file=sys.stderr, flush=True)
 
 
-def today_bj() -> str:
-    return datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+def now_bj() -> str:
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H%M%S")
 
 
 def current_time_label_bj() -> str:
     return datetime.now(timezone(timedelta(hours=8))).strftime("%H%M")
 
 
-def date_from_updated_time(ms: Any) -> str | None:
+def timestamp_from_updated_time(ms: Any) -> str | None:
     value = to_decimal(ms)
     if value is None:
         return None
     return datetime.fromtimestamp(
         float(value / Decimal("1000")),
         tz=timezone.utc,
-    ).astimezone(timezone(timedelta(hours=8))).date().isoformat()
+    ).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H%M%S")
 
 
 def parse_name_value(values: list[str], label: str) -> dict[str, str]:
@@ -705,7 +709,8 @@ def fetch_top_rows(
     proxy: str | None,
     timeout: float,
     quiet: bool,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    skip_if_updated: str | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
     session = requests.Session()
     rows: list[dict[str, Any]] = []
     pages = math.ceil(top / page_size)
@@ -722,6 +727,11 @@ def fetch_top_rows(
         )
         if page_index == 1:
             meta = meta_from_payload(payload)
+            if skip_if_updated:
+                actual_ts = timestamp_from_updated_time(meta.get("updatedTime"))
+                if actual_ts and actual_ts == skip_if_updated:
+                    log(f"updatedTime 无变化，跳过抓取", quiet)
+                    return [], meta, "no_update"
         page_rows = rows_from_payload(payload)
         rows.extend(page_rows)
         first_seq = page_rows[0].get("sequence") if page_rows else None
@@ -734,7 +744,7 @@ def fetch_top_rows(
         if len(page_rows) < page_size:
             break
         time.sleep(0.1)
-    return rows[:top], meta
+    return rows[:top], meta, None
 
 
 def to_decimal(value: Any) -> Decimal | None:
@@ -1201,7 +1211,7 @@ def main() -> int:
     if not activities:
         activities = {"bill": DEFAULT_BILL_URL}
     manual_ids = parse_name_value(args.resource_id, "--resource-id")
-    cli_date_prefix = args.date
+    cli_ts_prefix = args.date
     snapshot_label = args.snapshot_label
     output_root = Path(args.output_root).expanduser().resolve()
 
@@ -1244,7 +1254,8 @@ def main() -> int:
             timeout=args.timeout,
             quiet=args.quiet,
         )
-        rows, meta = fetch_top_rows(
+
+        rows, meta, skip_reason = fetch_top_rows(
             resource_id,
             referer=url,
             top=args.top,
@@ -1252,7 +1263,21 @@ def main() -> int:
             proxy=proxy,
             timeout=args.timeout,
             quiet=args.quiet,
+            skip_if_updated=args.last_updated,
         )
+        if skip_reason:
+            summaries.append(
+                {
+                    "name": name,
+                    "resourceId": resource_id,
+                    "rows": 0,
+                    "sum": "0",
+                    "restoredTradingVolumeSum": "0",
+                    "skipped": True,
+                    "reason": skip_reason,
+                }
+            )
+            continue
         rows = enrich_restored_trading_volume(rows)
         values = [to_decimal(row.get("grade")) for row in rows]
         total = sum((value for value in values if value is not None), Decimal("0"))
@@ -1262,11 +1287,11 @@ def main() -> int:
             Decimal("0"),
         )
 
-        date_prefix = cli_date_prefix or date_from_updated_time(meta.get("updatedTime")) or today_bj()
+        ts_prefix = cli_ts_prefix or timestamp_from_updated_time(meta.get("updatedTime")) or now_bj()
         file_prefix = (
-            f"{date_prefix}_{snapshot_label}_{name}"
+            f"{ts_prefix}_{snapshot_label}_{name}"
             if snapshot_label
-            else f"{date_prefix}_{name}"
+            else f"{ts_prefix}_{name}"
         )
         base = f"{file_prefix}_top{args.top}"
         csv_path = out_dir / f"{base}.csv"
@@ -1303,7 +1328,7 @@ def main() -> int:
             {
                 "name": name,
                 "url": url,
-                "date": date_prefix,
+                "date": ts_prefix,
                 "snapshotLabel": snapshot_label,
                 "resourceId": resource_id,
                 "top": args.top,

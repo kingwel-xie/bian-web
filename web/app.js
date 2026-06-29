@@ -29,6 +29,12 @@ function fmtTime(value) {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
 
+function fmtSnapshotTs(ts) {
+  if (!ts) return "—";
+  const m = String(ts).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/);
+  return m ? `${m[1]} ${m[2]}:${m[3]}:${m[4]}` : ts;
+}
+
 async function api(path, options) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -109,7 +115,7 @@ async function discoverResourceIds() {
     state.discoveredSymbol = inferred.symbol;
     const result = await api("/api/discover", {
       method: "POST",
-      body: JSON.stringify({ url, proxy: "auto", browserWaitMs: 30000 }),
+      body: JSON.stringify({ url, proxy: "auto", browserWaitMs: 30000, force: true }),
     });
     renderDiscoveryCards(result, inferred);
   } catch (error) {
@@ -123,7 +129,6 @@ async function discoverResourceIds() {
 function renderDiscoveryCards(result, inferred) {
   const candidates = result.candidates || [];
   const title = result.title || "";
-  const cached = result.cached;
   const el = $("#discoveryResults");
   if (!candidates.length) {
     el.innerHTML = `<div class="empty box">未发现 resourceId。</div>`;
@@ -134,7 +139,6 @@ function renderDiscoveryCards(result, inferred) {
       <strong>${escapeHtml(inferred.market.toUpperCase())}</strong>
       <span>${escapeHtml(inferred.symbol)}</span>
       ${title ? `<code>${escapeHtml(title)}</code>` : ""}
-      ${cached ? `<small style="opacity:0.5">(缓存)</small>` : ""}
     </div>
     <div class="discovery-grid">
       ${candidates.map((c) => {
@@ -150,7 +154,6 @@ function renderDiscoveryCards(result, inferred) {
         `;
       }).join("")}
     </div>
-    ${cached ? `<button id="reDiscoverBtn" class="ghost mini" type="button" style="margin-top:8px">重新发现</button>` : ""}
   `;
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -158,27 +161,25 @@ function renderDiscoveryCards(result, inferred) {
       startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl);
     });
   });
-  const reBtn = document.getElementById("reDiscoverBtn");
-  if (reBtn) {
-    reBtn.addEventListener("click", () => {
-      $("#discoverBtn").click();
-    });
-  }
 }
 
 async function startScrapeJob(resourceId, market, symbol, url) {
-  await api("/api/scrape/jobs", {
-    method: "POST",
-    body: JSON.stringify({
-      resourceId,
-      market,
-      symbol,
-      url,
-      proxy: "auto",
-      mode: "scrape",
-    }),
-  });
-  await loadJobs();
+  try {
+    await api("/api/scrape/jobs", {
+      method: "POST",
+      body: JSON.stringify({
+        resourceId,
+        market,
+        symbol,
+        url,
+        proxy: "auto",
+        mode: "scrape",
+      }),
+    });
+    await loadJobs();
+  } catch (error) {
+    alert(`抓取失败：${error.message}`);
+  }
 }
 
 async function editJobName(jobId, currentName) {
@@ -211,18 +212,19 @@ function renderJobs(jobs) {
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
     const url = normalizeTaskUrl(payload.url);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
+    const snapshotTs = job.latestSnapshot;
     return `
       <article class="job ${statusClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
-            <span class="job-name" data-edit="${escapeHtml(job.id)}">${escapeHtml(String(jobName))}</span>
+            <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(jobName))}</span>
           </strong>
           <p>${escapeHtml(url || "无 URL")} · ${escapeHtml((payload.market || "").toUpperCase())} ${escapeHtml(payload.symbol || "")}</p>
           <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""} · resourceId ${escapeHtml(String(payload.resourceId || ""))}</small>
+          ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
           <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>
-          <button class="ghost mini" type="button" data-preview="${escapeHtml(job.id)}">预览</button>
           <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">改名</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
@@ -233,7 +235,7 @@ function renderJobs(jobs) {
           </div>
           <div class="progress-track"><i style="width:${percent}%"></i></div>
         </div>
-        ${job.stderr && job.status === "failed" ? `<pre class="stderr">${escapeHtml(job.stderr.slice(-900))}</pre>` : ""}
+        ${job.stderr ? `<details class="stderr"><summary>stderr</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
       </article>
     `;
   }).join("") || `<div class="empty box">没有任务。</div>`;
@@ -269,15 +271,18 @@ function renderJobs(jobs) {
 }
 
 function buildSuggestions(entries) {
+  state._cacheMap = {};
   const el = $("#urlSuggestions");
   if (!entries.length) { el.innerHTML = ""; return; }
   el.innerHTML = entries.map((e) => {
+    const url = e.url || "";
+    state._cacheMap[url] = e;
     const ids = (e.candidates || []).map((c) => String(typeof c === "object" ? (c.resourceId || c) : c)).join(", ");
     const title = e.title || "";
     const label = `${title ? title + " — " : ""}${ids}`;
-    return `<button class="suggestion-item" type="button" data-url="${escapeHtml(e.url || "")}">
+    return `<button class="suggestion-item" type="button" data-url="${escapeHtml(url)}">
       <span class="si-label">${escapeHtml(label)}</span>
-      <span class="si-url">${escapeHtml(e.url || "")}</span>
+      <span class="si-url">${escapeHtml(url)}</span>
     </button>`;
   }).join("");
   el.querySelectorAll(".suggestion-item").forEach((btn) => {
@@ -285,9 +290,34 @@ function buildSuggestions(entries) {
       const url = btn.dataset.url;
       $("#urlInput").value = url;
       el.innerHTML = "";
-      discoverResourceIds();
+      showCachedDiscovery(url);
     });
   });
+}
+
+function showCachedDiscovery(url) {
+  const entry = state._cacheMap?.[url];
+  const el = $("#discoveryResults");
+  if (!entry) {
+    el.innerHTML = `<div class="empty box">没有缓存的发现结果，请点击"发现 resourceId"。</div>`;
+    return;
+  }
+  state.currentUrl = url;
+  const inferred = inferFromUrl(url);
+  state.discoveredMarket = inferred.market;
+  state.discoveredSymbol = inferred.symbol;
+  const rawCandidates = entry.candidates || [];
+  const jobs = state._jobs || [];
+  const existingRids = new Set();
+  for (const job of jobs) {
+    const rid = job.payload?.resourceId;
+    if (rid) existingRids.add(String(rid).trim());
+  }
+  const candidates = rawCandidates.map((c) => {
+    const rid = String(typeof c === "object" ? (c.resourceId || c) : c);
+    return { resourceId: rid, hasJob: existingRids.has(rid) };
+  });
+  renderDiscoveryCards({ candidates, title: entry.title }, inferred);
 }
 
 async function loadSuggestions() {
@@ -301,7 +331,8 @@ async function loadSuggestions() {
 
 async function loadJobs() {
   const payload = await api("/api/jobs");
-  renderJobs(payload.jobs || []);
+  state._jobs = payload.jobs || [];
+  renderJobs(state._jobs);
 }
 
 function bind() {
