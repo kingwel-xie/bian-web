@@ -123,6 +123,7 @@ async function discoverResourceIds() {
 function renderDiscoveryCards(result, inferred) {
   const candidates = result.candidates || [];
   const title = result.title || "";
+  const cached = result.cached;
   const el = $("#discoveryResults");
   if (!candidates.length) {
     el.innerHTML = `<div class="empty box">未发现 resourceId。</div>`;
@@ -133,15 +134,23 @@ function renderDiscoveryCards(result, inferred) {
       <strong>${escapeHtml(inferred.market.toUpperCase())}</strong>
       <span>${escapeHtml(inferred.symbol)}</span>
       ${title ? `<code>${escapeHtml(title)}</code>` : ""}
+      ${cached ? `<small style="opacity:0.5">(缓存)</small>` : ""}
     </div>
     <div class="discovery-grid">
-      ${candidates.map((id) => `
-        <button class="discovery-card" data-rid="${escapeHtml(String(id))}">
-          <span class="dc-id">${escapeHtml(String(id))}</span>
-          <span class="dc-meta">${escapeHtml(inferred.market.toUpperCase())} · ${escapeHtml(inferred.symbol)}</span>
-        </button>
-      `).join("")}
+      ${candidates.map((c) => {
+        const rid = c.resourceId;
+        const cls = c.hasJob ? "discovery-card used" : "discovery-card fresh";
+        const label = c.hasJob ? "已有任务" : "未启动";
+        return `
+          <button class="${cls}" data-rid="${escapeHtml(String(rid))}">
+            <span class="dc-id">${escapeHtml(String(rid))}</span>
+            <span class="dc-label">${label}</span>
+            <span class="dc-meta">${escapeHtml(inferred.market.toUpperCase())} · ${escapeHtml(inferred.symbol)}</span>
+          </button>
+        `;
+      }).join("")}
     </div>
+    ${cached ? `<button id="reDiscoverBtn" class="ghost mini" type="button" style="margin-top:8px">重新发现</button>` : ""}
   `;
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -149,6 +158,12 @@ function renderDiscoveryCards(result, inferred) {
       startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl);
     });
   });
+  const reBtn = document.getElementById("reDiscoverBtn");
+  if (reBtn) {
+    reBtn.addEventListener("click", () => {
+      $("#discoverBtn").click();
+    });
+  }
 }
 
 async function startScrapeJob(resourceId, market, symbol, url) {
@@ -253,6 +268,37 @@ function renderJobs(jobs) {
   });
 }
 
+function buildSuggestions(entries) {
+  const el = $("#urlSuggestions");
+  if (!entries.length) { el.innerHTML = ""; return; }
+  el.innerHTML = entries.map((e) => {
+    const ids = (e.candidates || []).map((c) => String(typeof c === "object" ? (c.resourceId || c) : c)).join(", ");
+    const title = e.title || "";
+    const label = `${title ? title + " — " : ""}${ids}`;
+    return `<button class="suggestion-item" type="button" data-url="${escapeHtml(e.url || "")}">
+      <span class="si-label">${escapeHtml(label)}</span>
+      <span class="si-url">${escapeHtml(e.url || "")}</span>
+    </button>`;
+  }).join("");
+  el.querySelectorAll(".suggestion-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const url = btn.dataset.url;
+      $("#urlInput").value = url;
+      el.innerHTML = "";
+      discoverResourceIds();
+    });
+  });
+}
+
+async function loadSuggestions() {
+  try {
+    const data = await api("/api/discover/cache");
+    buildSuggestions(data.entries || []);
+  } catch {
+    // silently ignore
+  }
+}
+
 async function loadJobs() {
   const payload = await api("/api/jobs");
   renderJobs(payload.jobs || []);
@@ -266,6 +312,17 @@ function bind() {
       discoverResourceIds();
     }
   });
+  $("#urlInput").addEventListener("focus", () => {
+    const suggestions = $("#urlSuggestions");
+    if (suggestions.children.length) suggestions.style.display = "flex";
+  });
+  $("#urlInput").addEventListener("blur", () => {
+    setTimeout(() => { $("#urlSuggestions").style.display = "none"; }, 200);
+  });
+  $("#urlInput").addEventListener("input", () => {
+    const suggestions = $("#urlSuggestions");
+    if (suggestions.children.length) suggestions.style.display = "flex";
+  });
 }
 
 async function boot() {
@@ -275,6 +332,7 @@ async function boot() {
   } catch (error) {
     $("#jobList").innerHTML = `<div class="empty box">${escapeHtml(error.message)}</div>`;
   }
+  loadSuggestions();
   state.pollTimer = setInterval(() => {
     loadJobs().catch((error) => {
       console.warn("loadJobs poll error:", error);

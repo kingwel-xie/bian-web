@@ -27,6 +27,7 @@ DATA_ROOT = Path(os.environ.get("DATA_ROOT", APP_DIR.parent)).expanduser().resol
 STATE_DIR = DATA_ROOT / ".workflow"
 JOBS_FILE = STATE_DIR / "jobs.json"
 SCHEDULES_FILE = STATE_DIR / "schedules.json"
+DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
 KNOWN_SYMBOLS = {
     "bill": "BILLUSDT",
     "aig": "AIGENSYNUSDT",
@@ -113,8 +114,24 @@ def read_json(path: Path, default: Any) -> Any:
 
 
 def write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def normalize_discovery_url(raw: str) -> str:
+    try:
+        url = urlparse(raw)
+        path = url.path.rstrip("/")
+        return f"{url.scheme}://{url.netloc}{path}"
+    except Exception:
+        return raw.strip().rstrip("/")
+
+
+def load_discovery_cache() -> dict[str, Any]:
+    return read_json(DISCOVERY_CACHE_FILE, {})
+
+
+def save_discovery_cache(cache: dict[str, Any]) -> None:
+    write_json(DISCOVERY_CACHE_FILE, cache)
 
 
 def to_decimal(value: Any) -> Decimal | None:
@@ -1187,6 +1204,22 @@ def api_scrape_latest() -> Response:
         return jsonify({"error": str(exc)}), 400
 
 
+@app.get("/api/discover/cache")
+def api_discover_cache() -> Response:
+    cache = load_discovery_cache()
+    entries = []
+    for key, entry in cache.items():
+        entries.append({
+            "key": key,
+            "url": entry.get("url"),
+            "title": entry.get("title"),
+            "candidates": entry.get("candidates", []),
+            "cachedAt": entry.get("cachedAt"),
+        })
+    entries.sort(key=lambda e: e.get("cachedAt") or "", reverse=True)
+    return jsonify({"entries": entries})
+
+
 @app.post("/api/discover")
 def api_discover() -> Response:
     try:
@@ -1194,31 +1227,65 @@ def api_discover() -> Response:
         url = str(payload.get("url") or "").strip()
         if not url:
             return jsonify({"error": "缺少 url"}), 400
-        tmp_name = f"_d{uuid.uuid4().hex[:6]}"
-        command = [
-            sys.executable,
-            str(APP_DIR / "auto_leaderboard.py"),
-            "--discover-only",
-            "--quiet",
-            "--activity",
-            f"{tmp_name}={url}",
-        ]
-        proxy = str(payload.get("proxy", "auto"))
-        if proxy:
-            command.extend(["--proxy", proxy])
-        browser_wait_ms = int(payload.get("browserWaitMs", 30000))
-        command.extend(["--browser-wait-ms", str(browser_wait_ms)])
-        completed = subprocess.run(
-            command,
-            cwd=APP_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=max(120, math.ceil(browser_wait_ms / 1000) + 60),
-        )
-        if completed.returncode != 0:
-            stderr_text = completed.stderr.decode("utf-8", errors="replace")[-2000:]
-            return jsonify({"error": stderr_text}), 500
-        result = json.loads(completed.stdout)
+
+        cache_key = normalize_discovery_url(url)
+        force = payload.get("force", False)
+        cache = load_discovery_cache()
+        cached_entry = cache.get(cache_key)
+
+        if cached_entry and not force:
+            result = dict(cached_entry)
+            result["cached"] = True
+        else:
+            tmp_name = f"_d{uuid.uuid4().hex[:6]}"
+            command = [
+                sys.executable,
+                str(APP_DIR / "auto_leaderboard.py"),
+                "--discover-only",
+                "--quiet",
+                "--activity",
+                f"{tmp_name}={url}",
+            ]
+            proxy = str(payload.get("proxy", "auto"))
+            if proxy:
+                command.extend(["--proxy", proxy])
+            browser_wait_ms = int(payload.get("browserWaitMs", 30000))
+            command.extend(["--browser-wait-ms", str(browser_wait_ms)])
+            completed = subprocess.run(
+                command,
+                cwd=APP_DIR,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=max(120, math.ceil(browser_wait_ms / 1000) + 60),
+            )
+            if completed.returncode != 0:
+                stderr_text = completed.stderr.decode("utf-8", errors="replace")[-2000:]
+                return jsonify({"error": stderr_text}), 500
+            result = json.loads(completed.stdout)
+            cache[cache_key] = {
+                "url": result.get("url"),
+                "title": result.get("title"),
+                "candidates": result.get("candidates", []),
+                "cachedAt": datetime.now(timezone.utc).isoformat(),
+            }
+            save_discovery_cache(cache)
+            result["cached"] = False
+
+        existing_ids = set()
+        for job in load_jobs():
+            rid = job.get("payload", {}).get("resourceId")
+            if rid:
+                existing_ids.add(str(rid).strip())
+
+        raw_candidates = result.get("candidates", [])
+        enriched = []
+        for c in raw_candidates:
+            rid = str(c) if not isinstance(c, dict) else str(c.get("resourceId", c))
+            enriched.append({
+                "resourceId": rid,
+                "hasJob": rid in existing_ids,
+            })
+        result["candidates"] = enriched
         return jsonify(result)
     except ScriptError as exc:
         return jsonify({"error": str(exc)}), 400
