@@ -72,10 +72,10 @@ function inferFromUrl(rawUrl) {
   const market = lowerSlug.includes("spot") ? "spot" : "um";
 
   const patterns = [
-    /(?:^|-)spot-[a-z0-9-]*-([a-z0-9]+)$/i,
-    /(?:^|-)futures-([a-z0-9]+)(?:-|$)/i,
     /^([a-z0-9]+)-spot-/i,
     /^([a-z0-9]+)-futures-/i,
+    /(?:^|-)futures-([a-z0-9]+)(?:-|$)/i,
+    /(?:^|-)spot-[a-z0-9-]*-([a-z0-9]+)$/i,
     /(?:^|-)wave-([a-z0-9]+)(?:-|$)/i,
     /(?:^|-)reward-?([a-z0-9]+)(?:-|$)/i,
   ];
