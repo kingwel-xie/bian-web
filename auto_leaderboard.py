@@ -797,17 +797,20 @@ def row_nickname(row: dict[str, Any]) -> str:
 
 
 def find_previous_snapshot(out_dir: Path, name: str, current_json_path: Path) -> Path | None:
-    candidates = []
+    current_name = current_json_path.name
+    older: list[Path] = []
     for path in sorted(out_dir.glob(f"*_{name}_top*.json")):
+        if path.name >= current_name:
+            continue
         if path.resolve() == current_json_path.resolve():
             continue
         data = read_json(path, {})
         if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
             continue
-        candidates.append(path)
-    if not candidates:
+        older.append(path)
+    if not older:
         return None
-    return max(candidates, key=lambda path: (path.name, path.stat().st_mtime))
+    return max(older, key=lambda p: p.name)
 
 
 def load_snapshot_rows(path: Path | None) -> list[dict[str, Any]] | None:

@@ -10,4 +10,6 @@ services:
     volumes:
       - ./data:/data
       - ./web:/app/web:ro
+      - ./app.py:/app/app.py
+      - ./auto_leaderboard.py:/app/auto_leaderboard.py
     restart: unless-stopped

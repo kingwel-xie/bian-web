@@ -90,7 +90,7 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "market": market,
         "token": token,
         "symbol": symbol,
-        "name": f"{market.upper()} {symbol}" if market and symbol else resource_id,
+        "name": resource_id,
         "url": url,
         "resourceId": resource_id,
         "top": SCRAPE_TOP,
@@ -913,7 +913,13 @@ def ensure_scrape_xlsx(json_path: Path, sheet_name: str | None = None) -> Path |
         return xlsx_path if xlsx_path.exists() else None
 
 
-def scrape_preview_from_json(json_path: Path, limit: int = 1000) -> dict[str, Any]:
+_no_job_context = object()
+
+def scrape_preview_from_json(
+    json_path: Path,
+    limit: int = 1000,
+    previous_json_path: Path | None | object = _no_job_context,
+) -> dict[str, Any]:
     data = read_json(json_path, {})
     rows = data.get("rows") if isinstance(data, dict) else []
     if not isinstance(rows, list):
@@ -923,6 +929,19 @@ def scrape_preview_from_json(json_path: Path, limit: int = 1000) -> dict[str, An
     discovery_candidates = sorted(json_path.parent.glob("*_discovery.json"), key=lambda p: p.stat().st_mtime)
     discovery_path = discovery_candidates[-1] if discovery_candidates else None
     delta_payload = latest_delta_payload(json_path.parent, str(data.get("name") or ""), json_path)
+    if previous_json_path is not _no_job_context:
+        if previous_json_path and previous_json_path.exists():
+            if delta_payload:
+                delta_payload["previousSnapshot"] = str(previous_json_path)
+                delta_payload["firstSnapshot"] = False
+            else:
+                delta_payload = {
+                    "name": data.get("name") or "",
+                    "previousSnapshot": str(previous_json_path),
+                    "firstSnapshot": False,
+                }
+        else:
+            delta_payload = None
     delta_by_nickname = preview_delta_by_nickname(rows, delta_payload)
     return {
         "name": data.get("name"),
@@ -1547,10 +1566,25 @@ def api_job_preview(job_id: str) -> Response:
         json_path = Path(str(json_path_str))
 
     try:
-        preview = scrape_preview_from_json(json_path, limit=1000)
+        prev_json_path = None
+        if snapshots:
+            json_path_str = str(json_path)
+            current_idx = next(
+                (i for i, s in enumerate(snapshots) if s.get("json") == json_path_str),
+                None,
+            )
+            if current_idx is not None and current_idx > 0:
+                prev_entry = snapshots[current_idx - 1]
+                prev_path_str = prev_entry.get("json")
+                if prev_path_str:
+                    prev_json_path = Path(str(prev_path_str))
+
+        preview = scrape_preview_from_json(json_path, limit=1000, previous_json_path=prev_json_path)
         preview["market"] = payload.get("market", "").upper()
         preview["symbol"] = payload.get("symbol", "")
-        preview["taskName"] = job.get("name") or payload.get("name") or payload.get("resourceId") or ""
+        job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
+        rid = str(payload.get("resourceId") or "").strip()
+        preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
         preview["snapshots"] = [
             {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
             for s in snapshots
