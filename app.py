@@ -44,7 +44,7 @@ SCRAPE_PAGE_SIZE = 100
 SCRAPE_MARKETS = {"um", "spot"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
-state_lock = threading.Lock()
+state_lock = threading.RLock()
 live_states_lock = threading.Lock()
 live_kline_states: dict[tuple[str, int, str], dict[str, Any]] = {}
 
@@ -90,7 +90,7 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "market": market,
         "token": token,
         "symbol": symbol,
-        "name": resource_id,
+        "name": f"{market.upper()} {symbol}" if market and symbol else resource_id,
         "url": url,
         "resourceId": resource_id,
         "top": SCRAPE_TOP,
@@ -113,7 +113,9 @@ def read_json(path: Path, default: Any) -> Any:
 
 
 def write_json(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
 
 
 def normalize_discovery_url(raw: str) -> str:
@@ -674,7 +676,8 @@ def discover_activities() -> list[dict[str, Any]]:
 
 
 def load_jobs() -> list[dict[str, Any]]:
-    return read_json(JOBS_FILE, [])
+    with state_lock:
+        return read_json(JOBS_FILE, [])
 
 
 def save_jobs(jobs: list[dict[str, Any]]) -> None:
@@ -832,8 +835,8 @@ def preview_delta_by_nickname(
             nickname = nickname_value(row)
             if nickname:
                 mapped[nickname] = {
-                    "deltaRestoredTradingVolume": decimal_text(
-                        restored_trading_volume(row) or Decimal("0")
+                    "deltaGrade": decimal_text(
+                        to_decimal(row.get("grade")) or Decimal("0")
                     )
                 }
         return mapped
@@ -853,11 +856,11 @@ def preview_delta_by_nickname(
         nickname = nickname_value(row)
         if not nickname:
             continue
-        current_volume = restored_trading_volume(row) or Decimal("0")
-        previous_volume = restored_trading_volume(previous[nickname]) if nickname in previous else Decimal("0")
-        if previous_volume is None:
-            previous_volume = Decimal("0")
-        mapped[nickname] = {"deltaRestoredTradingVolume": decimal_text(current_volume - previous_volume)}
+        current_grade = to_decimal(row.get("grade")) or Decimal("0")
+        previous_grade = to_decimal(previous[nickname].get("grade")) if nickname in previous else Decimal("0")
+        if previous_grade is None:
+            previous_grade = Decimal("0")
+        mapped[nickname] = {"deltaGrade": decimal_text(current_grade - previous_grade)}
     return mapped
 
 
@@ -877,8 +880,8 @@ def compact_leaderboard_rows(
                 "userId": row.get("userId"),
                 "grade": row.get("grade"),
                 "restoredTradingVolume": decimal_float(restored_trading_volume(row)),
-                "deltaRestoredTradingVolume": decimal_float(
-                    delta_row.get("deltaRestoredTradingVolume") if delta_row else None
+                "deltaGrade": decimal_float(
+                    delta_row.get("deltaGrade") if delta_row else None
                 ),
                 "tradingVolume": row.get("tradingVolume"),
                 "region": row.get("region"),
@@ -1534,9 +1537,11 @@ def api_job_preview(job_id: str) -> Response:
         if job.get("status") != "completed":
             return jsonify({"error": "任务未完成"}), 400
         result = job.get("result")
-        if not isinstance(result, list) or not result:
-            return jsonify({"error": "没有预览数据"}), 400
-        json_path_str = result[0].get("json")
+        json_path_str = None
+        if isinstance(result, list) and result:
+            json_path_str = result[0].get("json")
+        if not json_path_str and snapshots:
+            json_path_str = snapshots[-1].get("json")
         if not json_path_str:
             return jsonify({"error": "没有预览数据"}), 400
         json_path = Path(str(json_path_str))

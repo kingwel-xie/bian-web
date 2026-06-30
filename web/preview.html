@@ -26,6 +26,7 @@
   .delta-charts figcaption { border-top: 1px solid var(--line); padding: 6px 8px; color: var(--muted); font-size: 12px; }
   table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
+  th { padding: 6px 12px; }
   th { position: sticky; top: 0; z-index: 1; background: #eee7d9; color: var(--accent); font-size: 12px; text-transform: uppercase; }
   .col-rank { width: 56px; } .col-nick { width: 130px; } .col-user { width: 110px; }
   .col-score { width: 100px; } .col-volume { width: 150px; } .col-delta { width: 130px; } .col-region { width: 80px; }
@@ -38,7 +39,7 @@
   .downloads a:hover { background: #e1f3f6; color: var(--accent-2); }
   .err { color: var(--bad); font-weight: 900; }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
-  #searchInput { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; color: var(--ink); padding: 0 12px; outline: none; font: inherit; font-size: 12px; }
+  #searchInput { width: 100%; border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; }
 </style>
 </head>
 <body>
@@ -64,13 +65,10 @@
         <div id="deltaCharts" class="delta-charts"></div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <input id="searchInput" placeholder="搜索昵称" />
-    </div>
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
-        <thead><tr><th>#</th><th>Nickname</th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num">增量</th><th class="num">Region</th></tr></thead>
+        <thead><tr><th>#</th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num">增量</th><th class="num">Region</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
@@ -191,7 +189,7 @@
         <td class="tl">${escapeHtml(r.userId || "—")}</td>
         <td class="num">${fmtNumber(r.grade)}</td>
         <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
-        <td class="num">${r.deltaRestoredTradingVolume == null ? "—" : fmtNumber(r.deltaRestoredTradingVolume)}</td>
+        <td class="num">${r.deltaGrade == null ? "—" : fmtNumber(r.deltaGrade)}</td>
         <td class="num">${escapeHtml(r.region || "—")}</td></tr>
       `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
     }

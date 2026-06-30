@@ -844,27 +844,26 @@ def build_delta_rows(
         rank = row_rank(row)
         if rank is None or rank < start_rank or rank > end_rank:
             continue
-        current_volume = restored_trading_volume(row) or Decimal("0")
+        current_grade = to_decimal(row.get("grade")) or Decimal("0")
         nickname = row_nickname(row)
         previous_row = previous.get(nickname)
-        previous_volume = (
-            restored_trading_volume(previous_row)
+        previous_grade = (
+            to_decimal(previous_row.get("grade"))
             if previous_row is not None
             else Decimal("0")
         )
-        if previous_volume is None:
-            previous_volume = Decimal("0")
-        delta = current_volume - previous_volume
+        if previous_grade is None:
+            previous_grade = Decimal("0")
+        delta = current_grade - previous_grade
         delta_rows.append(
             {
                 "rank": rank,
                 "nickName": nickname,
                 "userId": row.get("userId"),
-                "grade": row.get("grade"),
-                "restoredTradingVolume": float(current_volume),
+                "grade": float(current_grade),
                 "previousRank": row_rank(previous_row) if previous_row is not None else None,
-                "previousRestoredTradingVolume": float(previous_volume) if has_previous else 0,
-                "deltaRestoredTradingVolume": float(delta),
+                "previousGrade": float(previous_grade) if has_previous else 0,
+                "deltaGrade": float(delta),
                 "matchedBy": "nickName" if previous_row is not None else None,
             }
         )
@@ -877,10 +876,9 @@ def write_delta_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "nickName",
         "userId",
         "grade",
-        "restoredTradingVolume",
         "previousRank",
-        "previousRestoredTradingVolume",
-        "deltaRestoredTradingVolume",
+        "previousGrade",
+        "deltaGrade",
         "matchedBy",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -1108,7 +1106,7 @@ def make_combined_delta_chart(
 
     for ax, (start_rank, end_rank, rows) in zip(axes, range_rows):
         ranks = [int(row["rank"]) for row in rows]
-        deltas = [float(row.get("deltaRestoredTradingVolume") or 0) for row in rows]
+        deltas = [float(row.get("deltaGrade") or 0) for row in rows]
         labels = [str(row.get("nickName") or "")[:12] for row in rows]
         colors = ["#0e747a" if value >= 0 else "#c45145" for value in deltas]
         ax.set_facecolor("#fffaf0")
@@ -1153,9 +1151,9 @@ def build_delta_outputs(
             {
                 "range": f"{start_rank}-{end_rank}",
                 "rows": len(delta_rows),
-                "sumDeltaRestoredTradingVolume": decimal_text(
+                "sumDeltaGrade": decimal_text(
                     sum(
-                        (to_decimal(row.get("deltaRestoredTradingVolume")) or Decimal("0"))
+                        (to_decimal(row.get("deltaGrade")) or Decimal("0"))
                         for row in delta_rows
                     )
                 ),

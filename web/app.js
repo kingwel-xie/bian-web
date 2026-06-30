@@ -148,11 +148,11 @@ function renderDiscoveryCards(result, inferred) {
       ${candidates.map((c) => {
         const rid = c.resourceId;
         const cls = c.hasJob ? "discovery-card used" : "discovery-card fresh";
-        const label = c.hasJob ? "已有任务" : "未启动";
+        const nameText = c.hasJob ? escapeHtml(c.jobName) : "未启动";
         return `
           <button class="${cls}" data-rid="${escapeHtml(String(rid))}">
+            <span class="dc-name">${nameText}</span>
             <span class="dc-id">${escapeHtml(String(rid))}</span>
-            <span class="dc-label">${label}</span>
             <span class="dc-meta">${escapeHtml(inferred.market.toUpperCase())} · ${escapeHtml(inferred.symbol)}</span>
           </button>
         `;
@@ -212,15 +212,17 @@ function renderJobs(jobs) {
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
     const url = normalizeTaskUrl(payload.url);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
+    const rid = payload.resourceId ? String(payload.resourceId) : "";
+    const displayName = rid ? `${jobName}  [${rid}]` : jobName;
     const snapshotTs = job.latestSnapshot;
     return `
       <article class="job ${statusClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
-            <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(jobName))}</span>
+            <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
           </strong>
           <p>${escapeHtml(url || "无 URL")} · ${escapeHtml((payload.market || "").toUpperCase())} ${escapeHtml(payload.symbol || "")}</p>
-          <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""} · resourceId ${escapeHtml(String(payload.resourceId || ""))}</small>
+          <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
@@ -376,14 +378,15 @@ function showCachedDiscovery(url) {
   state.discoveredSymbol = inferred.symbol;
   const rawCandidates = entry.candidates || [];
   const jobs = state._jobs || [];
-  const existingRids = new Set();
+  const existingJobs = new Map();
   for (const job of jobs) {
     const rid = job.payload?.resourceId;
-    if (rid) existingRids.add(String(rid).trim());
+    if (rid) existingJobs.set(String(rid).trim(), job.name || job.payload?.name || "");
   }
   const candidates = rawCandidates.map((c) => {
     const rid = String(typeof c === "object" ? (c.resourceId || c) : c);
-    return { resourceId: rid, hasJob: existingRids.has(rid) };
+    const jobName = existingJobs.get(rid);
+    return { resourceId: rid, hasJob: jobName !== undefined, jobName: jobName || "" };
   });
   renderDiscoveryCards({ candidates, title: entry.title }, inferred);
 }
