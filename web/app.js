@@ -4,6 +4,10 @@ const state = {
   discoveredSymbol: null,
   pollTimer: null,
   editingJobId: null,
+  page: 1,
+  perPage: 20,
+  total: 0,
+  totalPages: 1,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -176,7 +180,7 @@ async function startScrapeJob(resourceId, market, symbol, url) {
         mode: "scrape",
       }),
     });
-    await loadJobs();
+    await loadJobs(1);
   } catch (error) {
     alert(`抓取失败：${error.message}`);
   }
@@ -190,20 +194,16 @@ async function editJobName(jobId, currentName) {
       method: "PATCH",
       body: JSON.stringify({ name: newName }),
     });
-    await loadJobs();
+    await loadJobs(state.page);
   } catch (error) {
     alert(`编辑失败：${error.message}`);
   }
 }
 
-function groupJobs(jobs) {
-  return jobs.slice(0, 50);
-}
-
 function renderJobs(jobs) {
-  const list = groupJobs(jobs);
-  $("#jobCount").textContent = list.length;
-  $("#jobList").innerHTML = list.map((job) => {
+  const { page, totalPages, total } = state;
+  $("#jobCount").textContent = `${total}`;
+  $("#jobList").innerHTML = jobs.map((job) => {
     const payload = job.payload || {};
     const progress = job.progress || {};
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
@@ -265,9 +265,77 @@ function renderJobs(jobs) {
     button.addEventListener("click", async () => {
       if (!confirm("确认删除此任务？")) return;
       await api(`/api/jobs/${button.dataset.delete}`, { method: "DELETE" });
-      await loadJobs();
+      await loadJobs(state.page);
     });
   });
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const { page, totalPages, total } = state;
+  let existing = $("#pagination");
+  if (!existing) {
+    existing = document.createElement("div");
+    existing.id = "pagination";
+    existing.className = "pagination";
+    $("#jobList").after(existing);
+  }
+
+  if (totalPages <= 1 && total <= state.perPage) {
+    existing.innerHTML = `<span class="page-info">共 ${total} 条</span>`;
+    return;
+  }
+
+  const pages = paginationRange(page, totalPages, 2);
+  let html = `<span class="page-info">共 ${total} 条 · 第 ${page}/${totalPages} 页</span><div class="page-buttons">`;
+  html += `<button class="ghost mini" data-page="1" ${page <= 1 ? "disabled" : ""}>«</button>`;
+  html += `<button class="ghost mini" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹</button>`;
+  for (const p of pages) {
+    if (p === null) {
+      html += `<span class="page-ellipsis">…</span>`;
+    } else {
+      html += `<button class="ghost mini ${p === page ? "active" : ""}" data-page="${p}">${p}</button>`;
+    }
+  }
+  html += `<button class="ghost mini" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>›</button>`;
+  html += `<button class="ghost mini" data-page="${totalPages}" ${page >= totalPages ? "disabled" : ""}>»</button>`;
+  html += "</div>";
+  existing.innerHTML = html;
+
+  existing.querySelectorAll("[data-page]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const p = parseInt(btn.dataset.page, 10);
+      if (p && p !== state.page) goToPage(p);
+    });
+  });
+}
+
+function paginationRange(current, total, around) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const set = new Set();
+  set.add(1);
+  for (let i = Math.max(2, current - around); i <= Math.min(total - 1, current + around); i++) {
+    set.add(i);
+  }
+  set.add(total);
+  const sorted = [...set].sort((a, b) => a - b);
+  const result = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (p - prev > 1) result.push(null);
+    result.push(p);
+    prev = p;
+  }
+  return result;
+}
+
+async function goToPage(page) {
+  if (page < 1 || page > state.totalPages) return;
+  state.page = page;
+  await loadJobs(page);
 }
 
 function buildSuggestions(entries) {
@@ -329,9 +397,14 @@ async function loadSuggestions() {
   }
 }
 
-async function loadJobs() {
-  const payload = await api("/api/jobs");
+async function loadJobs(page) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", page);
+  const payload = await api(`/api/jobs?${params}`);
   state._jobs = payload.jobs || [];
+  state.page = payload.pagination?.page ?? 1;
+  state.totalPages = payload.pagination?.totalPages ?? 1;
+  state.total = payload.pagination?.total ?? 0;
   renderJobs(state._jobs);
 }
 
@@ -365,7 +438,7 @@ async function boot() {
   }
   loadSuggestions();
   state.pollTimer = setInterval(() => {
-    loadJobs().catch((error) => {
+    loadJobs(state.page).catch((error) => {
       console.warn("loadJobs poll error:", error);
     });
   }, 5000);

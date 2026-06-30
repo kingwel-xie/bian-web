@@ -50,6 +50,7 @@
       </div>
       <div class="downloads" id="downloadLinks"></div>
     </div>
+    <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
     <div class="preview-body">
       <div class="stats-panel">
         <h3>基础统计</h3>
@@ -79,12 +80,19 @@
   const params = new URLSearchParams(location.search);
   const jobId = params.get("job");
   if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
+  const snapshotParam = params.get("snapshot") || "";
 
   function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
+  function fmtSnapshotTs(ts) {
+    if (!ts) return "—";
+    const m = String(ts).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/);
+    return m ? `${m[1]} ${m[2]}:${m[3]}:${m[4]}` : ts;
+  }
 
   try {
-    const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/preview");
+    const url = "/api/jobs/" + encodeURIComponent(jobId) + "/preview" + (snapshotParam ? "?snapshot=" + encodeURIComponent(snapshotParam) : "");
+    const resp = await fetch(url);
     const preview = await resp.json();
     if (!resp.ok || preview.error) throw new Error(preview.error || "加载失败");
 
@@ -113,6 +121,28 @@
       preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
       preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
     ].filter(Boolean).join("");
+
+    const snaps = preview.snapshots || [];
+    const snapBar = document.getElementById("snapshotBar");
+    if (snaps.length > 1) {
+      const selected = snapshotParam || snaps[snaps.length - 1].timestamp;
+      snapBar.style.display = "flex";
+      snapBar.innerHTML = `
+        <label for="snapshotSelect">快照版本</label>
+        <select id="snapshotSelect">
+          ${snaps.toReversed().map(s => `
+            <option value="${escapeHtml(s.timestamp)}" ${s.timestamp === selected ? "selected" : ""}>
+              ${escapeHtml(fmtSnapshotTs(s.timestamp))} (${s.rows ?? "?"} 行)
+            </option>
+          `).join("")}
+        </select>
+      `;
+      document.getElementById("snapshotSelect").addEventListener("change", (e) => {
+        const url = new URL(location.href);
+        url.searchParams.set("snapshot", e.target.value);
+        location.href = url.href;
+      });
+    }
 
     function rangeStats(rows, ranges) {
       return ranges.map(([label, min, max]) => {

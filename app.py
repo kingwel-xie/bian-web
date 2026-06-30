@@ -1394,8 +1394,27 @@ def api_kline_snapshot(symbol: str) -> Response:
 
 @app.get("/api/jobs")
 def api_jobs() -> Response:
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = max(1, min(per_page, 100))
+    page = max(1, page)
+
+    all_jobs = load_jobs()
+    total = len(all_jobs)
+    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    page = min(page, total_pages) if total else 1
+
+    sorted_jobs = sorted(
+        all_jobs,
+        key=lambda j: j.get("updatedAt") or j.get("startedAt") or j.get("createdAt") or "",
+        reverse=True,
+    )
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_jobs = sorted_jobs[start:end]
+
     jobs = []
-    for job in load_jobs():
+    for job in page_jobs:
         payload = job.get("payload") or {}
         current = {
             "id": job.get("id"),
@@ -1426,7 +1445,16 @@ def api_jobs() -> Response:
         if stderr_text:
             current["stderr"] = stderr_text[-900:]
         jobs.append(current)
-    return jsonify({"jobs": list(reversed(jobs))})
+
+    return jsonify({
+        "jobs": jobs,
+        "pagination": {
+            "page": page,
+            "perPage": per_page,
+            "total": total,
+            "totalPages": total_pages,
+        },
+    })
 
 
 @app.post("/api/jobs")
@@ -1489,24 +1517,42 @@ def api_job_preview(job_id: str) -> Response:
     job = next((j for j in jobs if j.get("id") == job_id), None)
     if not job:
         return jsonify({"error": "任务不存在"}), 404
-    if job.get("status") != "completed":
-        return jsonify({"error": "任务未完成"}), 400
-    result = job.get("result")
-    if not isinstance(result, list) or not result:
-        return jsonify({"error": "没有预览数据"}), 400
-    item = result[0]
-    json_path = item.get("json")
-    if json_path:
-        try:
-            preview = scrape_preview_from_json(Path(str(json_path)), limit=1000)
-            payload = job.get("payload") or {}
-            preview["market"] = payload.get("market", "").upper()
-            preview["symbol"] = payload.get("symbol", "")
-            preview["taskName"] = job.get("name") or payload.get("name") or payload.get("resourceId") or ""
-            return jsonify(preview)
-        except Exception as exc:
-            return jsonify({"error": str(exc)}), 500
-    return jsonify({"error": "没有预览数据"}), 400
+    payload = job.get("payload") or {}
+
+    snapshots = job.get("snapshots") or []
+    snapshot_ts = request.args.get("snapshot", "").strip()
+
+    if snapshot_ts:
+        entry = next((s for s in snapshots if s.get("timestamp") == snapshot_ts), None)
+        if not entry:
+            return jsonify({"error": "快照不存在"}), 404
+        json_path_str = entry.get("json")
+        if not json_path_str:
+            return jsonify({"error": "快照文件路径缺失"}), 400
+        json_path = Path(str(json_path_str))
+    else:
+        if job.get("status") != "completed":
+            return jsonify({"error": "任务未完成"}), 400
+        result = job.get("result")
+        if not isinstance(result, list) or not result:
+            return jsonify({"error": "没有预览数据"}), 400
+        json_path_str = result[0].get("json")
+        if not json_path_str:
+            return jsonify({"error": "没有预览数据"}), 400
+        json_path = Path(str(json_path_str))
+
+    try:
+        preview = scrape_preview_from_json(json_path, limit=1000)
+        preview["market"] = payload.get("market", "").upper()
+        preview["symbol"] = payload.get("symbol", "")
+        preview["taskName"] = job.get("name") or payload.get("name") or payload.get("resourceId") or ""
+        preview["snapshots"] = [
+            {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
+            for s in snapshots
+        ]
+        return jsonify(preview)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.get("/api/schedules")
