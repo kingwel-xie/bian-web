@@ -200,6 +200,12 @@ async function editJobName(jobId, currentName) {
   }
 }
 
+function lastLine(text) {
+  if (!text) return "";
+  const lines = text.trim().split("\n");
+  return lines[lines.length - 1] || "";
+}
+
 function renderJobs(jobs) {
   const { page, totalPages, total } = state;
   $("#jobCount").textContent = `${total}`;
@@ -210,6 +216,7 @@ function renderJobs(jobs) {
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/1000 rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
+    const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
     const url = normalizeTaskUrl(payload.url);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
     const rid = payload.resourceId ? String(payload.resourceId) : "";
@@ -226,7 +233,7 @@ function renderJobs(jobs) {
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
-          <button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>
+          <button class="ghost mini" type="button" ${job.status === "running" || job.status === "queued" ? "disabled" : ""} data-rerun="${escapeHtml(job.id)}">再次抓取</button>
           <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">改名</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
@@ -237,7 +244,8 @@ function renderJobs(jobs) {
           </div>
           <div class="progress-track"><i style="width:${percent}%"></i></div>
         </div>
-        ${job.stderr ? `<details class="stderr"><summary>stderr</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
+          ${errorReason ? `<div class="job-error">${escapeHtml(errorReason)}</div>` : ""}
+          ${job.stderr ? `<details class="stderr"><summary>详情</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
       </article>
     `;
   }).join("") || `<div class="empty box">没有任务。</div>`;

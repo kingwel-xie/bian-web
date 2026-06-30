@@ -305,8 +305,20 @@ button:disabled {
 }
 
 .job.run {
-  border-left-color: var(--accent);
-  background: rgba(14, 116, 122, 0.06);
+  border-left-color: var(--accent-2);
+  background: rgba(14, 116, 122, 0.12);
+  box-shadow: inset 2px 0 0 var(--accent-2);
+}
+
+.job-error {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--bad);
+  background: rgba(196, 81, 69, 0.08);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
 }
 
 .snapshot-ts {

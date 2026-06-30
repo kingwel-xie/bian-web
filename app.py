@@ -1179,10 +1179,14 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             existing["finishedAt"] = None
             job = existing
         else:
+            market = str(payload.get("market") or "").upper()
+            symbol = str(payload.get("symbol") or "").upper()
+            default_name = f"{market} {symbol}".strip()
             job = {
                 "id": uuid.uuid4().hex[:12],
                 "source": source,
                 "status": "queued",
+                "name": payload.get("name") or default_name,
                 "payload": payload,
                 "progress": progress_from_stderr("", "queued"),
                 "createdAt": datetime.now(timezone.utc).isoformat(),
