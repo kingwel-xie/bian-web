@@ -40,6 +40,19 @@
   .err { color: var(--bad); font-weight: 900; }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
   #searchInput { width: 100%; border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; }
+  .team-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 16px; cursor: pointer; font-weight: 900; font-size: 12px; min-height: 34px; }
+  .team-btn:hover { background: #e1f3f6; color: var(--accent-2); }
+  .team-btn:disabled { opacity: 0.5; cursor: default; }
+  .team-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
+  .team-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+  .team-card { border-top: 1px solid var(--line); padding: 10px 16px; }
+  .team-card-header { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .team-card-header b { color: var(--ink); }
+  .team-members { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .team-members { width: auto; min-width: 0; }
+  .team-members td { padding: 4px 8px; border-bottom: 1px solid rgba(46,42,36,0.06); white-space: nowrap; }
+  .team-members th { padding: 4px 8px; font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; white-space: nowrap; }
+  .team-empty { color: var(--muted); text-align: center; padding: 18px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -49,7 +62,9 @@
         <h2 style="font-size:18px;margin:0" id="title">排行榜预览</h2>
         <p class="preview-meta" id="meta">加载中...</p>
       </div>
-      <div class="downloads" id="downloadLinks"></div>
+      <div class="downloads" id="downloadLinks">
+        <button class="team-btn" id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 团队检测</button>
+      </div>
     </div>
     <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
     <div class="preview-body">
@@ -65,6 +80,10 @@
         <div id="deltaCharts" class="delta-charts"></div>
       </div>
     </div>
+    <div id="teamPanel" class="team-panel" style="display:none">
+      <h3>团队检测 <span id="teamSummary" style="font-weight:400;font-size:12px"></span></h3>
+      <div id="teamBody"></div>
+    </div>
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
@@ -74,14 +93,15 @@
     </div>
   </div>
 <script>
+function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
+
 (async () => {
   const params = new URLSearchParams(location.search);
   const jobId = params.get("job");
   if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
   const snapshotParam = params.get("snapshot") || "";
 
-  function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
   function fmtSnapshotTs(ts) {
     if (!ts) return "—";
     const m = String(ts).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/);
@@ -114,6 +134,7 @@
     `;
 
     document.getElementById("downloadLinks").innerHTML = [
+      `<button class="team-btn" id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 团队检测</button>`,
       preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
       preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
       preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
@@ -200,6 +221,63 @@
     document.getElementById("meta").textContent = err.message;
   }
 })();
+
+function runTeamAnalysis() {
+  const btn = document.getElementById("teamBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 分析中...";
+  const params = new URLSearchParams(location.search);
+  const jobId = params.get("job");
+  if (!jobId) return;
+  const teamPanel = document.getElementById("teamPanel");
+  const teamBody = document.getElementById("teamBody");
+  const teamSummary = document.getElementById("teamSummary");
+  fetch("/api/jobs/" + encodeURIComponent(jobId) + "/team-analysis?snapshots=5")
+    .then(r => {
+      if (!r.ok) return r.text().then(t => { throw new Error("HTTP " + r.status + ": " + t.slice(0, 200)); });
+      return r.json();
+    })
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = "📊 团队检测";
+      if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
+      const teams = data.teams || [];
+      teamSummary.textContent = teams.length ? `发现 ${teams.length} 个团队` : "未检测到团队";
+      const snapCount = teams.length && teams[0].members[0]?.history?.length || 0;
+      teamBody.innerHTML = teams.length ? teams.map(t => {
+        const snapHeaders = t.members[0]?.history?.map((h, si) =>
+          `<th class="num">快照${si + 1}<br><span style="font-weight:400">排名</span></th>` +
+          `<th class="num"><span style="font-weight:400">grade</span></th>` +
+          `<th class="num"><span style="font-weight:400">增量</span></th>`
+        ).join("") || "";
+        return `<div class="team-card">
+          <div class="team-card-header">
+            <span>团队 #${t.id + 1} · <b>${t.size}</b> 人</span>
+            <span>平均排名 <b>${t.avgRank}</b></span>
+          </div>
+          <table class="team-members">
+            <tr><th>#</th><th>昵称</th><th>User ID</th>${snapHeaders}</tr>
+            ${t.members.map((m, i) => `<tr>
+              <td>${i + 1}</td>
+              <td>${escapeHtml(m.nickname)}</td>
+              <td>${escapeHtml(m.userId)}</td>
+              ${(m.history || []).map(h =>
+                `<td class="num">${h.rank}</td><td class="num">${fmtNumber(h.grade)}</td><td class="num">${h.delta != null ? fmtNumber(h.delta) : "—"}</td>`
+              ).join("")}
+            </tr>`).join("")}
+          </table>
+        </div>`;
+      }).join("") : '<div class="team-empty">未检测到团队。</div>';
+      teamPanel.style.display = "";
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = "📊 团队检测";
+      teamSummary.textContent = "请求失败";
+      teamBody.innerHTML = '<div class="team-empty">错误: ' + escapeHtml(err.message) + '</div>';
+      teamPanel.style.display = "";
+    });
+}
 </script>
 </body>
 </html>

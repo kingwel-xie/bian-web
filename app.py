@@ -913,6 +913,138 @@ def ensure_scrape_xlsx(json_path: Path, sheet_name: str | None = None) -> Path |
         return xlsx_path if xlsx_path.exists() else None
 
 
+def detect_teams(
+    snapshot_paths: list[Path],
+    min_sim: float = 0.85,
+    max_rank_gap: int = 3,
+    top_n: int = 500,
+) -> list[dict[str, Any]]:
+    if len(snapshot_paths) < 2:
+        return []
+
+    snap_count = min(3, len(snapshot_paths))
+    snap_paths = snapshot_paths[-snap_count:]
+
+    snap_grades: list[dict[str, float]] = []
+    snap_ranks: list[dict[str, int]] = []
+    for path in snap_paths:
+        data = read_json(path, {})
+        rows = data.get("rows", []) if isinstance(data, dict) else []
+        if not isinstance(rows, list):
+            return []
+        grades: dict[str, float] = {}
+        ranks: dict[str, int] = {}
+        for row in rows:
+            nick = nickname_value(row)
+            if nick:
+                grades[nick] = float(to_decimal(row.get("grade")) or 0)
+                ranks[nick] = int(row["sequence"]) if row.get("sequence") is not None else 0
+        snap_grades.append(grades)
+        snap_ranks.append(ranks)
+
+    last_data = read_json(snap_paths[-1], {})
+    last_rows = last_data.get("rows", []) if isinstance(last_data, dict) else []
+    if not isinstance(last_rows, list) or len(last_rows) < 6:
+        return []
+
+    delta_err = 5000
+
+    users: list[dict[str, Any]] = []
+    for row in last_rows:
+        nick = nickname_value(row)
+        if not nick:
+            continue
+        rank = int(row["sequence"]) if row.get("sequence") is not None else 0
+        if rank > top_n:
+            continue
+        grade = float(to_decimal(row.get("grade")) or 0)
+        prev_grade = snap_grades[-2].get(nick, 0) if snap_count >= 2 else 0
+        deltas = []
+        history = []
+        valid = True
+        for i in range(len(snap_grades)):
+            g = snap_grades[i].get(nick)
+            r = snap_ranks[i].get(nick)
+            if g is None or r is None:
+                valid = False
+                break
+            if i == 0:
+                history.append({"rank": r, "grade": g, "delta": 0})
+            else:
+                prev_g = snap_grades[i - 1].get(nick, 0)
+                history.append({"rank": r, "grade": g, "delta": g - prev_g})
+                deltas.append(g - prev_g)
+        if not valid:
+            continue
+        users.append({
+            "nickname": nick,
+            "userId": row.get("userId") or "",
+            "rank": rank,
+            "grade": grade,
+            "deltaGrade": grade - prev_grade,
+            "deltas": deltas,
+            "history": history,
+        })
+
+    if len(users) < 6:
+        return []
+
+    users.sort(key=lambda u: u["rank"])
+
+    adj: dict[int, set[int]] = {i: set() for i in range(len(users))}
+    for i in range(len(users)):
+        for j in range(i + 1, len(users)):
+            if abs(users[i]["rank"] - users[j]["rank"]) > max_rank_gap:
+                continue
+            ok = True
+            for di, dj in zip(users[i]["deltas"], users[j]["deltas"]):
+                if abs(di - dj) > delta_err:
+                    ok = False
+                    break
+            if ok:
+                adj[i].add(j)
+                adj[j].add(i)
+
+    visited: set[int] = set()
+    teams: list[list[int]] = []
+    for i in range(len(users)):
+        if i in visited:
+            continue
+        stack = [i]
+        team = []
+        while stack:
+            cur = stack.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            team.append(cur)
+            for nb in adj[cur]:
+                if nb not in visited:
+                    stack.append(nb)
+        if len(team) >= 2:
+            teams.append(team)
+
+    team_results: list[dict[str, Any]] = []
+    for team in teams:
+        members = [{
+            "nickname": users[i]["nickname"],
+            "userId": users[i]["userId"],
+            "rank": users[i]["rank"],
+            "deltaGrade": users[i]["deltaGrade"],
+            "history": users[i]["history"],
+        } for i in team]
+        members.sort(key=lambda m: m["rank"])
+        team_results.append({
+            "size": len(team),
+            "avgRank": round(sum(m["rank"] for m in members) / len(members), 1),
+            "members": members,
+        })
+    team_results.sort(key=lambda t: (t["avgRank"], -t["size"]))
+    for i, t in enumerate(team_results):
+        t["id"] = i
+    return team_results
+
+
 _no_job_context = object()
 
 def scrape_preview_from_json(
@@ -1594,6 +1726,55 @@ def api_job_preview(job_id: str) -> Response:
             for s in snapshots
         ]
         return jsonify(preview)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.get("/api/jobs/<job_id>/team-analysis")
+def api_team_analysis(job_id: str) -> Response:
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+
+    snapshots = job.get("snapshots") or []
+    if len(snapshots) < 3:
+        return jsonify({"error": "快照不足（需要至少 3 个）"}), 400
+
+    count = request.args.get("snapshots", 5, type=int)
+    min_sim = request.args.get("min_sim", 0.85, type=float)
+    max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
+    top_n = request.args.get("top_n", 500, type=int)
+
+    count = max(3, min(count, len(snapshots)))
+    recent = snapshots[-count:]
+
+    paths: list[Path] = []
+    for s in recent:
+        p = s.get("json")
+        if p:
+            path = Path(str(p))
+            if path.exists():
+                paths.append(path)
+    if len(paths) < 3:
+        return jsonify({"error": "快照文件不足"}), 400
+
+    try:
+        teams = detect_teams(
+            paths,
+            min_sim=min_sim,
+            max_rank_gap=max_rank_gap,
+            top_n=top_n,
+        )
+        return jsonify({
+            "teams": teams,
+            "params": {
+                "snapshots": count,
+                "minSim": min_sim,
+                "maxRankGap": max_rank_gap,
+                "topN": top_n,
+            },
+        })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
