@@ -771,56 +771,25 @@ def public_file_with_mtime_or_none(path_value: Any) -> str | None:
         return url
 
 
-def latest_delta_payload(activity_dir: Path, name: str, json_path: Path) -> dict[str, Any] | None:
-    prefix = json_path.name.rsplit("_top", 1)[0]
-    path = activity_dir / f"{prefix}_delta_by_nickname.json"
-    data = read_json(path, None)
-    if not isinstance(data, dict):
-        return None
-    for item in data.get("ranges") or []:
-        if not isinstance(item, dict):
-            continue
-        for key in ("csv",):
-            url = public_file_or_none(item.get(key))
-            if url:
-                item[f"{key}Url"] = url
-    json_url = public_file_or_none(path)
-    if json_url:
-        data["jsonUrl"] = json_url
-    combined_chart_url = public_file_with_mtime_or_none(data.get("combinedChart"))
-    if combined_chart_url:
-        data["combinedChartUrl"] = combined_chart_url
-    return data
-
-
-def load_delta_by_nickname(activity_dir: Path, delta_payload: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    mapped = {}
-    if not delta_payload:
-        return mapped
-    for item in delta_payload.get("ranges") or []:
-        if not isinstance(item, dict):
-            continue
-        csv_path = item.get("csv")
-        if not csv_path:
-            continue
-        path = Path(str(csv_path))
-        if not path.is_absolute():
-            path = activity_dir / str(csv_path)
-        try:
-            import csv
-
-            with path.open(encoding="utf-8", newline="") as handle:
-                for row in csv.DictReader(handle):
-                    nickname = str(row.get("nickName") or "").strip()
-                    if nickname:
-                        mapped[nickname] = row
-        except OSError:
-            continue
-    return mapped
-
-
 def nickname_value(row: dict[str, Any]) -> str:
     return str(row.get("nickName") or row.get("nickname") or "").strip()
+
+
+def find_previous_snapshot(activity_dir: Path, name: str, current_json_path: Path) -> Path | None:
+    current_name = current_json_path.name
+    older: list[Path] = []
+    for path in sorted(activity_dir.glob(f"*_{name}_top*.json")):
+        if path.name >= current_name:
+            continue
+        if path.resolve() == current_json_path.resolve():
+            continue
+        data = read_json(path, {})
+        if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
+            continue
+        older.append(path)
+    if not older:
+        return None
+    return max(older, key=lambda p: p.name)
 
 
 def preview_delta_by_nickname(
@@ -1042,20 +1011,22 @@ def scrape_preview_from_json(
     xlsx_path = ensure_scrape_xlsx(json_path, str(data.get("name") or json_path.parent.name))
     discovery_candidates = sorted(json_path.parent.glob("*_discovery.json"), key=lambda p: p.stat().st_mtime)
     discovery_path = discovery_candidates[-1] if discovery_candidates else None
-    delta_payload = latest_delta_payload(json_path.parent, str(data.get("name") or ""), json_path)
+
+    # Determine previous snapshot path
+    prev_path: Path | None = None
     if previous_json_path is not _no_job_context:
         if previous_json_path and previous_json_path.exists():
-            if delta_payload:
-                delta_payload["previousSnapshot"] = str(previous_json_path)
-                delta_payload["firstSnapshot"] = False
-            else:
-                delta_payload = {
-                    "name": data.get("name") or "",
-                    "previousSnapshot": str(previous_json_path),
-                    "firstSnapshot": False,
-                }
-        else:
-            delta_payload = None
+            prev_path = previous_json_path
+    else:
+        name = str(data.get("name") or "")
+        if name:
+            prev_path = find_previous_snapshot(json_path.parent, name, json_path)
+
+    delta_payload = (
+        {"previousSnapshot": str(prev_path), "firstSnapshot": False}
+        if prev_path
+        else {"firstSnapshot": True}
+    )
     delta_by_nickname = preview_delta_by_nickname(rows, delta_payload)
     return {
         "name": data.get("name"),
@@ -1071,7 +1042,6 @@ def scrape_preview_from_json(
         "csvUrl": public_file(csv_path) if csv_path.exists() else None,
         "xlsxUrl": public_file(xlsx_path) if xlsx_path and xlsx_path.exists() else None,
         "discoveryUrl": public_file(discovery_path) if discovery_path else None,
-        "delta": delta_payload,
         "rows": compact_leaderboard_rows(rows, limit, delta_by_nickname),
     }
 
@@ -1658,6 +1628,52 @@ def api_job_snapshots(job_id: str) -> Response:
     return jsonify({"snapshots": enriched})
 
 
+@app.delete("/api/jobs/<job_id>/snapshots/<snapshot_timestamp>")
+def api_delete_snapshot(job_id: str, snapshot_timestamp: str) -> Response:
+    with state_lock:
+        jobs = load_jobs()
+        job = next((j for j in jobs if j.get("id") == job_id), None)
+        if not job:
+            return jsonify({"error": "任务不存在"}), 404
+
+        snapshots = job.get("snapshots") or []
+        if len(snapshots) < 2:
+            return jsonify({"error": "至少保留一个快照"}), 400
+
+        idx = next(
+            (i for i, s in enumerate(snapshots) if s.get("timestamp") == snapshot_timestamp),
+            None,
+        )
+        if idx is None:
+            return jsonify({"error": "快照不存在"}), 404
+
+        removed = snapshots.pop(idx)
+        deleted_files: list[str] = []
+        for key in ("json", "csv"):
+            fp = removed.get(key)
+            if fp:
+                try:
+                    Path(str(fp)).unlink(missing_ok=True)
+                    deleted_files.append(str(fp))
+                except OSError:
+                    pass
+
+        # clear result if it references a deleted file
+        removed_json = removed.get("json")
+        if removed_json:
+            result = job.get("result")
+            if isinstance(result, list):
+                job["result"] = [r for r in result if r.get("json") != removed_json]
+            elif isinstance(result, dict) and result.get("json") == removed_json:
+                job.pop("result", None)
+
+        job["snapshots"] = snapshots
+        job["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        save_jobs(jobs)
+
+    return jsonify({"success": True, "deleted": deleted_files})
+
+
 @app.get("/api/jobs/<job_id>/preview")
 def api_job_preview(job_id: str) -> Response:
     jobs = load_jobs()
@@ -1683,7 +1699,9 @@ def api_job_preview(job_id: str) -> Response:
         result = job.get("result")
         json_path_str = None
         if isinstance(result, list) and result:
-            json_path_str = result[0].get("json")
+            candidate = result[0].get("json")
+            if candidate and Path(str(candidate)).exists():
+                json_path_str = candidate
         if not json_path_str and snapshots:
             json_path_str = snapshots[-1].get("json")
         if not json_path_str:

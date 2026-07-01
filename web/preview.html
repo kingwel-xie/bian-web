@@ -136,11 +136,25 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
             </option>
           `).join("")}
         </select>
+        <button id="deleteSnapshotBtn" type="button" style="background:none;border:1px solid #e0c8b0;border-radius:6px;cursor:pointer;padding:4px 10px;font-size:12px;color:#b34a4a;white-space:nowrap">删除</button>
       `;
       document.getElementById("snapshotSelect").addEventListener("change", (e) => {
         const url = new URL(location.href);
         url.searchParams.set("snapshot", e.target.value);
         location.href = url.href;
+      });
+      document.getElementById("deleteSnapshotBtn").addEventListener("click", () => {
+        const sel = document.getElementById("snapshotSelect");
+        const ts = sel.value;
+        if (!confirm("确定删除快照 " + fmtSnapshotTs(ts) + "？")) return;
+        fetch("/api/jobs/" + encodeURIComponent(jobId) + "/snapshots/" + encodeURIComponent(ts), { method: "DELETE" })
+          .then(r => {
+            if (!r.ok) return r.text().then(t => { throw new Error(t.slice(0, 200)); });
+            const url = new URL(location.href);
+            url.searchParams.delete("snapshot");
+            location.replace(url.href);
+          })
+          .catch(err => { alert("删除失败: " + err.message); });
       });
     }
 

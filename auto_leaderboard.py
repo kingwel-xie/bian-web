@@ -51,7 +51,6 @@ DEFAULT_PAGE_SIZE = 100
 DEFAULT_TOP = 500
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
 DEFAULT_MARK_RANKS = (20, 50, 200)
-DELTA_RANGES = ((10, 25), (26, 50), (180, 200))
 
 
 
@@ -796,100 +795,6 @@ def row_nickname(row: dict[str, Any]) -> str:
     return str(row.get("nickName") or row.get("nickname") or "").strip()
 
 
-def find_previous_snapshot(out_dir: Path, name: str, current_json_path: Path) -> Path | None:
-    current_name = current_json_path.name
-    older: list[Path] = []
-    for path in sorted(out_dir.glob(f"*_{name}_top*.json")):
-        if path.name >= current_name:
-            continue
-        if path.resolve() == current_json_path.resolve():
-            continue
-        data = read_json(path, {})
-        if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
-            continue
-        older.append(path)
-    if not older:
-        return None
-    return max(older, key=lambda p: p.name)
-
-
-def load_snapshot_rows(path: Path | None) -> list[dict[str, Any]] | None:
-    if path is None:
-        return None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    rows = data.get("rows") if isinstance(data, dict) else None
-    if not isinstance(rows, list):
-        return None
-    return enrich_restored_trading_volume(rows)
-
-
-def previous_by_nickname(rows: list[dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
-    if rows is None:
-        return {}
-    mapped: dict[str, dict[str, Any]] = {}
-    for row in sorted(rows, key=lambda item: row_rank(item) or 10**9):
-        nickname = row_nickname(row)
-        if nickname and nickname not in mapped:
-            mapped[nickname] = row
-    return mapped
-
-
-def build_delta_rows(
-    current_rows: list[dict[str, Any]],
-    previous_rows: list[dict[str, Any]] | None,
-    start_rank: int,
-    end_rank: int,
-) -> list[dict[str, Any]]:
-    previous = previous_by_nickname(previous_rows)
-    has_previous = previous_rows is not None
-    delta_rows = []
-    for row in sorted(current_rows, key=lambda item: row_rank(item) or 10**9):
-        rank = row_rank(row)
-        if rank is None or rank < start_rank or rank > end_rank:
-            continue
-        current_grade = to_decimal(row.get("grade")) or Decimal("0")
-        nickname = row_nickname(row)
-        previous_row = previous.get(nickname)
-        previous_grade = (
-            to_decimal(previous_row.get("grade"))
-            if previous_row is not None
-            else Decimal("0")
-        )
-        if previous_grade is None:
-            previous_grade = Decimal("0")
-        delta = current_grade - previous_grade
-        delta_rows.append(
-            {
-                "rank": rank,
-                "nickName": nickname,
-                "userId": row.get("userId"),
-                "grade": float(current_grade),
-                "previousRank": row_rank(previous_row) if previous_row is not None else None,
-                "previousGrade": float(previous_grade) if has_previous else 0,
-                "deltaGrade": float(delta),
-                "matchedBy": "nickName" if previous_row is not None else None,
-            }
-        )
-    return delta_rows
-
-
-def write_delta_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    fieldnames = [
-        "rank",
-        "nickName",
-        "userId",
-        "grade",
-        "previousRank",
-        "previousGrade",
-        "deltaGrade",
-        "matchedBy",
-    ]
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1076,117 +981,6 @@ def make_distribution_chart(
     plt.close(fig)
 
 
-def make_combined_delta_chart(
-    range_rows: list[tuple[int, int, list[dict[str, Any]]]],
-    name: str,
-    output_path: Path,
-    has_previous: bool,
-) -> None:
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.ticker import FuncFormatter
-    except ImportError as exc:
-        raise ScriptError("缺少 matplotlib，无法出图：python3 -m pip install matplotlib") from exc
-    plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "DejaVu Sans"]
-    plt.rcParams["axes.unicode_minus"] = False
-
-    def fmt_axis(value: float, _pos: object = None) -> str:
-        abs_value = abs(value)
-        sign = "-" if value < 0 else ""
-        if abs_value >= 10_000:
-            return f"{sign}{abs_value / 10000:.0f}W"
-        return f"{value:.0f}"
-
-    fig, axes = plt.subplots(len(range_rows), 1, figsize=(16, 18), dpi=160)
-    if len(range_rows) == 1:
-        axes = [axes]
-    fig.patch.set_facecolor("#f6f1e8")
-    note = "first snapshot, delta = current volume" if not has_previous else "matched by nickName"
-    fig.suptitle(f"{name.upper()} Daily Delta by Nickname ({note})", fontsize=22, weight="bold", color="#1f2933")
-
-    for ax, (start_rank, end_rank, rows) in zip(axes, range_rows):
-        ranks = [int(row["rank"]) for row in rows]
-        deltas = [float(row.get("deltaGrade") or 0) for row in rows]
-        labels = [str(row.get("nickName") or "")[:12] for row in rows]
-        colors = ["#0e747a" if value >= 0 else "#c45145" for value in deltas]
-        ax.set_facecolor("#fffaf0")
-        ax.bar(ranks, deltas, width=0.72, color=colors, alpha=0.82)
-        ax.axhline(0, color="#5f554b", linewidth=1.1)
-        ax.set_title(f"Rank {start_rank}-{end_rank}   Total: {fmt_axis(sum(deltas))}", fontsize=15, weight="bold", color="#1f2933")
-        ax.set_ylabel("Delta", fontsize=11, color="#334e68")
-        ax.set_xticks(ranks)
-        ax.set_xticklabels([f"#{rank}\n{label}" for rank, label in zip(ranks, labels)], rotation=45, ha="right", fontsize=8)
-        ax.yaxis.set_major_formatter(FuncFormatter(fmt_axis))
-        ax.grid(True, axis="y", color="#d9cfc0", alpha=0.8, linewidth=0.8)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color("#b7aa98")
-        ax.spines["bottom"].set_color("#b7aa98")
-        ax.tick_params(colors="#334e68")
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(output_path, bbox_inches="tight")
-    plt.close(fig)
-
-
-def build_delta_outputs(
-    name: str,
-    out_dir: Path,
-    file_prefix: str,
-    json_path: Path,
-    rows: list[dict[str, Any]],
-) -> dict[str, Any]:
-    previous_path = find_previous_snapshot(out_dir, name, json_path)
-    previous_rows = load_snapshot_rows(previous_path)
-    has_previous = previous_rows is not None
-    ranges = []
-    combined_rows = []
-    for start_rank, end_rank in DELTA_RANGES:
-        delta_rows = build_delta_rows(rows, previous_rows, start_rank, end_rank)
-        combined_rows.append((start_rank, end_rank, delta_rows))
-        range_key = f"{start_rank}_{end_rank}"
-        csv_path = out_dir / f"{file_prefix}_rank{range_key}_delta_by_nickname.csv"
-        write_delta_csv(csv_path, delta_rows)
-        inherit_owner(csv_path, out_dir)
-        ranges.append(
-            {
-                "range": f"{start_rank}-{end_rank}",
-                "rows": len(delta_rows),
-                "sumDeltaGrade": decimal_text(
-                    sum(
-                        (to_decimal(row.get("deltaGrade")) or Decimal("0"))
-                        for row in delta_rows
-                    )
-                ),
-                "csv": str(csv_path),
-            }
-        )
-    combined_chart_path = out_dir / f"{file_prefix}_delta_by_nickname_combined.png"
-    make_combined_delta_chart(combined_rows, name, combined_chart_path, has_previous)
-    inherit_owner(combined_chart_path, out_dir)
-    delta_json_path = out_dir / f"{file_prefix}_delta_by_nickname.json"
-    payload = {
-        "name": name,
-        "matchBy": "nickName",
-        "previousSnapshot": str(previous_path) if previous_path else None,
-        "firstSnapshot": not has_previous,
-        "combinedChart": str(combined_chart_path),
-        "ranges": ranges,
-    }
-    write_json(delta_json_path, payload)
-    inherit_owner(delta_json_path, out_dir)
-    return {
-        "json": str(delta_json_path),
-        "previousSnapshot": str(previous_path) if previous_path else None,
-        "firstSnapshot": not has_previous,
-        "combinedChart": str(combined_chart_path),
-        "ranges": ranges,
-        "charts": [str(combined_chart_path)],
-    }
-
-
 def normalize_resource_ids(discovery: dict[str, Any], manual_id: str | None) -> list[int]:
     ids: list[int] = []
     if manual_id is not None:
@@ -1355,8 +1149,6 @@ def main() -> int:
         for path in (csv_path, json_path, discovery_path):
             inherit_owner(path, out_dir)
 
-        delta = build_delta_outputs(name, out_dir, file_prefix, json_path, rows)
-
         if not args.no_charts and args.top >= 200:
             make_distribution_chart(rows, name, chart_path, limit=200, log_scale=False)
             make_distribution_chart(rows, name, chart_log_path, limit=200, log_scale=True)
@@ -1373,7 +1165,6 @@ def main() -> int:
                 "csv": str(csv_path),
                 "json": str(json_path),
                 "discovery": str(discovery_path),
-                "delta": delta,
                 "charts": [str(path) for path in chart_paths],
             }
         )
