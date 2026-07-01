@@ -165,9 +165,8 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         const total = items.reduce((s, r) => s + (Number(r.grade) || 0), 0);
         const avg = count ? total / count : 0;
         const last = items.length ? items[items.length - 1].grade : null;
-        const deltas = items.filter(r => r.deltaGrade != null && Number(r.grade));
-        const avgDeltaRatio = deltas.length ? deltas.reduce((s, r) => s + Number(r.deltaGrade) / Number(r.grade), 0) / deltas.length : null;
-        return { label, count, total, avg, last, avgDeltaRatio };
+        const sumDelta = items.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
+        return { label, count, total, avg, last, sumDelta };
       });
     }
 
@@ -189,12 +188,13 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const stats = rangeStats(allRows, ranges);
     const totalCount = allRows.length;
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
+    const totalDelta = allRows.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
-      const dr = s.avgDeltaRatio != null ? (s.avgDeltaRatio * 100).toFixed(1) + "%" : "—";
+      const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
       return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
 
