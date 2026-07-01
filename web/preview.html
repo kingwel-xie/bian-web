@@ -11,19 +11,13 @@
   .preview-head p { color: var(--muted); font-size: 12px; margin-top: 5px; }
   .preview-meta { color: var(--muted); font-size: 12px; }
   .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-  .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; width: 67%; margin: 0 auto; }
+  .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
   .stats-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); }
   .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
   .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 18%; } .stats-table .c-count { width: 14%; } .stats-table .c-total { width: 24%; } .stats-table .c-pct { width: 18%; } .stats-table .c-avg { width: 26%; }
-  .chart-panel { min-width: 0; }
-  .delta-charts { display: grid; gap: 8px; }
-  .delta-charts:empty { display: none; }
-  .delta-charts figure { min-width: 0; margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
-  .delta-charts img { display: block; width: 100%; max-height: 760px; object-fit: contain; background: #fffdf8; }
-  .delta-charts figcaption { border-top: 1px solid var(--line); padding: 6px 8px; color: var(--muted); font-size: 12px; }
+  .stats-table .c-rank { width: 14%; } .stats-table .c-count { width: 12%; } .stats-table .c-total { width: 20%; } .stats-table .c-pct { width: 14%; } .stats-table .c-avg { width: 20%; } .stats-table .c-last { width: 20%; }
   table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
   th { padding: 6px 12px; }
@@ -53,6 +47,15 @@
   .team-members td { padding: 4px 8px; border-bottom: 1px solid rgba(46,42,36,0.06); white-space: nowrap; }
   .team-members th { padding: 4px 8px; font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; white-space: nowrap; }
   .team-empty { color: var(--muted); text-align: center; padding: 18px; font-size: 13px; }
+  @media (max-width: 640px) {
+    body { padding: 6px; }
+    .panel[style] { padding: 6px !important; }
+    .stats-panel { width: 100%; }
+    .stats-table th, .stats-table td { padding: 6px 8px; }
+    .col-nick { width: 100px; } .col-user { width: 80px; } .col-volume { width: 110px; } .col-delta { width: 100px; }
+    .team-card-header { flex-direction: column; gap: 4px; }
+    .preview-meta span { display: inline-block; }
+  }
 </style>
 </head>
 <body>
@@ -71,13 +74,10 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-avg" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">均值</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-avg" /><col class="c-last" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">均值</th><th class="num">末名</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
-      </div>
-      <div class="chart-panel">
-        <div id="deltaCharts" class="delta-charts"></div>
       </div>
     </div>
     <div id="teamPanel" class="team-panel" style="display:none">
@@ -87,7 +87,7 @@
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
-        <thead><tr><th>#</th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num">增量</th><th class="num">Region</th></tr></thead>
+        <thead><tr><th>#</th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num">Region</th></tr></thead>
         <tbody id="rows"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
@@ -169,7 +169,8 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         const count = items.length;
         const total = items.reduce((s, r) => s + (Number(r.grade) || 0), 0);
         const avg = count ? total / count : 0;
-        return { label, count, total, avg };
+        const last = items.length ? items[items.length - 1].grade : null;
+        return { label, count, total, avg, last };
       });
     }
 
@@ -193,17 +194,19 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
-      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${fmtVolume(s.avg)}</td></tr>`;
+      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td></tr>`;
 
-    document.getElementById("deltaCharts").innerHTML = preview.delta?.combinedChartUrl ? `
-      <figure><img src="${escapeHtml(preview.delta.combinedChartUrl)}" alt="增量图" loading="lazy" />
-      <figcaption>增量图 · 10-25 / 26-50 / 180-200</figcaption></figure>` : "";
+    let deltaSort = false;
 
     function render(query) {
       const q = query.trim().toLowerCase();
-      const rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
+      let rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
+      if (deltaSort) {
+        rows = [...rows].sort((a, b) => (b.deltaGrade ?? -Infinity) - (a.deltaGrade ?? -Infinity));
+      }
+      document.getElementById("deltaSortIcon").textContent = deltaSort ? " ▼" : "";
       document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
         <tr><td>${escapeHtml(r.rank)}</td>
         <td class="tl">${escapeHtml(r.nickname || "—")}</td>
@@ -217,6 +220,10 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     render("");
 
     document.getElementById("searchInput").addEventListener("input", e => render(e.target.value));
+    document.querySelector(".sort-delta").addEventListener("click", () => {
+      deltaSort = !deltaSort;
+      render(document.getElementById("searchInput").value);
+    });
   } catch (err) {
     document.getElementById("meta").textContent = err.message;
   }
