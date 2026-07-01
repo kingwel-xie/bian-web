@@ -17,7 +17,7 @@
   .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
   .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 14%; } .stats-table .c-count { width: 12%; } .stats-table .c-total { width: 20%; } .stats-table .c-pct { width: 14%; } .stats-table .c-avg { width: 20%; } .stats-table .c-last { width: 20%; }
+  .stats-table .c-rank { width: 10%; } .stats-table .c-count { width: 12%; } .stats-table .c-total { width: 18%; } .stats-table .c-pct { width: 12%; } .stats-table .c-dratio { width: 14%; } .stats-table .c-avg { width: 18%; } .stats-table .c-last { width: 16%; }
   table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
   th { padding: 6px 12px; }
@@ -59,8 +59,8 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-avg" /><col class="c-last" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">均值</th><th class="num">末名</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-last" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th><th class="num">均值</th><th class="num">末名</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -151,7 +151,9 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         const total = items.reduce((s, r) => s + (Number(r.grade) || 0), 0);
         const avg = count ? total / count : 0;
         const last = items.length ? items[items.length - 1].grade : null;
-        return { label, count, total, avg, last };
+        const deltas = items.filter(r => r.deltaGrade != null && Number(r.grade));
+        const avgDeltaRatio = deltas.length ? deltas.reduce((s, r) => s + Number(r.deltaGrade) / Number(r.grade), 0) / deltas.length : null;
+        return { label, count, total, avg, last, avgDeltaRatio };
       });
     }
 
@@ -175,9 +177,10 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
-      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
+      const dr = s.avgDeltaRatio != null ? (s.avgDeltaRatio * 100).toFixed(1) + "%" : "—";
+      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
 

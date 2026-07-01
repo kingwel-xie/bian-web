@@ -915,7 +915,6 @@ def ensure_scrape_xlsx(json_path: Path, sheet_name: str | None = None) -> Path |
 
 def detect_teams(
     snapshot_paths: list[Path],
-    min_sim: float = 0.85,
     max_rank_gap: int = 3,
     top_n: int = 500,
     delta_err: int = 1000,
@@ -924,109 +923,88 @@ def detect_teams(
     if len(snapshot_paths) < 2:
         return []
 
-    snap_count = min(3, len(snapshot_paths))
-    snap_paths = snapshot_paths[-snap_count:]
-
-    snap_grades: list[dict[str, float]] = []
-    snap_ranks: list[dict[str, int]] = []
-    for path in snap_paths:
+    paths = snapshot_paths[-2:]
+    grades1: dict[str, float] = {}
+    ranks1: dict[str, int] = {}
+    for path in paths:
         data = read_json(path, {})
         rows = data.get("rows", []) if isinstance(data, dict) else []
         if not isinstance(rows, list):
             return []
-        grades: dict[str, float] = {}
-        ranks: dict[str, int] = {}
         for row in rows:
             nick = nickname_value(row)
             if nick:
-                grades[nick] = float(to_decimal(row.get("grade")) or 0)
-                ranks[nick] = int(row["sequence"]) if row.get("sequence") is not None else 0
-        snap_grades.append(grades)
-        snap_ranks.append(ranks)
+                grades1[nick] = float(to_decimal(row.get("grade")) or 0)
+                ranks1[nick] = int(row["sequence"]) if row.get("sequence") is not None else 0
+        break  # only first (older) snapshot
 
-    last_data = read_json(snap_paths[-1], {})
-    last_rows = last_data.get("rows", []) if isinstance(last_data, dict) else []
-    if not isinstance(last_rows, list) or len(last_rows) < 6:
+    path2 = paths[-1]
+    data2 = read_json(path2, {})
+    rows2 = data2.get("rows", []) if isinstance(data2, dict) else []
+    if not isinstance(rows2, list) or len(rows2) < 6:
         return []
 
     users: list[dict[str, Any]] = []
-    for row in last_rows:
+    for row in rows2:
         nick = nickname_value(row)
         if not nick:
             continue
         rank = int(row["sequence"]) if row.get("sequence") is not None else 0
         if rank > top_n:
             continue
-        grade = float(to_decimal(row.get("grade")) or 0)
-        prev_grade = snap_grades[-2].get(nick, 0) if snap_count >= 2 else 0
-        deltas = []
-        history = []
-        valid = True
-        for i in range(len(snap_grades)):
-            g = snap_grades[i].get(nick)
-            r = snap_ranks[i].get(nick)
-            if g is None or r is None:
-                valid = False
-                break
-            if i == 0:
-                history.append({"rank": r, "grade": g, "delta": 0})
-            else:
-                prev_g = snap_grades[i - 1].get(nick, 0)
-                history.append({"rank": r, "grade": g, "delta": g - prev_g})
-                deltas.append(g - prev_g)
-        if not valid:
+        grade2 = float(to_decimal(row.get("grade")) or 0)
+        g1 = grades1.get(nick)
+        r1 = ranks1.get(nick)
+        if g1 is None or r1 is None:
+            continue
+        delta = grade2 - g1
+        if abs(delta) <= min_delta:
             continue
         users.append({
             "nickname": nick,
             "userId": row.get("userId") or "",
             "rank": rank,
-            "grade": grade,
-            "deltaGrade": grade - prev_grade,
-            "deltas": deltas,
-            "history": history,
+            "grade": grade2,
+            "delta": delta,
+            "history": [
+                {"rank": r1, "grade": g1, "delta": 0},
+                {"rank": rank, "grade": grade2, "delta": delta},
+            ],
         })
 
-    users = [u for u in users if any(abs(d) > min_delta for d in u["deltas"])]
     if len(users) < 6:
         return []
 
     users.sort(key=lambda u: u["rank"])
 
-    adj: dict[int, set[int]] = {i: set() for i in range(len(users))}
+    candidate_teams: list[set[int]] = []
+    seen: set[frozenset[int]] = set()
     for i in range(len(users)):
+        team: set[int] = {i}
         for j in range(i + 1, len(users)):
-            ok = True
-            for di, dj in zip(users[i]["deltas"], users[j]["deltas"]):
-                if abs(di) <= min_delta and abs(dj) <= min_delta:
-                    continue
-                if abs(di - dj) > delta_err:
-                    ok = False
-                    break
-            if not ok:
-                continue
-            if abs(users[i]["rank"] - users[j]["rank"]) > max_rank_gap:
-                continue
-            adj[i].add(j)
-            adj[j].add(i)
-
-    visited: set[int] = set()
-    teams: list[list[int]] = []
-    for i in range(len(users)):
-        if i in visited:
-            continue
-        stack = [i]
-        team = []
-        while stack:
-            cur = stack.pop()
-            if cur in visited:
-                continue
-            visited.add(cur)
-            team.append(cur)
-            for nb in adj[cur]:
-                if nb not in visited:
-                    stack.append(nb)
+            if users[j]["rank"] - users[i]["rank"] > max_rank_gap:
+                break
+            if all(abs(users[j]["delta"] - users[k]["delta"]) <= delta_err for k in team):
+                team.add(j)
         if len(team) >= 2:
+            fs = frozenset(team)
+            if fs not in seen:
+                seen.add(fs)
+                candidate_teams.append(team)
+
+    candidate_teams.sort(key=len, reverse=True)
+    kept: list[set[int]] = []
+    for team in candidate_teams:
+        if not any(team.issubset(other) for other in kept):
+            kept.append(team)
+
+    kept.sort(key=lambda t: (sum(users[i]["rank"] for i in t) / len(t), -len(t)))
+    assigned: set[int] = set()
+    teams: list[set[int]] = []
+    for team in kept:
+        if not any(i in assigned for i in team):
             teams.append(team)
+            assigned.update(team)
 
     team_results: list[dict[str, Any]] = []
     for team in teams:
@@ -1034,7 +1012,7 @@ def detect_teams(
             "nickname": users[i]["nickname"],
             "userId": users[i]["userId"],
             "rank": users[i]["rank"],
-            "deltaGrade": users[i]["deltaGrade"],
+            "delta": users[i]["delta"],
             "history": users[i]["history"],
         } for i in team]
         members.sort(key=lambda m: m["rank"])
@@ -1749,33 +1727,41 @@ def api_team_analysis(job_id: str) -> Response:
         return jsonify({"error": "任务不存在"}), 404
 
     snapshots = job.get("snapshots") or []
-    if len(snapshots) < 3:
-        return jsonify({"error": "快照不足（需要至少 3 个）"}), 400
+    if len(snapshots) < 2:
+        return jsonify({"error": "快照不足（需要至少 2 个）"}), 400
 
-    count = request.args.get("snapshots", 5, type=int)
-    min_sim = request.args.get("min_sim", 0.85, type=float)
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
     top_n = request.args.get("top_n", 500, type=int)
     delta_err = request.args.get("delta_err", 1000, type=int)
     min_delta = request.args.get("min_delta", 500, type=int)
 
-    count = max(3, min(count, len(snapshots)))
-    recent = snapshots[-count:]
+    ts1 = request.args.get("snapshot1")
+    ts2 = request.args.get("snapshot2")
+
+    if ts1 and ts2:
+        s1 = next((s for s in snapshots if s.get("timestamp") == ts1), None)
+        s2 = next((s for s in snapshots if s.get("timestamp") == ts2), None)
+        if not s1 or not s2:
+            return jsonify({"error": "指定快照不存在"}), 400
+        if ts1 > ts2:
+            s1, s2 = s2, s1
+        selected = [s1, s2]
+    else:
+        selected = snapshots[-2:]
 
     paths: list[Path] = []
-    for s in recent:
+    for s in selected:
         p = s.get("json")
         if p:
             path = Path(str(p))
             if path.exists():
                 paths.append(path)
-    if len(paths) < 3:
+    if len(paths) < 2:
         return jsonify({"error": "快照文件不足"}), 400
 
     try:
         teams = detect_teams(
             paths,
-            min_sim=min_sim,
             max_rank_gap=max_rank_gap,
             top_n=top_n,
             delta_err=delta_err,
@@ -1784,8 +1770,8 @@ def api_team_analysis(job_id: str) -> Response:
         return jsonify({
             "teams": teams,
             "params": {
-                "snapshots": count,
-                "minSim": min_sim,
+                "snapshot1": selected[0]["timestamp"],
+                "snapshot2": selected[1]["timestamp"],
                 "maxRankGap": max_rank_gap,
                 "topN": top_n,
                 "deltaErr": delta_err,

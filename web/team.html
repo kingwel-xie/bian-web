@@ -13,7 +13,9 @@
   .preview-meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
   .params-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
   .params-panel label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
-  .params-panel input { width: 72px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+  .params-panel input, .params-panel select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+  .params-panel select { width: 210px; }
+  .params-panel input { width: 72px; }
   .params-panel button { min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 20px; cursor: pointer; font-weight: 900; font-size: 12px; }
   .params-panel button:hover { background: #e1f3f6; color: var(--accent-2); }
   .params-panel button:disabled { opacity: 0.5; cursor: default; }
@@ -22,9 +24,14 @@
   .team-card { border-top: 1px solid var(--line); padding: 10px 16px; }
   .team-card-header { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
   .team-card-header b { color: var(--ink); }
-  .team-members { width: auto; min-width: 0; border-collapse: collapse; font-size: 12px; }
-  .team-members td { padding: 4px 8px; border-bottom: 1px solid rgba(46,42,36,0.06); white-space: nowrap; }
-  .team-members th { padding: 4px 8px; font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; white-space: nowrap; }
+  .team-members { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+  .team-members th, .team-members td { padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-members th { font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; }
+  .team-members td { border-bottom: 1px solid rgba(46,42,36,0.06); }
+  .team-members th:nth-child(1), .team-members td:nth-child(1) { width: 30px; text-align: center; }
+  .team-members th:nth-child(2), .team-members td:nth-child(2) { width: 18%; }
+  .team-members th:nth-child(3), .team-members td:nth-child(3) { width: 24%; }
+  .team-members .num { text-align: right; }
   .team-empty { color: var(--muted); text-align: center; padding: 18px; font-size: 13px; }
   .err { color: var(--bad); font-weight: 900; }
   @media (max-width: 640px) {
@@ -45,7 +52,8 @@
   <div id="meta" class="preview-meta">加载中...</div>
 
   <div class="params-panel">
-    <label>快照数量 <input type="number" id="paramSnapshots" value="5" min="3" /></label>
+    <label>快照1（旧）<select id="paramSnap1"></select></label>
+    <label>快照2（新）<select id="paramSnap2"></select></label>
     <label>排名差距 <input type="number" id="paramMaxRankGap" value="20" min="1" /></label>
     <label>分析人数 <input type="number" id="paramTopN" value="500" min="50" /></label>
     <label>增量容差 <input type="number" id="paramDeltaErr" value="1000" min="0" step="100" /></label>
@@ -61,6 +69,29 @@
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
+function fmtSnapshotTs(ts) {
+  if (!ts) return "";
+  let t = ts.replace(/[^0-9T:\-]/g, "");
+  if (t.length >= 15) t = t.slice(0, 15) + ":" + t.slice(15);
+  if (t.length >= 13) t = t.slice(0, 13) + ":" + t.slice(13);
+  return t.replace("T", " ");
+}
+
+function populateSnapshotSelects(snapshots) {
+  const sel1 = document.getElementById("paramSnap1");
+  const sel2 = document.getElementById("paramSnap2");
+  sel1.innerHTML = "";
+  sel2.innerHTML = "";
+  snapshots.forEach((s, i) => {
+    const label = fmtSnapshotTs(s.timestamp) || "快照 " + (i + 1);
+    sel1.appendChild(new Option(label, s.timestamp));
+    sel2.appendChild(new Option(label, s.timestamp));
+  });
+  if (snapshots.length >= 2) {
+    sel1.selectedIndex = snapshots.length - 2;
+    sel2.selectedIndex = snapshots.length - 1;
+  }
+}
 
 const params = new URLSearchParams(location.search);
 const jobId = params.get("job");
@@ -77,6 +108,8 @@ if (!jobId) {
       const heading = preview.taskName || [preview.market, preview.symbol].filter(Boolean).join(" ") || preview.name || "";
       if (heading) document.getElementById("meta").textContent = heading;
       document.title = (heading || "团队检测") + " — 团队检测";
+      const snaps = preview.snapshots || [];
+      populateSnapshotSelects(snaps);
     })
     .catch(() => {});
 }
@@ -87,12 +120,13 @@ function runTeamAnalysis() {
   btn.textContent = "⏳ 分析中...";
   if (!jobId) return;
 
-  const snapshots = document.getElementById("paramSnapshots").value;
+  const snap1 = document.getElementById("paramSnap1").value;
+  const snap2 = document.getElementById("paramSnap2").value;
   const maxRankGap = document.getElementById("paramMaxRankGap").value;
   const topN = document.getElementById("paramTopN").value;
   const deltaErr = document.getElementById("paramDeltaErr").value;
   const minDelta = document.getElementById("paramMinDelta").value;
-  const q = "?snapshots=" + encodeURIComponent(snapshots) + "&max_rank_gap=" + encodeURIComponent(maxRankGap) + "&top_n=" + encodeURIComponent(topN) + "&delta_err=" + encodeURIComponent(deltaErr) + "&min_delta=" + encodeURIComponent(minDelta);
+  const q = "?snapshot1=" + encodeURIComponent(snap1) + "&snapshot2=" + encodeURIComponent(snap2) + "&max_rank_gap=" + encodeURIComponent(maxRankGap) + "&top_n=" + encodeURIComponent(topN) + "&delta_err=" + encodeURIComponent(deltaErr) + "&min_delta=" + encodeURIComponent(minDelta);
 
   const teamPanel = document.getElementById("teamPanel");
   const teamBody = document.getElementById("teamBody");
