@@ -28,6 +28,7 @@ STATE_DIR = DATA_ROOT / ".workflow"
 JOBS_FILE = STATE_DIR / "jobs.json"
 SCHEDULES_FILE = STATE_DIR / "schedules.json"
 DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
+TEAMS_FILE = STATE_DIR / "teams.json"
 KNOWN_SYMBOLS = {
     "bill": "BILLUSDT",
     "aig": "AIGENSYNUSDT",
@@ -41,6 +42,9 @@ LIVE_KLINE_INTERVAL = "1m"
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
 SCRAPE_TOP = 1000
 SCRAPE_PAGE_SIZE = 100
+
+_running_processes: dict[str, subprocess.Popen] = {}
+_rp_lock = threading.Lock()
 SCRAPE_MARKETS = {"um", "spot"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
@@ -100,7 +104,7 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def ensure_state() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    for path, default in [(JOBS_FILE, []), (SCHEDULES_FILE, [])]:
+    for path, default in [(JOBS_FILE, []), (SCHEDULES_FILE, []), (TEAMS_FILE, {"teams": []})]:
         if not path.exists():
             write_json(path, default)
 
@@ -806,7 +810,8 @@ def preview_delta_by_nickname(
                 mapped[nickname] = {
                     "deltaGrade": decimal_text(
                         to_decimal(row.get("grade")) or Decimal("0")
-                    )
+                    ),
+                    "prevRank": None,
                 }
         return mapped
 
@@ -826,10 +831,14 @@ def preview_delta_by_nickname(
         if not nickname:
             continue
         current_grade = to_decimal(row.get("grade")) or Decimal("0")
-        previous_grade = to_decimal(previous[nickname].get("grade")) if nickname in previous else Decimal("0")
+        prev = previous.get(nickname)
+        previous_grade = to_decimal(prev.get("grade")) if prev else Decimal("0")
         if previous_grade is None:
             previous_grade = Decimal("0")
-        mapped[nickname] = {"deltaGrade": decimal_text(current_grade - previous_grade)}
+        mapped[nickname] = {
+            "deltaGrade": decimal_text(current_grade - previous_grade),
+            "prevRank": prev.get("sequence") if prev else None,
+        }
     return mapped
 
 
@@ -852,6 +861,7 @@ def compact_leaderboard_rows(
                 "deltaGrade": decimal_float(
                     delta_row.get("deltaGrade") if delta_row else None
                 ),
+                "prevRank": delta_row.get("prevRank") if delta_row else None,
                 "tradingVolume": row.get("tradingVolume"),
                 "region": row.get("region"),
             }
@@ -1148,6 +1158,8 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    with _rp_lock:
+        _running_processes[job_id] = process
 
     stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
@@ -1175,6 +1187,8 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
         threads.append(t)
 
     return_code = process.wait()
+    with _rp_lock:
+        _running_processes.pop(job_id, None)
     for t in threads:
         t.join(timeout=5)
     stdout = "".join(stdout_chunks)
@@ -1295,6 +1309,14 @@ def load_schedules() -> list[dict[str, Any]]:
 
 def save_schedules(schedules: list[dict[str, Any]]) -> None:
     write_json(SCHEDULES_FILE, schedules)
+
+
+def load_teams_db() -> dict[str, Any]:
+    return read_json(TEAMS_FILE, {"teams": []})
+
+
+def save_teams_db(db: dict[str, Any]) -> None:
+    write_json(TEAMS_FILE, db)
 
 
 def scheduler_loop() -> None:
@@ -1684,6 +1706,43 @@ def api_delete_snapshot(job_id: str, snapshot_timestamp: str) -> Response:
     return jsonify({"success": True, "deleted": deleted_files})
 
 
+@app.post("/api/jobs/<job_id>/kill")
+def api_kill_job(job_id: str) -> Response:
+    with _rp_lock:
+        proc = _running_processes.get(job_id)
+    if proc:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception:
+            return jsonify({"error": "终止进程失败"}), 500
+
+        with _rp_lock:
+            _running_processes.pop(job_id, None)
+
+    with state_lock:
+        jobs = load_jobs()
+        found = False
+        for j in jobs:
+            if j.get("id") == job_id and j.get("status") in ("running", "queued"):
+                j["status"] = "failed"
+                j["finishedAt"] = datetime.now(timezone.utc).isoformat()
+                j["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                j["returnCode"] = -1
+                j["stderr"] = (j.get("stderr") or "") + "\nterminated by user"
+                save_jobs(jobs)
+                found = True
+                break
+
+    if not found:
+        return jsonify({"error": "任务不在运行中"}), 404
+
+    return jsonify({"success": True})
+
+
 @app.get("/api/jobs/<job_id>/preview")
 def api_job_preview(job_id: str) -> Response:
     jobs = load_jobs()
@@ -1856,6 +1915,178 @@ def api_toggle_schedule(schedule_id: str) -> Response:
             save_schedules(schedules)
             return jsonify({"schedule": schedule})
     return jsonify({"error": "not found"}), 404
+
+
+def _team_member_key(m: dict) -> str:
+    return (m.get("nickname") or "").strip().lower()
+
+
+def _team_item(member: dict, weight: int = 1) -> dict:
+    return {
+        "nickname": str(member.get("nickname") or ""),
+        "userId": str(member.get("userId") or ""),
+        "weight": weight,
+    }
+
+
+@app.get("/api/teams")
+def api_get_teams() -> Response:
+    db = load_teams_db()
+    return jsonify({"db": db})
+
+
+@app.post("/api/teams")
+def api_create_teams() -> Response:
+    db = load_teams_db()
+    if db.get("teams"):
+        return jsonify({"error": "数据库已存在，请使用 PUT 追加"}), 400
+    body = request.get_json(force=True)
+    raw_teams = body.get("teams") or []
+    teams_out = []
+    for team in raw_teams:
+        name = str(team.get("name") or "").strip() or f"团队 {len(teams_out) + 1}"
+        members_in = team.get("members") or []
+        members_out = [_team_item(m, weight=1) for m in members_in]
+        teams_out.append({"name": name, "members": members_out})
+    now = datetime.now(timezone.utc).isoformat()
+    db = {
+        "teams": teams_out,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    save_teams_db(db)
+    return jsonify({"db": db}), 201
+
+
+@app.put("/api/teams")
+def api_append_teams() -> Response:
+    db = load_teams_db()
+    if not db.get("teams"):
+        db = {"teams": [], "createdAt": datetime.now(timezone.utc).isoformat(), "updatedAt": datetime.now(timezone.utc).isoformat()}
+    body = request.get_json(force=True)
+    raw_teams = body.get("teams") or []
+    existing_teams = db.get("teams") or []
+
+    def _team_index_by_name(name: str) -> int | None:
+        for i, t in enumerate(existing_teams):
+            if t.get("name") == name:
+                return i
+        return None
+
+    for incoming in raw_teams:
+        name = str(incoming.get("name") or "").strip() or "未命名"
+        idx = _team_index_by_name(name)
+        if idx is not None:
+            target = existing_teams[idx]
+            existing_members = target.get("members") or []
+            existing_map: dict[str, dict] = {}
+            for em in existing_members:
+                existing_map[_team_member_key(em)] = em
+            for m in incoming.get("members") or []:
+                key = _team_member_key(m)
+                if key in existing_map:
+                    existing_map[key]["weight"] = existing_map[key].get("weight", 1) + 1
+                else:
+                    existing_members.append(_team_item(m, weight=1))
+            target["members"] = existing_members
+        else:
+            members_out = [_team_item(m, weight=1) for m in (incoming.get("members") or [])]
+            existing_teams.append({"name": name, "members": members_out})
+
+    db["teams"] = existing_teams
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
+@app.delete("/api/teams")
+def api_delete_teams() -> Response:
+    db = load_teams_db()
+    if not db.get("teams"):
+        return jsonify({"error": "数据库不存在"}), 404
+    TEAMS_FILE.unlink(missing_ok=True)
+    return jsonify({"ok": True})
+
+
+@app.put("/api/teams/team")
+def api_rename_team() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    new_name = str(body.get("name") or "").strip()
+    if not new_name:
+        return jsonify({"error": "名称不能为空"}), 400
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    teams[team_idx]["name"] = new_name
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
+@app.delete("/api/teams/member")
+def api_delete_member() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = body.get("teamIndex")
+    nickname = str(body.get("nickname") or "").strip().lower()
+    teams = db.get("teams") or []
+    if team_idx is not None and 0 <= team_idx < len(teams):
+        teams[team_idx]["members"] = [
+            m for m in (teams[team_idx].get("members") or [])
+            if _team_member_key(m) != nickname
+        ]
+    else:
+        for team in teams:
+            team["members"] = [
+                m for m in (team.get("members") or [])
+                if _team_member_key(m) != nickname
+            ]
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
+@app.post("/api/teams/member")
+def api_add_member() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    member = _team_item(body, weight=int(body.get("weight", 1)))
+    teams[team_idx].setdefault("members", []).append(member)
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
+@app.put("/api/teams/member/weight")
+def api_update_member_weight() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    nickname = str(body.get("nickname") or "").strip().lower()
+    new_weight = int(body.get("weight", 1))
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    for m in (teams[team_idx].get("members") or []):
+        if _team_member_key(m) == nickname:
+            m["weight"] = new_weight
+            db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_teams_db(db)
+            return jsonify({"db": db})
+    return jsonify({"error": "成员不存在"}), 404
+
+
+@app.get("/teams.html")
+def teams_page() -> Response:
+    resp = send_from_directory(str(APP_DIR / "web"), "teams.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 @app.get("/files/<path:relative>")

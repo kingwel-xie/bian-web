@@ -233,7 +233,10 @@ function renderJobs(jobs) {
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
-          <button class="ghost mini" type="button" ${job.status === "running" || job.status === "queued" ? "disabled" : ""} data-rerun="${escapeHtml(job.id)}">再次抓取</button>
+          ${job.status === "running" || job.status === "queued"
+            ? `<button class="ghost mini danger" type="button" data-kill="${escapeHtml(job.id)}">终止任务</button>`
+            : `<button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>`
+          }
           <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">改名</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
@@ -261,6 +264,16 @@ function renderJobs(jobs) {
       if (!job) return;
       const p = job.payload || {};
       await startScrapeJob(p.resourceId, p.market, p.symbol, p.url);
+    });
+  });
+  $("#jobList").querySelectorAll("[data-kill]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!confirm("确认终止此任务？")) return;
+      try {
+        await api(`/api/jobs/${button.dataset.kill}/kill`, { method: "POST" });
+      } catch (error) {
+        alert(`终止失败：${error.message}`);
+      }
     });
   });
   $("#jobList").querySelectorAll("[data-rename]").forEach((button) => {

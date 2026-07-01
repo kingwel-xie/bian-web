@@ -6,34 +6,34 @@
 <title>团队检测</title>
 <link rel="stylesheet" href="/css888/styles.css?v=20260621f" />
 <style>
-  body { padding: 14px; }
-  .team-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
-  .team-head h2 { font-size: 18px; margin: 0; }
+  body { padding: 10px; }
+  .team-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px; }
+  .team-head h2 { font-size: 16px; margin: 0; }
   .team-head a { font-size: 12px; color: var(--accent-2); }
-  .preview-meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-  .params-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
-  .params-panel label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
-  .params-panel input, .params-panel select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
-  .params-panel select { width: 210px; }
-  .params-panel input { width: 72px; }
-  .params-panel button { min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 20px; cursor: pointer; font-weight: 900; font-size: 12px; }
+  .preview-meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .params-panel { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; }
+  .params-panel label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+  .params-panel input, .params-panel select { border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; font: inherit; font-size: 12px; background: #fff; color: var(--ink); }
+  .params-panel select { width: 190px; }
+  .params-panel input { width: 64px; }
+  .params-panel button { min-height: 28px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 16px; cursor: pointer; font-weight: 900; font-size: 11px; }
   .params-panel button:hover { background: #e1f3f6; color: var(--accent-2); }
   .params-panel button:disabled { opacity: 0.5; cursor: default; }
-  .team-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
-  .team-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
-  .team-card { border-top: 1px solid var(--line); padding: 10px 16px; }
-  .team-card-header { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .team-panel { border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; overflow: hidden; }
+  .team-panel h3 { margin: 0; padding: 6px 12px; font-size: 12px; background: #eee7d9; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+  .team-card { border-top: 1px solid var(--line); padding: 6px 12px; }
+  .team-card-header { display: flex; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
   .team-card-header b { color: var(--ink); }
-  .team-members { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
-  .team-members th, .team-members td { padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .team-members th { font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; }
-  .team-members td { border-bottom: 1px solid rgba(46,42,36,0.06); }
-  .team-members th:nth-child(1), .team-members td:nth-child(1) { width: 30px; text-align: center; }
+  .team-members { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+  .team-members th, .team-members td { padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-members th { font-size: 10px; color: var(--muted); background: transparent; position: static; text-transform: none; }
+  .team-members th:nth-child(1), .team-members td:nth-child(1) { width: 24px; text-align: center; }
   .team-members th:nth-child(2), .team-members td:nth-child(2) { width: 18%; }
   .team-members th:nth-child(3), .team-members td:nth-child(3) { width: 24%; }
   .team-members .num { text-align: right; }
-  .team-empty { color: var(--muted); text-align: center; padding: 18px; font-size: 13px; }
+  .team-empty { color: var(--muted); text-align: center; padding: 14px; font-size: 12px; }
   .err { color: var(--bad); font-weight: 900; }
+  .team-name-input { padding: 1px 5px !important; font-size: 11px !important; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -77,6 +77,9 @@ function fmtSnapshotTs(ts) {
   return t.replace("T", " ");
 }
 
+var lastTeams = null;
+var dbExists = false;
+
 function populateSnapshotSelects(snapshots) {
   const sel1 = document.getElementById("paramSnap1");
   const sel2 = document.getElementById("paramSnap2");
@@ -91,6 +94,40 @@ function populateSnapshotSelects(snapshots) {
     sel1.selectedIndex = snapshots.length - 2;
     sel2.selectedIndex = snapshots.length - 1;
   }
+}
+
+function saveOneTeam(idx) {
+  if (!lastTeams || !lastTeams[idx]) return;
+  const input = document.getElementById("teamName-" + idx);
+  const name = (input?.value || "").trim() || "团队 " + (idx + 1);
+  const btn = document.getElementById("saveBtn-" + idx);
+  const msgEl = document.getElementById("saveMsg-" + idx);
+  btn.disabled = true;
+  const method = dbExists ? "PUT" : "POST";
+  fetch("/api/teams", {
+    method: method,
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({teams: [{name: name, members: lastTeams[idx].members}]}),
+  }).then(r => {
+    if (!r.ok) return r.json().then(d => { throw new Error(d.error || "保存失败"); });
+    return r.json();
+  }).then(data => {
+    dbExists = true;
+    msgEl.textContent = "✓ 已添加";
+    msgEl.style.color = "var(--good)";
+    btn.textContent = "✓ 已添加";
+    btn.disabled = true;
+  }).catch(err => {
+    msgEl.textContent = "✗ " + err.message;
+    msgEl.style.color = "var(--bad)";
+    btn.disabled = false;
+  });
+}
+
+function checkDb() {
+  fetch("/api/teams").then(r => r.json()).then(data => {
+    dbExists = data.db && data.db.teams && data.db.teams.length > 0;
+  }).catch(() => {});
 }
 
 const params = new URLSearchParams(location.search);
@@ -113,6 +150,8 @@ if (!jobId) {
     })
     .catch(() => {});
 }
+
+checkDb();
 
 function runTeamAnalysis() {
   const btn = document.getElementById("teamBtn");
@@ -142,8 +181,10 @@ function runTeamAnalysis() {
       btn.textContent = "📊 开始检测";
       if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
       const teams = data.teams || [];
+      lastTeams = teams;
       teamSummary.textContent = teams.length ? "发现 " + teams.length + " 个团队" : "未检测到团队";
-      teamBody.innerHTML = teams.length ? teams.map(t => {
+
+      teamBody.innerHTML = teams.length ? teams.map((t, idx) => {
         const snapHeaders = t.members[0]?.history?.map((h, si) =>
           `<th class="num">快照${si + 1}<br><span style="font-weight:400">排名</span></th>` +
           `<th class="num"><span style="font-weight:400">grade</span></th>` +
@@ -165,8 +206,14 @@ function runTeamAnalysis() {
               ).join("")}
             </tr>`).join("")}
           </table>
+          <div style="padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px">名称 <input id="teamName-${idx}" class="team-name-input" type="text" placeholder="团队 ${idx + 1}" style="border:1px solid var(--line);border-radius:4px;padding:4px 6px;font:inherit;font-size:12px;width:140px" /></label>
+            <button id="saveBtn-${idx}" class="team-add-btn" type="button" onclick="saveOneTeam(${idx})">+ 添加到数据库</button>
+            <span id="saveMsg-${idx}" style="font-size:12px"></span>
+          </div>
         </div>`;
       }).join("") : '<div class="team-empty">未检测到团队。</div>';
+
       teamPanel.style.display = "";
     })
     .catch(err => {

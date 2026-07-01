@@ -22,9 +22,11 @@
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
   th { padding: 6px 12px; }
   th { position: sticky; top: 0; z-index: 1; background: #eee7d9; color: var(--accent); font-size: 12px; text-transform: uppercase; }
-  .col-rank { width: 56px; } .col-nick { width: 130px; } .col-user { width: 110px; }
-  .col-score { width: 100px; } .col-volume { width: 150px; } .col-delta { width: 130px; } .col-region { width: 80px; }
+  .col-rank { width: 56px; } .col-rank-change { width: 56px; } .col-nick { width: 120px; } .col-user { width: 100px; }
+  .col-score { width: 90px; } .col-volume { width: 130px; } .col-delta { width: 110px; } .col-region { width: 70px; }
   .rank { font-weight: 900; }
+  .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
+  .chg-up { color: #c0392b; font-weight: 700; } .chg-down { color: #27ae60; font-weight: 700; } .chg-flat { color: #999; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .tl { text-align: left; }
   th.num { text-align: right; }
@@ -34,12 +36,14 @@
   .err { color: var(--bad); font-weight: 900; }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
   #searchInput { width: 100%; border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; }
+  #teamFilter { background: transparent; border: none; color: var(--accent); font-weight: 700; font-size: 12px; outline: none; cursor: pointer; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
     .stats-panel { width: 100%; }
     .stats-table th, .stats-table td { padding: 6px 8px; }
     .col-nick { width: 100px; } .col-user { width: 80px; } .col-volume { width: 110px; } .col-delta { width: 100px; }
+    .col-rank-change { width: 40px; } .col-score { width: 80px; }
     .preview-meta span { display: inline-block; }
   }
 </style>
@@ -67,9 +71,17 @@
     </div>
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
-        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-region" /></colgroup>
-        <thead><tr><th>#</th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num">Region</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="7" class="empty">加载中...</td></tr></tbody>
+        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
+        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort">排名变化</th><th class="num">Region</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
+      <h3>分团队统计</h3>
+      <table class="stats-table">
+        <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
+        <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
+        <tbody id="teamStatsBody"></tbody>
       </table>
     </div>
   </div>
@@ -197,30 +209,111 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
+    let teamOfUser = {};
 
-    function render(query) {
-      const q = query.trim().toLowerCase();
-      let rows = q ? allRows.filter(r => String(r.nickname || "").toLowerCase().includes(q)) : allRows;
+    try {
+      const teamsResp = await fetch("/api/teams");
+      const teamsData = await teamsResp.json();
+      const db = teamsData.db || { teams: [] };
+      for (const team of db.teams) {
+        for (const m of (team.members || [])) {
+          teamOfUser[m.nickname || m.userId] = team.name;
+        }
+      }
+    } catch (_) {}
+
+    // populate team filter
+    const teamFilterEl = document.getElementById("teamFilter");
+    const allTeams = [...new Set(Object.values(teamOfUser))].sort();
+    teamFilterEl.innerHTML = '<option value="">全部</option>' + allTeams.map(t =>
+      `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`
+    ).join("");
+
+    // team stats
+    const teamMap = {};
+    for (const r of allRows) {
+      const t = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
+      if (t) {
+        if (!teamMap[t]) teamMap[t] = { count: 0, totalGrade: 0, totalDelta: 0 };
+        teamMap[t].count++;
+        teamMap[t].totalGrade += Number(r.grade) || 0;
+        teamMap[t].totalDelta += Number(r.deltaGrade) || 0;
+      }
+    }
+    const teamEntries = Object.entries(teamMap).sort((a, b) => b[1].count - a[1].count);
+    const teamStatEl = document.getElementById("teamStatsPanel");
+    const teamBody = document.getElementById("teamStatsBody");
+    if (teamEntries.length) {
+      teamStatEl.style.display = "";
+      teamBody.innerHTML = teamEntries.map(([name, st]) => {
+        const pct = totalVolume ? (st.totalGrade / totalVolume * 100).toFixed(1) + "%" : "—";
+        const dpct = totalDelta ? (st.totalDelta / totalDelta * 100).toFixed(1) + "%" : "—";
+        return `<tr><td><b>${escapeHtml(name)}</b></td><td class="num">${st.count}</td><td class="num">${fmtVolume(st.totalGrade)}</td><td class="num">${pct}</td><td class="num">${dpct}</td></tr>`;
+      }).join("");
+    }
+
+    let teamFilter = "";
+    let rankChangeSort = "";
+
+    function render() {
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      let rows = allRows.filter(r => {
+        const txt = String(r.nickname || "").toLowerCase();
+        if (q && !txt.includes(q)) return false;
+        if (teamFilter) {
+          const t = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
+          if (t !== teamFilter) return false;
+        }
+        return true;
+      });
       if (deltaSort) {
         rows = [...rows].sort((a, b) => (b.deltaGrade ?? -Infinity) - (a.deltaGrade ?? -Infinity));
       }
+      if (rankChangeSort) {
+        rows = [...rows].sort((a, b) => {
+          const da = (a.prevRank ?? a.rank) - a.rank;
+          const db = (b.prevRank ?? b.rank) - b.rank;
+          return rankChangeSort === "up" ? da - db : db - da;
+        });
+      }
       document.getElementById("deltaSortIcon").textContent = deltaSort ? " ▼" : "";
-      document.getElementById("rows").innerHTML = rows.length ? rows.map(r => `
-        <tr><td>${escapeHtml(r.rank)}</td>
-        <td class="tl">${escapeHtml(r.nickname || "—")}</td>
+      document.getElementById("rows").innerHTML = rows.length ? rows.map(r => {
+        const teamName = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
+        const nickHtml = teamName
+          ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
+          : escapeHtml(r.nickname || "—");
+        const prev = r.prevRank;
+        const chg = prev != null ? prev - r.rank : null;
+        const chgHtml = chg == null ? "—" : chg > 0 ? `<span class="chg-up">↑${chg}</span>` : chg < 0 ? `<span class="chg-down">↓${-chg}</span>` : `<span class="chg-flat">-</span>`;
+        return `<tr><td>${escapeHtml(r.rank)}</td>
+        <td class="tl">${nickHtml}</td>
         <td class="tl">${escapeHtml(r.userId || "—")}</td>
         <td class="num">${fmtNumber(r.grade)}</td>
         <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
         <td class="num">${r.deltaGrade == null ? "—" : fmtNumber(r.deltaGrade)}</td>
-        <td class="num">${escapeHtml(r.region || "—")}</td></tr>
-      `).join("") : `<tr><td colspan="7" class="empty">${q ? "没有匹配昵称。" : "没有数据。"}</td></tr>`;
+        <td class="num">${chgHtml}</td>
+        <td class="num">${escapeHtml(r.region || "—")}</td></tr>`;
+      }).join("") : `<tr><td colspan="8" class="empty">${q || teamFilter ? "没有匹配。" : "没有数据。"}</td></tr>`;
     }
-    render("");
+    render();
 
-    document.getElementById("searchInput").addEventListener("input", e => render(e.target.value));
+    document.getElementById("searchInput").addEventListener("input", render);
+    teamFilterEl.addEventListener("change", () => {
+      teamFilter = teamFilterEl.value;
+      render();
+    });
     document.querySelector(".sort-delta").addEventListener("click", () => {
       deltaSort = !deltaSort;
-      render(document.getElementById("searchInput").value);
+      rankChangeSort = "";
+      render();
+    });
+    document.getElementById("rankChangeSort").addEventListener("click", () => {
+      if (!rankChangeSort) rankChangeSort = "up";
+      else if (rankChangeSort === "up") rankChangeSort = "down";
+      else rankChangeSort = "";
+      deltaSort = false;
+      document.getElementById("rankChangeSort").textContent = "排名变化" + (rankChangeSort ? (rankChangeSort === "up" ? " ↑" : " ↓") : "");
+      render();
     });
   } catch (err) {
     document.getElementById("meta").textContent = err.message;
