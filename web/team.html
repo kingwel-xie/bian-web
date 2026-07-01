@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>团队检测</title>
+<link rel="stylesheet" href="/css888/styles.css?v=20260621f" />
+<style>
+  body { padding: 14px; }
+  .team-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+  .team-head h2 { font-size: 18px; margin: 0; }
+  .team-head a { font-size: 12px; color: var(--accent-2); }
+  .preview-meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .params-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
+  .params-panel label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+  .params-panel input { width: 72px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+  .params-panel button { min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 20px; cursor: pointer; font-weight: 900; font-size: 12px; }
+  .params-panel button:hover { background: #e1f3f6; color: var(--accent-2); }
+  .params-panel button:disabled { opacity: 0.5; cursor: default; }
+  .team-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow: hidden; }
+  .team-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); display: flex; justify-content: space-between; align-items: center; }
+  .team-card { border-top: 1px solid var(--line); padding: 10px 16px; }
+  .team-card-header { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .team-card-header b { color: var(--ink); }
+  .team-members { width: auto; min-width: 0; border-collapse: collapse; font-size: 12px; }
+  .team-members td { padding: 4px 8px; border-bottom: 1px solid rgba(46,42,36,0.06); white-space: nowrap; }
+  .team-members th { padding: 4px 8px; font-size: 11px; color: var(--muted); background: transparent; position: static; text-transform: none; white-space: nowrap; }
+  .team-empty { color: var(--muted); text-align: center; padding: 18px; font-size: 13px; }
+  .err { color: var(--bad); font-weight: 900; }
+  @media (max-width: 640px) {
+    body { padding: 6px; }
+    .panel[style] { padding: 6px !important; }
+    .params-panel { flex-direction: column; align-items: stretch; }
+    .params-panel input { width: 100%; box-sizing: border-box; }
+    .team-card-header { flex-direction: column; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="panel" style="padding:14px">
+  <div class="team-head">
+    <h2>团队检测</h2>
+    <a id="backLink" href="">← 返回预览</a>
+  </div>
+  <div id="meta" class="preview-meta">加载中...</div>
+
+  <div class="params-panel">
+    <label>快照数量 <input type="number" id="paramSnapshots" value="5" min="3" /></label>
+    <label>排名差距 <input type="number" id="paramMaxRankGap" value="20" min="1" /></label>
+    <label>分析人数 <input type="number" id="paramTopN" value="500" min="50" /></label>
+    <label>增量容差 <input type="number" id="paramDeltaErr" value="1000" min="0" step="100" /></label>
+    <label>忽略小增量 <input type="number" id="paramMinDelta" value="500" min="0" step="100" /></label>
+    <button id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 开始检测</button>
+  </div>
+
+  <div id="teamPanel" class="team-panel" style="display:none">
+    <h3>检测结果 <span id="teamSummary" style="font-weight:400;font-size:12px"></span></h3>
+    <div id="teamBody"></div>
+  </div>
+</div>
+<script>
+function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
+
+const params = new URLSearchParams(location.search);
+const jobId = params.get("job");
+if (!jobId) {
+  document.getElementById("meta").textContent = "缺少 job 参数。";
+  document.getElementById("backLink").href = "preview.html";
+} else {
+  document.getElementById("meta").textContent = "任务 " + jobId;
+  document.getElementById("backLink").href = "preview.html?job=" + encodeURIComponent(jobId);
+
+  fetch("/api/jobs/" + encodeURIComponent(jobId) + "/preview")
+    .then(r => r.json())
+    .then(preview => {
+      const heading = preview.taskName || [preview.market, preview.symbol].filter(Boolean).join(" ") || preview.name || "";
+      if (heading) document.getElementById("meta").textContent = heading;
+      document.title = (heading || "团队检测") + " — 团队检测";
+    })
+    .catch(() => {});
+}
+
+function runTeamAnalysis() {
+  const btn = document.getElementById("teamBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 分析中...";
+  if (!jobId) return;
+
+  const snapshots = document.getElementById("paramSnapshots").value;
+  const maxRankGap = document.getElementById("paramMaxRankGap").value;
+  const topN = document.getElementById("paramTopN").value;
+  const deltaErr = document.getElementById("paramDeltaErr").value;
+  const minDelta = document.getElementById("paramMinDelta").value;
+  const q = "?snapshots=" + encodeURIComponent(snapshots) + "&max_rank_gap=" + encodeURIComponent(maxRankGap) + "&top_n=" + encodeURIComponent(topN) + "&delta_err=" + encodeURIComponent(deltaErr) + "&min_delta=" + encodeURIComponent(minDelta);
+
+  const teamPanel = document.getElementById("teamPanel");
+  const teamBody = document.getElementById("teamBody");
+  const teamSummary = document.getElementById("teamSummary");
+
+  fetch("/api/jobs/" + encodeURIComponent(jobId) + "/team-analysis" + q)
+    .then(r => {
+      if (!r.ok) return r.text().then(t => { throw new Error("HTTP " + r.status + ": " + t.slice(0, 200)); });
+      return r.json();
+    })
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = "📊 开始检测";
+      if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
+      const teams = data.teams || [];
+      teamSummary.textContent = teams.length ? "发现 " + teams.length + " 个团队" : "未检测到团队";
+      teamBody.innerHTML = teams.length ? teams.map(t => {
+        const snapHeaders = t.members[0]?.history?.map((h, si) =>
+          `<th class="num">快照${si + 1}<br><span style="font-weight:400">排名</span></th>` +
+          `<th class="num"><span style="font-weight:400">grade</span></th>` +
+          `<th class="num"><span style="font-weight:400">增量</span></th>`
+        ).join("") || "";
+        return `<div class="team-card">
+          <div class="team-card-header">
+            <span>团队 #${t.id + 1} · <b>${t.size}</b> 人</span>
+            <span>平均排名 <b>${t.avgRank}</b></span>
+          </div>
+          <table class="team-members">
+            <tr><th>#</th><th>昵称</th><th>User ID</th>${snapHeaders}</tr>
+            ${t.members.map((m, i) => `<tr>
+              <td>${i + 1}</td>
+              <td>${escapeHtml(m.nickname)}</td>
+              <td>${escapeHtml(m.userId)}</td>
+              ${(m.history || []).map(h =>
+                `<td class="num">${h.rank}</td><td class="num">${fmtNumber(h.grade)}</td><td class="num">${h.delta != null ? fmtNumber(h.delta) : "—"}</td>`
+              ).join("")}
+            </tr>`).join("")}
+          </table>
+        </div>`;
+      }).join("") : '<div class="team-empty">未检测到团队。</div>';
+      teamPanel.style.display = "";
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = "📊 开始检测";
+      teamSummary.textContent = "请求失败";
+      teamBody.innerHTML = '<div class="team-empty">错误: ' + escapeHtml(err.message) + '</div>';
+      teamPanel.style.display = "";
+    });
+}
+</script>
+</body>
+</html>

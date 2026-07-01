@@ -918,6 +918,8 @@ def detect_teams(
     min_sim: float = 0.85,
     max_rank_gap: int = 3,
     top_n: int = 500,
+    delta_err: int = 1000,
+    min_delta: int = 500,
 ) -> list[dict[str, Any]]:
     if len(snapshot_paths) < 2:
         return []
@@ -946,8 +948,6 @@ def detect_teams(
     last_rows = last_data.get("rows", []) if isinstance(last_data, dict) else []
     if not isinstance(last_rows, list) or len(last_rows) < 6:
         return []
-
-    delta_err = 5000
 
     users: list[dict[str, Any]] = []
     for row in last_rows:
@@ -986,6 +986,7 @@ def detect_teams(
             "history": history,
         })
 
+    users = [u for u in users if any(abs(d) > min_delta for d in u["deltas"])]
     if len(users) < 6:
         return []
 
@@ -994,16 +995,19 @@ def detect_teams(
     adj: dict[int, set[int]] = {i: set() for i in range(len(users))}
     for i in range(len(users)):
         for j in range(i + 1, len(users)):
-            if abs(users[i]["rank"] - users[j]["rank"]) > max_rank_gap:
-                continue
             ok = True
             for di, dj in zip(users[i]["deltas"], users[j]["deltas"]):
+                if abs(di) <= min_delta and abs(dj) <= min_delta:
+                    continue
                 if abs(di - dj) > delta_err:
                     ok = False
                     break
-            if ok:
-                adj[i].add(j)
-                adj[j].add(i)
+            if not ok:
+                continue
+            if abs(users[i]["rank"] - users[j]["rank"]) > max_rank_gap:
+                continue
+            adj[i].add(j)
+            adj[j].add(i)
 
     visited: set[int] = set()
     teams: list[list[int]] = []
@@ -1403,6 +1407,13 @@ def preview_html() -> Response:
     return response
 
 
+@app.get("/team.html")
+def team_html() -> Response:
+    response = send_from_directory(app.static_folder, "team.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 @app.get("/api/overview")
 def api_overview() -> Response:
     return jsonify({"dataRoot": str(DATA_ROOT), "activities": discover_activities()})
@@ -1745,6 +1756,8 @@ def api_team_analysis(job_id: str) -> Response:
     min_sim = request.args.get("min_sim", 0.85, type=float)
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
     top_n = request.args.get("top_n", 500, type=int)
+    delta_err = request.args.get("delta_err", 1000, type=int)
+    min_delta = request.args.get("min_delta", 500, type=int)
 
     count = max(3, min(count, len(snapshots)))
     recent = snapshots[-count:]
@@ -1765,6 +1778,8 @@ def api_team_analysis(job_id: str) -> Response:
             min_sim=min_sim,
             max_rank_gap=max_rank_gap,
             top_n=top_n,
+            delta_err=delta_err,
+            min_delta=min_delta,
         )
         return jsonify({
             "teams": teams,
@@ -1773,6 +1788,8 @@ def api_team_analysis(job_id: str) -> Response:
                 "minSim": min_sim,
                 "maxRankGap": max_rank_gap,
                 "topN": top_n,
+                "deltaErr": delta_err,
+                "minDelta": min_delta,
             },
         })
     except Exception as exc:
