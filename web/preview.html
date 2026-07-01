@@ -37,6 +37,7 @@
   .empty { color: var(--muted); text-align: center; padding: 18px; }
   #searchInput { width: 100%; border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; }
   #teamFilter { background: transparent; border: none; color: var(--accent); font-weight: 700; font-size: 12px; outline: none; cursor: pointer; }
+  hr.sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -69,19 +70,20 @@
         </table>
       </div>
     </div>
-    <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
-      <table>
-        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
-        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort">排名变化</th><th class="num">Region</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
-      </table>
-    </div>
     <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
       <h3>分团队统计</h3>
       <table class="stats-table">
         <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
         <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
         <tbody id="teamStatsBody"></tbody>
+      </table>
+    </div>
+    <hr class="sep" />
+    <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
+      <table>
+        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
+        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort">排名变化</th><th class="num">Region</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
   </div>
