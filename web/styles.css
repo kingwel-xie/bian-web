@@ -665,7 +665,39 @@ td:nth-child(2) {
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.suggestion-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.suggestion-row .suggestion-item {
+  flex: 1;
+  border-right: 0;
+}
+
+.suggestion-del {
+  flex: 0 0 36px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.suggestion-del:hover {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.06);
+}
+
+.suggestion-row:last-child .suggestion-item,
+.suggestion-row:last-child .suggestion-del {
+  border-bottom: 0;
 }
 
 .pagination {

@@ -358,17 +358,34 @@ function buildSuggestions(entries) {
     const ids = (e.candidates || []).map((c) => String(typeof c === "object" ? (c.resourceId || c) : c)).join(", ");
     const title = e.title || "";
     const label = `${title ? title + " — " : ""}${ids}`;
-    return `<button class="suggestion-item" type="button" data-url="${escapeHtml(url)}">
-      <span class="si-label">${escapeHtml(label)}</span>
-      <span class="si-url">${escapeHtml(url)}</span>
-    </button>`;
+    return `<div class="suggestion-row">
+      <button class="suggestion-item" type="button" data-url="${escapeHtml(url)}">
+        <span class="si-label">${escapeHtml(label)}</span>
+        <span class="si-url">${escapeHtml(url)}</span>
+      </button>
+      <button class="suggestion-del" type="button" data-key="${escapeHtml(e.key || url)}" title="删除">×</button>
+    </div>`;
   }).join("");
   el.querySelectorAll(".suggestion-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const url = btn.dataset.url;
       $("#urlInput").value = url;
-      el.innerHTML = "";
+      el.style.display = "none";
       showCachedDiscovery(url);
+    });
+  });
+  el.querySelectorAll(".suggestion-del").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.key;
+      try {
+        await api(`/api/discover/cache/${encodeURIComponent(key)}`, { method: "DELETE" });
+        const row = btn.closest(".suggestion-row");
+        if (row) row.remove();
+        if (!el.children.length) el.style.display = "none";
+      } catch (err) {
+        alert("删除失败: " + err.message);
+      }
     });
   });
 }

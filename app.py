@@ -63,7 +63,7 @@ def normalize_scrape_symbol(raw_symbol: Any) -> tuple[str, str]:
     else:
         token = symbol
         symbol = f"{symbol}USDT"
-    if not re.fullmatch(r"[A-Z0-9]{2,24}", token):
+    if not re.fullmatch(r"[A-Z0-9]{1,24}", token):
         raise ScriptError("symbol 格式无效。")
     return token.lower(), symbol
 
@@ -1264,13 +1264,13 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             job = existing
         else:
             market = str(payload.get("market") or "").upper()
-            symbol = str(payload.get("symbol") or "").upper()
-            default_name = f"{market} {symbol}".strip()
+            token = str(payload.get("token") or payload.get("symbol") or "").upper()
+            default_name = f"{market} {token}".strip()
             job = {
                 "id": uuid.uuid4().hex[:12],
                 "source": source,
                 "status": "queued",
-                "name": payload.get("name") or default_name,
+                "name": default_name or payload.get("name"),
                 "payload": payload,
                 "progress": progress_from_stderr("", "queued"),
                 "createdAt": datetime.now(timezone.utc).isoformat(),
@@ -1399,6 +1399,16 @@ def api_discover_cache() -> Response:
         })
     entries.sort(key=lambda e: e.get("cachedAt") or "", reverse=True)
     return jsonify({"entries": entries})
+
+
+@app.delete("/api/discover/cache/<path:key>")
+def api_delete_discover_cache(key: str) -> Response:
+    cache = load_discovery_cache()
+    if key not in cache:
+        return jsonify({"error": "条目不存在"}), 404
+    del cache[key]
+    save_discovery_cache(cache)
+    return jsonify({"ok": True})
 
 
 @app.post("/api/discover")
@@ -1725,6 +1735,7 @@ def api_job_preview(job_id: str) -> Response:
         preview = scrape_preview_from_json(json_path, limit=1000, previous_json_path=prev_json_path)
         preview["market"] = payload.get("market", "").upper()
         preview["symbol"] = payload.get("symbol", "")
+        preview["token"] = payload.get("token", "").upper()
         job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
         rid = str(payload.get("resourceId") or "").strip()
         preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
