@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 import uuid
+import gzip
+import io
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -48,6 +50,29 @@ _rp_lock = threading.Lock()
 SCRAPE_MARKETS = {"um", "spot"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
+
+
+@app.after_request
+def compress_response(response: Response) -> Response:
+    if response.status_code < 200 or response.status_code >= 300:
+        return response
+    if response.is_streamed or response.direct_passthrough:
+        return response
+    if len(response.data) < 512:
+        return response
+    accept = request.headers.get("Accept-Encoding", "")
+    if "gzip" not in accept:
+        return response
+    response.direct_passthrough = False
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb") as f:
+        f.write(response.get_data())
+    response.set_data(buf.getvalue())
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = len(response.get_data())
+    return response
+
+
 state_lock = threading.RLock()
 live_states_lock = threading.Lock()
 live_kline_states: dict[tuple[str, int, str], dict[str, Any]] = {}
@@ -1240,6 +1265,15 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
                             save_jobs(jobs)
                             break
 
+    if return_code == 0 and isinstance(result, list):
+        with state_lock:
+            jobs = load_jobs()
+            for j in jobs:
+                if j.get("id") == job_id and j.get("snapshots"):
+                    j.pop("result", None)
+                    save_jobs(jobs)
+                    break
+
 
 def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any]:
     if payload.get("mode") == "workflow":
@@ -1802,6 +1836,14 @@ def api_job_preview(job_id: str) -> Response:
             {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
             for s in snapshots
         ]
+        team_db = load_teams_db()
+        team_map: dict[str, str] = {}
+        for team in team_db.get("teams") or []:
+            for m in team.get("members") or []:
+                key = (m.get("nickname") or "").strip() or (m.get("userId") or "").strip()
+                if key:
+                    team_map[key] = team.get("name", "")
+        preview["teamMap"] = team_map
         return jsonify(preview)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

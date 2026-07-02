@@ -35,9 +35,12 @@
   .downloads a:hover { background: #e1f3f6; color: var(--accent-2); }
   .err { color: var(--bad); font-weight: 900; }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
-  #searchInput { width: 100%; border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; }
+  #searchInput { width: calc(100% - 20px); border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; vertical-align: middle; }
   #teamFilter { background: transparent; border: none; color: var(--accent); font-weight: 700; font-size: 12px; outline: none; cursor: pointer; }
   hr.sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+  .info-icon { cursor: help; font-size: 11px; opacity: 0.5; } .info-icon:hover { opacity: 1; }
+  .sort-icon { font-size: 14px; opacity: 0.5; }
+  .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -65,7 +68,7 @@
         <h3>基础统计</h3>
         <table class="stats-table">
           <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-last" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th><th class="num">均值</th><th class="num">末名</th></tr></thead>
+          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">均值</th><th class="num">末名</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -82,7 +85,7 @@
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
-        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer">增量 <span id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort">排名变化</th><th class="num">Region</th></tr></thead>
+        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
         <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
@@ -172,6 +175,20 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       });
     }
 
+    // delta tooltip
+    const curTs = snapshotParam || (snaps.length ? snaps[snaps.length - 1].timestamp : null);
+    let prevTs = null;
+    if (curTs) {
+      const idx = snaps.findIndex(s => s.timestamp === curTs);
+      if (idx > 0) prevTs = snaps[idx - 1].timestamp;
+    }
+    const deltaTip = prevTs ? `较 ${fmtSnapshotTs(prevTs)} → ${fmtSnapshotTs(curTs)}` : null;
+    if (deltaTip) {
+      document.querySelectorAll(".info-icon").forEach(el => el.setAttribute("title", deltaTip));
+      document.querySelector(".sort-delta")?.setAttribute("title", deltaTip);
+      document.getElementById("rankChangeSort")?.setAttribute("title", deltaTip);
+    }
+
     function rangeStats(rows, ranges) {
       return ranges.map(([label, min, max]) => {
         const items = rows.filter(r => { const k = Number(r.rank); return k >= min && k <= max; });
@@ -208,21 +225,10 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
       return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
-    let teamOfUser = {};
-
-    try {
-      const teamsResp = await fetch("/api/teams");
-      const teamsData = await teamsResp.json();
-      const db = teamsData.db || { teams: [] };
-      for (const team of db.teams) {
-        for (const m of (team.members || [])) {
-          teamOfUser[m.nickname || m.userId] = team.name;
-        }
-      }
-    } catch (_) {}
+    let teamOfUser = (preview.teamMap || {});
 
     // populate team filter
     const teamFilterEl = document.getElementById("teamFilter");
@@ -278,7 +284,8 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
           return rankChangeSort === "up" ? da - db : db - da;
         });
       }
-      document.getElementById("deltaSortIcon").textContent = deltaSort ? " ▼" : "";
+      document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
+      document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
       document.getElementById("rows").innerHTML = rows.length ? rows.map(r => {
         const teamName = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
         const nickHtml = teamName
@@ -314,7 +321,6 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       else if (rankChangeSort === "up") rankChangeSort = "down";
       else rankChangeSort = "";
       deltaSort = false;
-      document.getElementById("rankChangeSort").textContent = "排名变化" + (rankChangeSort ? (rankChangeSort === "up" ? " ↑" : " ↓") : "");
       render();
     });
   } catch (err) {
