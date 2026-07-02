@@ -39,6 +39,7 @@ MARK_RANKS = (20, 50, 200)
 LIVE_RANKS = tuple(sorted({*range(10, 201, 10), 35}))
 BJ = timezone(timedelta(hours=8))
 FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
+SPOT_KLINES = "https://api.binance.com/api/v3/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
@@ -1617,6 +1618,7 @@ def api_jobs() -> Response:
             "updatedAt": job.get("updatedAt"),
             "payload": {
                 "market": payload.get("market"),
+                "token": payload.get("token"),
                 "symbol": payload.get("symbol"),
                 "resourceId": payload.get("resourceId"),
                 "url": payload.get("url"),
@@ -1674,6 +1676,36 @@ def api_update_job(job_id: str) -> Response:
             save_jobs(jobs)
             return jsonify({"job": job})
     return jsonify({"error": "任务不存在"}), 404
+
+
+@app.put("/api/jobs/<job_id>/params")
+def api_update_job_params(job_id: str) -> Response:
+    body = request.get_json(force=True) or {}
+    market = str(body.get("market") or "").strip().lower()
+    token = str(body.get("token") or "").strip().upper()
+    symbol = str(body.get("symbol") or "").strip().upper()
+
+    if market not in ("um", "spot"):
+        return jsonify({"error": "market 必须为 um 或 spot"}), 400
+    if not token or not re.match(r"^[A-Z0-9]{1,24}$", token):
+        return jsonify({"error": "token 格式无效"}), 400
+    if not symbol or not re.match(r"^[A-Z0-9]{2,30}$", symbol):
+        return jsonify({"error": "symbol 格式无效"}), 400
+
+    with state_lock:
+        jobs = load_jobs()
+        for job in jobs:
+            if job.get("id") == job_id:
+                p = job.setdefault("payload", {})
+                p["market"] = market
+                p["token"] = token
+                p["symbol"] = symbol
+                name = str(body.get("name") or "").strip()
+                job["name"] = name if name else f"{market.upper()} {token}"
+                job["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                save_jobs(jobs)
+                return jsonify({"job": job})
+        return jsonify({"error": "任务不存在"}), 404
 
 
 @app.get("/api/jobs/<job_id>/snapshots")
@@ -2144,6 +2176,142 @@ def files(relative: str) -> Response:
     if not target.exists() or not target.is_file():
         return jsonify({"error": "not found"}), 404
     return send_from_directory(target.parent, target.name)
+
+
+@app.get("/api/jobs/<job_id>/delta-analysis")
+def api_job_delta_analysis(job_id: str) -> Response:
+    import requests
+
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    payload = job.get("payload") or {}
+    token = (request.args.get("token") or payload.get("token") or "").upper()
+    symbol = (request.args.get("symbol") or payload.get("symbol") or "").upper()
+    if not symbol:
+        if token:
+            symbol = token + "USDT"
+        else:
+            return jsonify({"error": "缺少交易对"}), 400
+    market_type = str(payload.get("market") or "").lower()
+    klines_url = SPOT_KLINES if market_type == "spot" else FAPI_KLINES
+
+    snapshots = job.get("snapshots") or []
+    if len(snapshots) < 2:
+        return jsonify({"error": "至少需要 2 个快照"}), 400
+
+    try:
+        proxy = choose_binance_proxy("auto", timeout=8)
+    except ScriptError:
+        proxy = _no_job_context  # sentinel: no connection at all
+    no_connection = proxy is _no_job_context
+
+    snapshot_data = []
+    for s in snapshots:
+        json_path = s.get("json")
+        if not json_path:
+            continue
+        path = Path(str(json_path))
+        if not path.exists():
+            continue
+        data = read_json(path, {})
+        if not isinstance(data, dict):
+            continue
+        meta = data.get("meta") or {}
+        updated_at_ms = to_decimal(meta.get("updatedTime"))
+        if updated_at_ms is None:
+            continue
+        snapshot_data.append({
+            "timestamp": s["timestamp"],
+            "sum": to_decimal(data.get("sum")),
+            "eligibleVolume": to_decimal(meta.get("eligibleTradingVolume")),
+            "totalUsers": meta.get("total"),
+            "updatedTimeMs": updated_at_ms,
+            "updatedAtBj": datetime.fromtimestamp(
+                float(updated_at_ms / Decimal("1000")), timezone.utc
+            ).astimezone(BJ),
+        })
+
+    if len(snapshot_data) < 2:
+        return jsonify({"error": "可读的快照不足 2 个"}), 400
+
+    pairs = []
+    for i in range(1, len(snapshot_data)):
+        prev = snapshot_data[i - 1]
+        cur = snapshot_data[i]
+        leaderboard_delta = None
+        if prev["sum"] is not None and cur["sum"] is not None:
+            leaderboard_delta = cur["sum"] - prev["sum"]
+        eligible_delta = None
+        if prev["eligibleVolume"] is not None and cur["eligibleVolume"] is not None:
+            eligible_delta = cur["eligibleVolume"] - prev["eligibleVolume"]
+        end_bj = cur["updatedAtBj"].replace(microsecond=0)
+        start_bj = prev["updatedAtBj"].replace(microsecond=0)
+        pair = {
+            "prevTimestamp": prev["timestamp"],
+            "curTimestamp": cur["timestamp"],
+            "prev": {
+                "sum": decimal_text(prev["sum"]),
+                "eligibleVolume": decimal_text(prev["eligibleVolume"]),
+                "totalUsers": prev["totalUsers"],
+                "updatedAt": prev["updatedAtBj"].strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            "cur": {
+                "sum": decimal_text(cur["sum"]),
+                "eligibleVolume": decimal_text(cur["eligibleVolume"]),
+                "totalUsers": cur["totalUsers"],
+                "updatedAt": cur["updatedAtBj"].strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            "leaderboardDelta": decimal_text(leaderboard_delta),
+            "eligibleDelta": decimal_text(eligible_delta),
+            "windowStart": start_bj.strftime("%Y-%m-%d %H:%M:%S"),
+            "windowEnd": end_bj.strftime("%Y-%m-%d %H:%M:%S"),
+            "marketBaseVolume": None,
+            "marketQuoteVolume": None,
+            "leaderboardDeltaRatio": None,
+            "klines": 0,
+            "error": None,
+        }
+        if no_connection:
+            pair["error"] = "无可用连接方式"
+        else:
+            try:
+                start_ms = int(start_bj.astimezone(timezone.utc).timestamp() * 1000)
+                end_ms = int(end_bj.astimezone(timezone.utc).timestamp() * 1000)
+                resp = requests.get(
+                    klines_url,
+                    params={
+                        "symbol": symbol,
+                        "interval": "1h",
+                        "startTime": start_ms,
+                        "endTime": end_ms,
+                        "limit": 1500,
+                    },
+                    proxies=request_proxies(proxy),
+                    timeout=15,
+                )
+                payload_k = resp.json()
+                if resp.status_code == 200 and isinstance(payload_k, list):
+                    base_v = Decimal("0")
+                    quote_v = Decimal("0")
+                    for k in payload_k:
+                        if isinstance(k, list) and len(k) >= 8:
+                            base_v += to_decimal(k[5]) or Decimal("0")
+                            quote_v += to_decimal(k[7]) or Decimal("0")
+                    pair["marketBaseVolume"] = decimal_text(base_v)
+                    pair["marketQuoteVolume"] = decimal_text(quote_v)
+                    pair["klines"] = len(payload_k)
+                    if quote_v and leaderboard_delta is not None:
+                        pair["leaderboardDeltaRatio"] = decimal_text(leaderboard_delta / quote_v)
+                else:
+                    pair["error"] = f"Binance API HTTP {resp.status_code}"
+            except Exception as exc:
+                pair["error"] = str(exc)
+        pairs.append(pair)
+
+    proxy_label = "无可用连接" if no_connection else ("直连" if proxy is None else str(proxy))
+    return jsonify({"pairs": pairs, "symbol": symbol, "proxyStatus": proxy_label, "klinesUrl": klines_url})
 
 
 def main() -> None:

@@ -186,19 +186,45 @@ async function startScrapeJob(resourceId, market, symbol, url) {
   }
 }
 
-async function editJobName(jobId, currentName) {
-  const newName = prompt("编辑任务名称：", currentName);
-  if (!newName || newName === currentName) return;
+let _editJobId = null;
+
+function openEditModal(job) {
+  _editJobId = job.id;
+  const p = job.payload || {};
+  document.getElementById("editMarket").value = (p.market || "um").toLowerCase();
+  document.getElementById("editToken").value = (p.token || (p.symbol || "").replace(/USDT$/i, "") || "").toUpperCase();
+  document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
+  document.getElementById("editName").value = job.name || p.name || "";
+  const rid = p.resourceId || "";
+  document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
+  document.getElementById("editModal").style.display = "";
+}
+
+document.getElementById("editCancelBtn").addEventListener("click", () => {
+  document.getElementById("editModal").style.display = "none";
+  _editJobId = null;
+});
+
+document.getElementById("editSaveBtn").addEventListener("click", async () => {
+  const jobId = _editJobId;
+  if (!jobId) return;
+  const market = document.getElementById("editMarket").value;
+  const token = document.getElementById("editToken").value.trim().toUpperCase();
+  const symbol = document.getElementById("editSymbol").value.trim().toUpperCase();
+  const name = document.getElementById("editName").value.trim();
+  if (!token || !symbol) { alert("Token 和 Symbol 不能为空"); return; }
   try {
-    await api(`/api/jobs/${jobId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name: newName }),
+    await api(`/api/jobs/${jobId}/params`, {
+      method: "PUT",
+      body: JSON.stringify({ market, token, symbol, name: name || undefined }),
     });
+    document.getElementById("editModal").style.display = "none";
+    _editJobId = null;
     await loadJobs(state.page);
   } catch (error) {
-    alert(`编辑失败：${error.message}`);
+    alert(`保存失败：${error.message}`);
   }
-}
+});
 
 function lastLine(text) {
   if (!text) return "";
@@ -277,11 +303,10 @@ function renderJobs(jobs) {
     });
   });
   $("#jobList").querySelectorAll("[data-rename]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       const job = jobs.find((item) => item.id === button.dataset.rename);
       if (!job) return;
-      const current = job.name || job.payload?.name || job.payload?.resourceId || job.id;
-      await editJobName(job.id, String(current));
+      openEditModal(job);
     });
   });
   $("#jobList").querySelectorAll("[data-delete]").forEach((button) => {

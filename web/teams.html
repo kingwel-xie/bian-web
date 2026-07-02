@@ -6,42 +6,45 @@
 <title>团队管理</title>
 <link rel="stylesheet" href="/css888/styles.css?v=20260701b" />
 <style>
-  body { padding: 10px; }
-  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
-  .page-head h2 { font-size: 16px; margin: 0; }
-  .page-head a { font-size: 12px; color: var(--accent-2); }
-  .team-section { border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; overflow: hidden; margin-bottom: 6px; }
-  .team-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #eee7d9; gap: 6px; flex-wrap: wrap; }
-  .team-header h3 { margin: 0; font-size: 13px; color: var(--accent); }
-  .team-name-input { border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; font: inherit; font-size: 12px; width: 120px; background: #fff; }
-  .member-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .member-table th, .member-table td { padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .member-table th { font-size: 10px; color: var(--muted); background: transparent; position: static; text-transform: none; text-align: left; }
-  .member-table td { border-bottom: 1px solid rgba(46,42,36,0.06); }
+  body { padding: 6px; }
+  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .page-head h2 { font-size: 14px; margin: 0; }
+  .page-head a { font-size: 11px; color: var(--accent-2); }
+  .team-section { border: 1px solid var(--line); border-radius: 4px; background: #fffdf8; margin-bottom: 4px; }
+  .team-header { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: #eee7d9; }
+  .team-header h3 { margin: 0; font-size: 12px; color: var(--accent); font-weight:600 }
+  .team-name-input { border:0;border-bottom:1px dashed var(--line);padding:0 2px;font:inherit;font-size:12px;width:100px;background:transparent;color:var(--accent);font-weight:600 }
+  .team-name-input:focus { outline:none; border-bottom-color:var(--accent-2) }
+  .member-c { overflow-x: auto; display: inline-block; max-width: 100%; }
+  .member-table { border-collapse: collapse; font-size: 11px; }
+  .member-table th, .member-table td { padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .member-table th { font-size: 9px; color: var(--muted); background: transparent; position: static; text-transform: none; text-align: left; font-weight:600 }
+  .member-table td { border-bottom: 1px solid rgba(46,42,36,0.05); }
   .member-table .num { text-align: right; }
-  .member-table .w-col { width: 55px; }
+  .member-table .nick-col { max-width: 200px; }
+  .member-table .w-col { width: 64px; }
   .member-table .del-col { width: 24px; text-align: center; }
-  .weight-input { width: 42px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 3px; font: inherit; font-size: 11px; text-align: center; }
-  .del-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+  .member-table .uid-col { width: 90px; }
+  .weight-input { width: 52px; border: 1px solid var(--line); border-radius: 2px; padding: 0 2px; font: inherit; font-size: 10px; text-align: center; background: #fff; }
+  .del-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
   .del-btn:hover { color: var(--bad); }
-  .add-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-soft); }
-  .add-form label { font-size: 10px; color: var(--muted); display: flex; flex-direction: column; gap: 1px; }
-  .add-form input, .add-form select { border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px; font: inherit; font-size: 11px; background: #fff; }
-  .add-form input { width: 90px; }
-  .add-form input.wide { width: 130px; }
-  .add-form button { min-height: 24px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 12px; cursor: pointer; font-weight: 700; font-size: 11px; }
+  .add-form { display: flex; gap: 4px; align-items: center; padding: 3px 6px; background: var(--panel-soft); }
+  .add-form input, .add-form select { border: 1px solid var(--line); border-radius: 2px; padding: 1px 4px; font: inherit; font-size: 11px; background: #fff; }
+  .add-form input { width: 80px; }
+  .add-form input.wide { width: 110px; }
+  .add-form button { border: 0; border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 10px; cursor: pointer; font-weight: 700; font-size: 10px; line-height:20px }
   .add-form button:hover { background: #e1f3f6; color: var(--accent-2); }
-  .db-actions { display: flex; gap: 6px; padding: 6px 10px; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--line); }
-  .db-actions button { min-height: 26px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 14px; cursor: pointer; font-weight: 700; font-size: 11px; }
+  .db-actions { display: flex; gap: 4px; padding: 3px 6px; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--line); }
+  .db-actions button { border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 10px; cursor: pointer; font-weight: 700; font-size: 10px; line-height:22px }
   .db-actions button:hover { background: #e1f3f6; color: var(--accent-2); }
   .db-actions .danger { border-color: var(--bad); color: var(--bad); }
   .db-actions .danger:hover { background: rgba(196,81,69,0.08); }
-  .msg { font-size: 11px; padding: 4px 10px; }
-  .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 12px; }
+  .msg { font-size: 10px; padding: 2px 8px; }
+  .empty { color: var(--muted); text-align: center; padding: 16px; font-size: 11px; }
   @media (max-width: 640px) {
-    body { padding: 4px; }
-    .add-form { flex-direction: column; align-items: stretch; }
-    .add-form input { width: 100%; }
+    body { padding: 3px; }
+    .add-form { flex-wrap: wrap; }
+    .add-form input { width: 60px; }
   }
 </style>
 </head>
@@ -69,7 +72,7 @@ function loadDb() {
       content.innerHTML = '<div class="empty">暂无团队。</div>';
       content.innerHTML += `<div class="add-form" style="max-width:400px;margin:12px auto">
         <label>团队名 <input id="newTeamName" placeholder="新团队名称" class="wide" /></label>
-        <button id="createTeamBtn">创建团队</button>
+        <button id="createTeamBtn" style="line-height:22px;padding:0 12px;min-height:0">创建团队</button>
       </div>`;
       document.getElementById("createTeamBtn")?.addEventListener("click", function() {
         const name = document.getElementById("newTeamName").value.trim() || "新团队";
@@ -88,22 +91,24 @@ function loadDb() {
       const members = team.members || [];
       return `<div class="team-section" id="team-${ti}">
         <div class="team-header">
-          <h3>团队 <input class="team-name-input" value="${escapeHtml(team.name || "")}" data-ti="${ti}" /> <button class="rename-btn" data-ti="${ti}" style="border:0;background:transparent;color:var(--accent-2);cursor:pointer;font-size:11px">重命名</button></h3>
-          <span style="font-size:12px;color:var(--muted)">${members.length} 人</span>
+          <h3>团队</h3>
+          <input class="team-name-input" value="${escapeHtml(team.name || "")}" data-ti="${ti}" />
+          <span style="font-size:10px;color:var(--muted);margin-left:auto">${members.length} 人</span>
         </div>
+        <div class="member-c">
         <table class="member-table">
-          <tr><th>#</th><th>昵称</th><th>User ID</th><th class="w-col">权重</th><th class="del-col"></th></tr>
+          <tr><th>昵称</th><th class="uid-col">User ID</th><th class="w-col">权重</th><th class="del-col"></th></tr>
           ${members.map((m, mi) => `<tr>
-            <td>${mi + 1}</td>
-            <td>${escapeHtml(m.nickname)}</td>
-            <td>${escapeHtml(m.userId)}</td>
+            <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
+            <td class="uid-col" title="${escapeHtml(m.userId || "")}">${escapeHtml(m.userId || "")}</td>
             <td class="num"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
             <td class="del-col"><button class="del-btn" title="删除" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}">×</button></td>
           </tr>`).join("")}
         </table>
+        </div>
         <div class="add-form">
-          <label>昵称 <input class="add-nick-${ti}" placeholder="nickname" class="wide" /></label>
-          <label>User ID <input class="add-uid-${ti}" placeholder="userId" /></label>
+          <input class="add-nick-${ti} wide" placeholder="昵称" />
+          <input class="add-uid-${ti}" placeholder="User ID" />
           <button class="add-btn" data-ti="${ti}">添加</button>
         </div>
       </div>`;
@@ -159,12 +164,11 @@ function loadDb() {
         }).then(() => { loadDb(); msg("成员已添加", true); }).catch(err => msg("错误: " + err.message, false));
       });
     });
-    content.querySelectorAll(".rename-btn").forEach(el => {
-      el.addEventListener("click", function() {
+    content.querySelectorAll(".team-name-input").forEach(el => {
+      const save = function() {
         const ti = parseInt(this.dataset.ti);
-        const input = document.querySelector(".team-name-input[data-ti='" + ti + "']");
-        const name = (input.value || "").trim();
-        if (!name) { msg("名称不能为空", false); return; }
+        const name = (this.value || "").trim();
+        if (!name) { msg("名称不能为空", false); this.value = this.defaultValue; return; }
         fetch("/api/teams/team", {
           method: "PUT",
           headers: {"Content-Type": "application/json"},
@@ -172,8 +176,10 @@ function loadDb() {
         }).then(r => {
           if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
           return r.json();
-        }).then(() => msg("团队已重命名", true)).catch(err => msg("错误: " + err.message, false));
-      });
+        }).then(() => { this.defaultValue = name; msg("已重命名", true); }).catch(err => msg("错误: " + err.message, false));
+      };
+      el.addEventListener("blur", save);
+      el.addEventListener("keydown", function(e) { if (e.key === "Enter") { this.blur(); } });
     });
     document.getElementById("deleteDbBtn").addEventListener("click", function() {
       if (!confirm("确定清空整个数据库吗？此操作不可恢复。")) return;

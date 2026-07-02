@@ -766,3 +766,35 @@ td:nth-child(2) {
   cursor: pointer;
   max-width: 320px;
 }
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 22px 26px;
+  min-width: 340px;
+  max-width: 420px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+.modal-box h3 { margin: 0 0 4px; font-size: 16px; }
+.modal-form { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.modal-form label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.modal-form input, .modal-form select {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  font-size: 14px; background: #fffdf8; color: var(--ink); outline: none;
+}
+.modal-form input:focus, .modal-form select:focus { border-color: var(--accent-2); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.modal-actions button {
+  padding: 7px 18px; border: 1px solid var(--line); border-radius: 6px;
+  background: #eee7d9; color: var(--ink); font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.modal-actions button:hover { background: #e1f3f6; }
+.modal-actions button#editSaveBtn { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
+.modal-actions button#editSaveBtn:hover { background: #3b6573; }
