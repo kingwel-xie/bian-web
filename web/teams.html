@@ -4,47 +4,65 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>团队管理</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260701b" />
+<link rel="stylesheet" href="/css888/styles.css" />
 <style>
-  body { padding: 6px; }
-  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .page-head h2 { font-size: 14px; margin: 0; }
-  .page-head a { font-size: 11px; color: var(--accent-2); }
-  .team-section { border: 1px solid var(--line); border-radius: 4px; background: #fffdf8; margin-bottom: 4px; }
-  .team-header { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: #eee7d9; }
-  .team-header h3 { margin: 0; font-size: 12px; color: var(--accent); font-weight:600 }
-  .team-name-input { border:0;border-bottom:1px dashed var(--line);padding:0 2px;font:inherit;font-size:12px;width:100px;background:transparent;color:var(--accent);font-weight:600 }
-  .team-name-input:focus { outline:none; border-bottom-color:var(--accent-2) }
-  .member-c { overflow-x: auto; display: inline-block; max-width: 100%; }
-  .member-table { border-collapse: collapse; font-size: 11px; }
-  .member-table th, .member-table td { padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .member-table th { font-size: 9px; color: var(--muted); background: transparent; position: static; text-transform: none; text-align: left; font-weight:600 }
-  .member-table td { border-bottom: 1px solid rgba(46,42,36,0.05); }
-  .member-table .num { text-align: right; }
-  .member-table .nick-col { max-width: 200px; }
-  .member-table .w-col { width: 64px; }
-  .member-table .del-col { width: 24px; text-align: center; }
-  .member-table .uid-col { width: 90px; }
-  .weight-input { width: 52px; border: 1px solid var(--line); border-radius: 2px; padding: 0 2px; font: inherit; font-size: 10px; text-align: center; background: #fff; }
-  .del-btn { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
+  body { padding: 8px; }
+  #content { display: flex; flex-direction: column; align-items: center; }
+  .team-card { width: 62%; min-width: 380px; }
+  .page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .page-head h2 { font-size: 15px; margin: 0; color: var(--accent); }
+  .page-head a { font-size: 12px; color: var(--accent-2); }
+  .team-card { border: 1px solid var(--line); border-radius: 6px; background: #fff; margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: inline-block; min-width: 380px; }
+  .team-hd { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+  .team-name { border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); min-width: 60px; max-width: 200px; }
+  .team-name:focus { outline: none; border-bottom: 1px solid var(--accent-2); }
+  .team-count { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .member-wrap { overflow-x: auto; }
+  .member-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+  .member-table th { font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 18px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+  .member-table td { padding: 4px 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid rgba(0,0,0,0.03); }
+  .member-table tbody tr:hover td { background: #faf8f5; }
+  .member-table .num { text-align: center; }
+  .member-table .nick-col { width: 350px; }
+  .member-table .uid-col { width: 130px; }
+  .member-table .w-col { width: 128px; }
+  .member-table .del-col { text-align: center; }
+  .weight-input { width: 88px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; text-align: center; background: #fff; }
+  .weight-input:focus { border-color: var(--accent-2); outline: none; }
+  .del-btn { border: 0; background: transparent; color: #bbb; cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
   .del-btn:hover { color: var(--bad); }
-  .add-form { display: flex; gap: 4px; align-items: center; padding: 3px 6px; background: var(--panel-soft); }
-  .add-form input, .add-form select { border: 1px solid var(--line); border-radius: 2px; padding: 1px 4px; font: inherit; font-size: 11px; background: #fff; }
-  .add-form input { width: 80px; }
-  .add-form input.wide { width: 110px; }
-  .add-form button { border: 0; border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 10px; cursor: pointer; font-weight: 700; font-size: 10px; line-height:20px }
-  .add-form button:hover { background: #e1f3f6; color: var(--accent-2); }
-  .db-actions { display: flex; gap: 4px; padding: 3px 6px; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--line); }
-  .db-actions button { border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 10px; cursor: pointer; font-weight: 700; font-size: 10px; line-height:22px }
-  .db-actions button:hover { background: #e1f3f6; color: var(--accent-2); }
-  .db-actions .danger { border-color: var(--bad); color: var(--bad); }
-  .db-actions .danger:hover { background: rgba(196,81,69,0.08); }
-  .msg { font-size: 10px; padding: 2px 8px; }
-  .empty { color: var(--muted); text-align: center; padding: 16px; font-size: 11px; }
+  .merge-btn { border: 0; background: transparent; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; }
+  .merge-btn:hover { background: var(--accent-2); color: #fff; }
+  .merge-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 999; }
+  .merge-dialog { background: #fff; border-radius: 8px; padding: 16px; min-width: 320px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); }
+  .merge-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: var(--accent); }
+  .merge-hint { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .merge-targets { max-height: 240px; overflow-y: auto; margin-bottom: 12px; }
+  .merge-option { display: block; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-bottom: 2px; border: 1px solid transparent; }
+  .merge-option:hover { background: #f5f3ef; }
+  .merge-option.selected { background: #e1f3f6; border-color: var(--accent-2); }
+  .merge-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .merge-actions button { border: 1px solid var(--line); border-radius: 4px; padding: 4px 16px; cursor: pointer; font-size: 12px; font-weight: 600; line-height: 22px; }
+  .merge-confirm { background: var(--accent-2); color: #fff; border-color: var(--accent-2); }
+  .merge-confirm:hover { opacity: 0.85; }
+  .merge-cancel { background: #fff; color: var(--ink); }
+  .merge-cancel:hover { background: #f5f3ef; }
+  .add-row td { padding: 3px 10px; background: #faf9f7; }
+  .add-row input { border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; font: inherit; font-size: 11px; background: #fff; width: 100%; box-sizing: border-box; }
+  .add-row input:focus { border-color: var(--accent-2); outline: none; }
+  .add-btn { border: 1px solid var(--line); border-radius: 4px; background: #eee7d9; color: var(--ink); padding: 0 12px; cursor: pointer; font-weight: 600; font-size: 12px; line-height: 24px; }
+  .add-btn:hover { background: #e1f3f6; color: var(--accent-2); }
+  .msg { font-size: 11px; color: var(--good); min-height: 1em; padding: 2px 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 12px; }
+  .empty-form { display: flex; gap: 8px; justify-content: center; padding: 12px; align-items: center; }
+  .empty-form input { border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; font: inherit; font-size: 13px; background: #fff; width: 160px; }
+  .empty-form button { border: 1px solid var(--line); border-radius: 4px; background: #eee7d9; color: var(--ink); padding: 4px 16px; cursor: pointer; font-weight: 600; font-size: 13px; line-height: 24px; }
+  .empty-form button:hover { background: #e1f3f6; color: var(--accent-2); }
   @media (max-width: 640px) {
-    body { padding: 3px; }
-    .add-form { flex-wrap: wrap; }
-    .add-form input { width: 60px; }
+    body { padding: 4px; }
+    .member-table { font-size: 11px; }
+    .member-table th, .member-table td { padding: 3px 6px; }
+    .add-row td { padding: 3px 6px; }
   }
 </style>
 </head>
@@ -58,22 +76,29 @@
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+let _msgTimer = null;
 function msg(text, isOk) {
   const el = document.getElementById("msg");
-  if (el) { el.textContent = text; el.style.color = isOk ? "var(--good)" : "var(--bad)"; setTimeout(() => { el.textContent = ""; }, 4000); }
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isOk ? "var(--good)" : "var(--bad)";
+  clearTimeout(_msgTimer);
+  _msgTimer = setTimeout(() => { el.textContent = ""; }, 4000);
 }
 
 function loadDb() {
   const content = document.getElementById("content");
   fetch("/api/teams").then(r => r.json()).then(data => {
-    const db = data.db;
-    const teams = (db && db.teams) || [];
+      const db = data.db;
+      const teams = (db && db.teams) || [];
+      _teamsData = teams;
     if (!teams.length) {
-      content.innerHTML = '<div class="empty">暂无团队。</div>';
-      content.innerHTML += `<div class="add-form" style="max-width:400px;margin:12px auto">
-        <label>团队名 <input id="newTeamName" placeholder="新团队名称" class="wide" /></label>
-        <button id="createTeamBtn" style="line-height:22px;padding:0 12px;min-height:0">创建团队</button>
-      </div>`;
+      content.innerHTML =
+        '<div class="empty">暂无团队。</div>' +
+        '<div class="empty-form">' +
+          '<input id="newTeamName" placeholder="输入团队名称" />' +
+          '<button id="createTeamBtn">创建团队</button>' +
+        '</div>';
       document.getElementById("createTeamBtn")?.addEventListener("click", function() {
         const name = document.getElementById("newTeamName").value.trim() || "新团队";
         fetch("/api/teams", {
@@ -89,35 +114,43 @@ function loadDb() {
     }
     content.innerHTML = teams.map((team, ti) => {
       const members = team.members || [];
-      return `<div class="team-section" id="team-${ti}">
-        <div class="team-header">
-          <h3>团队</h3>
-          <input class="team-name-input" value="${escapeHtml(team.name || "")}" data-ti="${ti}" />
-          <span style="font-size:10px;color:var(--muted);margin-left:auto">${members.length} 人</span>
+      return `<div class="team-card">
+        <div class="team-hd">
+          <input class="team-name" value="${escapeHtml(team.name || "")}" data-ti="${ti}" />
+           <span class="team-count">${members.length} 人</span>
+           ${teams.length > 1 ? `<button class="merge-btn" data-ti="${ti}">合并</button>` : ""}
         </div>
-        <div class="member-c">
-        <table class="member-table">
-          <tr><th>昵称</th><th class="uid-col">User ID</th><th class="w-col">权重</th><th class="del-col"></th></tr>
-          ${members.map((m, mi) => `<tr>
-            <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
-            <td class="uid-col" title="${escapeHtml(m.userId || "")}">${escapeHtml(m.userId || "")}</td>
-            <td class="num"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
-            <td class="del-col"><button class="del-btn" title="删除" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}">×</button></td>
-          </tr>`).join("")}
-        </table>
-        </div>
-        <div class="add-form">
-          <input class="add-nick-${ti} wide" placeholder="昵称" />
-          <input class="add-uid-${ti}" placeholder="User ID" />
-          <button class="add-btn" data-ti="${ti}">添加</button>
+        <div class="member-wrap">
+          <table class="member-table">
+            <thead>
+              <tr><th>昵称</th><th class="uid-col">User ID</th><th class="w-col num">权重</th><th class="del-col">操作</th></tr>
+            </thead>
+            <tbody>
+              ${members.map((m, mi) => `<tr>
+                <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
+                <td class="uid-col" title="${escapeHtml(m.userId || "")}">${escapeHtml(m.userId || "")}</td>
+                <td class="num"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
+                <td class="del-col"><button class="del-btn" title="删除" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}">×</button></td>
+              </tr>`).join("")}
+            </tbody>
+            <tfoot>
+              <tr class="add-row">
+                <td><input class="add-nick-${ti}" placeholder="昵称" /></td>
+                <td><input class="add-uid-${ti}" placeholder="User ID" /></td>
+                <td class="num"><button class="add-btn" data-ti="${ti}">+ 添加</button></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>`;
     }).join("");
-    content.innerHTML += `<div class="db-actions" id="msg"></div>
-      <div class="db-actions">
-        <button class="danger" id="deleteDbBtn">🗑 清空数据库</button>
-      </div>`;
-    // Bind events
+    content.innerHTML += '<div class="msg" id="msg"></div>' +
+      '<div style="padding:2px 0;display:flex;gap:8px;align-items:center">' +
+        '<button id="deleteDbBtn" style="border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;padding:4px 0">删除所有团队</button>' +
+      '</div>';
+
+    // weight change
     content.querySelectorAll(".weight-input").forEach(el => {
       el.addEventListener("change", function() {
         const ti = parseInt(this.dataset.ti);
@@ -133,6 +166,8 @@ function loadDb() {
         }).then(() => msg("权重已更新", true)).catch(err => msg("错误: " + err.message, false));
       });
     });
+
+    // delete member
     content.querySelectorAll(".del-btn").forEach(el => {
       el.addEventListener("click", function() {
         const ti = parseInt(this.dataset.ti);
@@ -148,6 +183,8 @@ function loadDb() {
         }).then(() => { loadDb(); msg("成员已删除", true); }).catch(err => msg("错误: " + err.message, false));
       });
     });
+
+    // add member
     content.querySelectorAll(".add-btn").forEach(el => {
       el.addEventListener("click", function() {
         const ti = parseInt(this.dataset.ti);
@@ -164,7 +201,9 @@ function loadDb() {
         }).then(() => { loadDb(); msg("成员已添加", true); }).catch(err => msg("错误: " + err.message, false));
       });
     });
-    content.querySelectorAll(".team-name-input").forEach(el => {
+
+    // rename team
+    content.querySelectorAll(".team-name").forEach(el => {
       const save = function() {
         const ti = parseInt(this.dataset.ti);
         const name = (this.value || "").trim();
@@ -181,19 +220,94 @@ function loadDb() {
       el.addEventListener("blur", save);
       el.addEventListener("keydown", function(e) { if (e.key === "Enter") { this.blur(); } });
     });
-    document.getElementById("deleteDbBtn").addEventListener("click", function() {
-      if (!confirm("确定清空整个数据库吗？此操作不可恢复。")) return;
+
+    document.getElementById("deleteDbBtn")?.addEventListener("click", function() {
+      if (!confirm("确定删除所有团队吗？此操作不可恢复。")) return;
       fetch("/api/teams", { method: "DELETE" }).then(r => {
         if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
         return r.json();
       }).then(() => { loadDb(); }).catch(err => msg("错误: " + err.message, false));
     });
+
+    // merge button
+    content.querySelectorAll(".merge-btn").forEach(el => {
+      el.addEventListener("click", function() {
+        const ti = parseInt(this.dataset.ti);
+        _mergeSourceIdx = ti;
+        _mergeTargetIdx = -1;
+        const sourceName = _teamsData[ti]?.name || "";
+        _mergeHint.textContent = `将「${sourceName}」合并到：`;
+        _mergeTargets.innerHTML = _teamsData.map((team, i) => {
+          if (i === ti) return "";
+          return `<div class="merge-option" data-idx="${i}">${escapeHtml(team.name)} (${(team.members || []).length} 人)</div>`;
+        }).join("");
+        _mergeTargets.querySelectorAll(".merge-option").forEach(opt => {
+          opt.addEventListener("click", function() {
+            _mergeTargets.querySelectorAll(".merge-option").forEach(o => o.classList.remove("selected"));
+            this.classList.add("selected");
+            _mergeTargetIdx = parseInt(this.dataset.idx);
+          });
+        });
+        _mergeOverlay.style.display = "flex";
+      });
+    });
+
   }).catch(err => {
     content.innerHTML = '<div class="empty err">加载失败: ' + escapeHtml(err.message) + '</div>';
   });
 }
 
+</script>
+
+<div id="mergeOverlay" class="merge-overlay" style="display:none">
+  <div class="merge-dialog">
+    <div class="merge-title">合并团队</div>
+    <div class="merge-hint" id="mergeHint"></div>
+    <div class="merge-targets" id="mergeTargets"></div>
+    <div class="merge-actions">
+      <button id="mergeConfirmBtn" class="merge-confirm">确认合并</button>
+      <button id="mergeCancelBtn" class="merge-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// merge overlay
+const _mergeOverlay = document.getElementById("mergeOverlay");
+const _mergeTargets = document.getElementById("mergeTargets");
+const _mergeHint = document.getElementById("mergeHint");
+const _mergeConfirm = document.getElementById("mergeConfirmBtn");
+const _mergeCancel = document.getElementById("mergeCancelBtn");
+let _mergeSourceIdx = -1;
+let _mergeTargetIdx = -1;
+let _teamsData = [];
+
+function closeMerge() {
+  _mergeOverlay.style.display = "none";
+  _mergeSourceIdx = -1;
+  _mergeTargetIdx = -1;
+}
+
+_mergeCancel.addEventListener("click", closeMerge);
+_mergeOverlay.addEventListener("click", function(e) { if (e.target === _mergeOverlay) closeMerge(); });
+
+_mergeConfirm.addEventListener("click", function() {
+  if (_mergeTargetIdx < 0) { return; }
+  const sourceName = _teamsData[_mergeSourceIdx]?.name || "";
+  const targetName = _teamsData[_mergeTargetIdx]?.name || "";
+  if (!confirm(`确定将「${sourceName}」合并到「${targetName}」吗？此操作不可撤销。`)) return;
+  fetch("/api/teams/merge", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({sourceIndex: _mergeSourceIdx, targetIndex: _mergeTargetIdx}),
+  }).then(r => {
+    if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
+    return r.json();
+  }).then(() => { closeMerge(); loadDb(); }).catch(err => { closeMerge(); alert("错误: " + err.message); });
+});
+
 loadDb();
 </script>
+
 </body>
 </html>

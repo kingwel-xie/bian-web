@@ -2156,6 +2156,42 @@ def api_update_member_weight() -> Response:
     return jsonify({"error": "成员不存在"}), 404
 
 
+@app.post("/api/teams/merge")
+def api_merge_teams() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    source_idx = int(body.get("sourceIndex", -1))
+    target_idx = int(body.get("targetIndex", -1))
+    teams = db.get("teams") or []
+    if source_idx < 0 or source_idx >= len(teams):
+        return jsonify({"error": "源团队索引无效"}), 400
+    if target_idx < 0 or target_idx >= len(teams):
+        return jsonify({"error": "目标团队索引无效"}), 400
+    if source_idx == target_idx:
+        return jsonify({"error": "不能合并到自身"}), 400
+
+    source = teams[source_idx]
+    target = teams[target_idx]
+    target_members = target.get("members") or []
+    target_map = {_team_member_key(m): m for m in target_members}
+
+    for m in (source.get("members") or []):
+        key = _team_member_key(m)
+        if key in target_map:
+            target_map[key]["weight"] = max(
+                target_map[key].get("weight", 1), m.get("weight", 1)
+            )
+        else:
+            target_members.append(dict(m))
+
+    target["members"] = target_members
+    del teams[source_idx]
+    db["teams"] = teams
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
 @app.get("/teams.html")
 def teams_page() -> Response:
     resp = send_from_directory(str(APP_DIR / "web"), "teams.html")
