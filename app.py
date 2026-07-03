@@ -1648,6 +1648,7 @@ def api_jobs() -> Response:
                 "url": payload.get("url"),
                 "rewardToken": payload.get("rewardToken"),
                 "rewardAmount": payload.get("rewardAmount"),
+                "rewardTiers": payload.get("rewardTiers"),
             },
             "snapshotCount": len(job.get("snapshots") or []),
             "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
@@ -1729,15 +1730,26 @@ def api_update_job_params(job_id: str) -> Response:
                 name = str(body.get("name") or "").strip()
                 job["name"] = name if name else f"{market.upper()} {token}"
                 reward_token = str(body.get("rewardToken") or "").strip().upper()
-                reward_amount = str(body.get("rewardAmount") or "").strip()
                 if reward_token:
                     p["rewardToken"] = reward_token
-                if reward_amount:
-                    p["rewardAmount"] = reward_amount
-                if not reward_token:
+                else:
                     p.pop("rewardToken", None)
-                if not reward_amount:
-                    p.pop("rewardAmount", None)
+                p.pop("rewardAmount", None)
+                reward_tiers = body.get("rewardTiers")
+                if isinstance(reward_tiers, list) and reward_tiers:
+                    cleaned = []
+                    for t in reward_tiers:
+                        rmin = t.get("rankMin")
+                        rmax = t.get("rankMax")
+                        amt = t.get("amount")
+                        if isinstance(rmin, int) and isinstance(rmax, int) and rmin >= 1 and rmax >= rmin:
+                            cleaned.append({"rankMin": rmin, "rankMax": rmax, "amount": str(int(amt) if isinstance(amt, (int, float)) else amt or "0")})
+                    if cleaned:
+                        p["rewardTiers"] = cleaned
+                    else:
+                        p.pop("rewardTiers", None)
+                else:
+                    p.pop("rewardTiers", None)
                 job["updatedAt"] = datetime.now(timezone.utc).isoformat()
                 save_jobs(jobs)
                 return jsonify({"job": job})
@@ -1899,6 +1911,11 @@ def api_job_preview(job_id: str) -> Response:
         preview["token"] = payload.get("token", "").upper()
         preview["rewardToken"] = payload.get("rewardToken", "")
         preview["rewardAmount"] = payload.get("rewardAmount", "")
+        preview["rewardTiers"] = payload.get("rewardTiers")
+        if preview.get("rewardTiers"):
+            preview["totalRewardAmount"] = sum(
+                int(t.get("amount", 0)) for t in preview["rewardTiers"]
+            )
         job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
         rid = str(payload.get("resourceId") or "").strip()
         preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name

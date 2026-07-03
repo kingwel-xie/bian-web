@@ -196,7 +196,21 @@ function openEditModal(job) {
   document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
   document.getElementById("editName").value = job.name || p.name || "";
   document.getElementById("editRewardToken").value = p.rewardToken || document.getElementById("editToken").value || "";
-  document.getElementById("editRewardAmount").value = p.rewardAmount || "0";
+  const tiers = p.rewardTiers && p.rewardTiers.length ? p.rewardTiers : [
+    {rankMin:6, rankMax:20, amount:"0"},
+    {rankMin:21, rankMax:50, amount:"0"},
+    {rankMin:51, rankMax:200, amount:"0"},
+    {rankMin:201, rankMax:1000, amount:"0"},
+  ];
+  for (let i = 0; i < 4; i++) {
+    const t = tiers[i] || {};
+    const minEl = document.getElementById("editTier" + i + "Min");
+    const maxEl = document.getElementById("editTier" + i + "Max");
+    const amtEl = document.getElementById("editTier" + i + "Amt");
+    if (minEl) minEl.value = t.rankMin != null ? t.rankMin : "";
+    if (maxEl) maxEl.value = t.rankMax != null ? t.rankMax : "";
+    if (amtEl) amtEl.value = t.amount || "0";
+  }
   const rid = p.resourceId || "";
   document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
   document.getElementById("editModal").style.display = "";
@@ -215,12 +229,23 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const symbol = document.getElementById("editSymbol").value.trim().toUpperCase();
   const name = document.getElementById("editName").value.trim();
   const rewardToken = document.getElementById("editRewardToken").value.trim().toUpperCase();
-  const rewardAmount = document.getElementById("editRewardAmount").value.trim();
   if (!token || !symbol) { alert("Token 和 Symbol 不能为空"); return; }
+  const rewardTiers = [];
+  for (let i = 0; i < 4; i++) {
+    const minEl = document.getElementById("editTier" + i + "Min");
+    const maxEl = document.getElementById("editTier" + i + "Max");
+    const amtEl = document.getElementById("editTier" + i + "Amt");
+    const rmin = parseInt(minEl?.value);
+    const rmax = parseInt(maxEl?.value);
+    const amt = amtEl?.value?.trim() || "0";
+    if (rmin >= 1 && rmax >= rmin) {
+      rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
+    }
+  }
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
-      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardAmount: rewardAmount || undefined }),
+      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined }),
     });
     document.getElementById("editModal").style.display = "none";
     _editJobId = null;

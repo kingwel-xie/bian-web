@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>排行榜预览</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260702f" />
+<link rel="stylesheet" href="/css888/styles.css?v=20260703a" />
 <style>
   body { padding: 14px; }
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
@@ -48,6 +48,18 @@
   .reward-item .label { color: var(--muted); font-size: 11px; }
   .reward-item .value { font-weight: 700; font-size: 15px; }
   .reward-item .value.usd { color: var(--good); }
+  .reward-tier-header { font-size: 11px; color: var(--muted); margin: 8px 0 4px; width:100%; display: flex; gap: 8px; }
+  .reward-tier-header span:nth-child(1) { width:70px; text-align:center; }
+  .reward-tier-header span:nth-child(2) { flex:1; text-align:center; }
+  .reward-tier-header span:nth-child(3) { width:110px; text-align:right; }
+  .reward-tier-header span:nth-child(4) { width:110px; text-align:right; }
+  .reward-tier-row { font-size: 12px; width:100%; display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+  .reward-tier-row:last-child { border-bottom: none; font-weight: 700; }
+  .reward-tier-row span:nth-child(1) { width:70px; text-align:center; color: var(--muted); }
+  .reward-tier-row span:nth-child(2) { flex:1; text-align:center; }
+  .reward-tier-row span:nth-child(3) { width:110px; text-align:right; }
+  .reward-tier-row span:nth-child(4) { width:110px; text-align:right; }
+  .reward-tier-row .usd { color: var(--good); }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -92,7 +104,7 @@
       <h3>奖励计算</h3>
       <div class="reward-body" id="rewardBody">
         <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
-        <div class="reward-item"><div class="label">奖励数量</div><div class="value" id="rewardAmountDisplay">—</div></div>
+        <div id="rewardTiersBody" style="width:100%"></div>
         <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
         <div class="reward-item"><div class="label">总价值 (USD)</div><div class="value usd" id="rewardValueDisplay">—</div></div>
         <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
@@ -471,18 +483,38 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
 
     // --- Reward calculation ---
     const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
+    const rewardTiers = previewData.rewardTiers || [];
     const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
     const rewardPanel = document.getElementById("rewardPanel");
     const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
-    const rewardAmountDisplay = document.getElementById("rewardAmountDisplay");
     const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
     const rewardValueDisplay = document.getElementById("rewardValueDisplay");
+    const rewardTiersBody = document.getElementById("rewardTiersBody");
+    const useTiers = rewardTiers.length > 0;
+
+    function buildTierRows(price) {
+      const totalAmt = rewardTiers.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+      const parts = [`<div class="reward-tier-header"><span>名次</span><span>总奖励数量</span><span>USD 价值</span><span>单价</span></div>`];
+      for (const t of rewardTiers) {
+        const amt = parseFloat(t.amount) || 0;
+        const usd = price != null ? amt * price : null;
+        parts.push(`<div class="reward-tier-row"><span>${t.rankMin} — ${t.rankMax}</span><span>${amt.toLocaleString("en-US")}</span><span class="usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span>${price != null ? "$" + price.toLocaleString("en-US", {minFractionDigits:4,maxFractionDigits:8}) : "—"}</span></div>`);
+      }
+      if (rewardTiers.length > 1) {
+        const totalUsd = price != null ? totalAmt * price : null;
+        parts.push(`<div class="reward-tier-row"><span>总计</span><span>${totalAmt.toLocaleString("en-US")}</span><span class="usd">${totalUsd != null ? "$" + totalUsd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span></span></div>`);
+      }
+      return parts.join("");
+    }
 
     async function updateReward() {
-      if (!rewardToken || !rewardAmount) { rewardPanel.style.display = "none"; return; }
+      const hasReward = useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0;
+      if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
       rewardPanel.style.display = "";
       rewardTokenDisplay.textContent = rewardToken;
-      rewardAmountDisplay.textContent = rewardAmount.toLocaleString("en-US");
+      if (useTiers) {
+        rewardTiersBody.innerHTML = buildTierRows(null);
+      }
       rewardPriceDisplay.textContent = "加载中...";
       rewardValueDisplay.textContent = "加载中...";
       const symbol = rewardToken + "USDT";
@@ -491,17 +523,27 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         const data = await resp.json();
         if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
         const price = parseFloat(data.price);
-        const value = rewardAmount * price;
+        if (useTiers) {
+          const totalAmt = rewardTiers.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+          rewardTiersBody.innerHTML = buildTierRows(price);
+          rewardValueDisplay.textContent = "$" + (totalAmt * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        } else {
+          rewardValueDisplay.textContent = "$" + (rewardAmount * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
         rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
-        rewardValueDisplay.textContent = "$" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       } catch (err) {
         rewardPriceDisplay.textContent = "—";
-        rewardValueDisplay.textContent = "错误: " + err.message;
+        if (!useTiers) {
+          rewardValueDisplay.textContent = "错误: " + err.message;
+        } else {
+          const el = rewardTiersBody.querySelector(".reward-tier-row:last-child .usd");
+          if (el) el.textContent = "错误";
+        }
       }
     }
 
     document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);
-    if (rewardToken && rewardAmount) updateReward();
+    if (rewardToken && (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0)) updateReward();
   } catch (err) {
     document.getElementById("meta").textContent = err.message;
   }
