@@ -814,7 +814,7 @@ td:nth-child(2) {
 .tier-row { display: flex; align-items: center; gap: 4px; font-size: 13px; }
 .tier-row .tier-label { display: inline-block; width: 80px; text-align: right; color: var(--muted); font-size: 12px; }
 .tier-row .tier-min,
-.tier-row .tier-max { width: 60px; padding: 6px 8px !important; text-align: center; }
+.tier-row .tier-max { width: 72px; padding: 6px 8px !important; text-align: center; }
 .tier-row .tier-sep { color: var(--muted); font-size: 13px; }
 .tier-row .tier-arrow { color: var(--muted); font-size: 12px; margin: 0 4px 0 8px; }
 .tier-row .tier-amt { width: 100px; padding: 6px 8px !important; text-align: right; }
