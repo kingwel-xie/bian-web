@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>排行榜预览</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260703b" />
+<link rel="stylesheet" href="/css888/styles.css?v=20260703c" />
 <style>
   body { padding: 14px; }
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
@@ -48,19 +48,7 @@
   .reward-item .label { color: var(--muted); font-size: 11px; }
   .reward-item .value { font-weight: 700; font-size: 15px; }
   .reward-item .value.usd { color: var(--good); }
-  .reward-tier-header { font-size: 11px; color: var(--muted); margin: 8px 0 4px; width:100%; display: flex; gap: 8px; }
-  .reward-tier-header span:nth-child(1) { width:70px; text-align:center; }
-  .reward-tier-header span:nth-child(2) { width:90px; text-align:right; }
-  .reward-tier-header span:nth-child(3) { flex:1; text-align:center; }
-  .reward-tier-header span:nth-child(4) { width:110px; text-align:right; }
-  .reward-tier-header span:nth-child(5) { width:110px; text-align:right; }
-  .reward-tier-row { font-size: 12px; width:100%; display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
-  .reward-tier-row span:nth-child(1) { width:70px; text-align:center; color: var(--muted); }
-  .reward-tier-row span:nth-child(2) { width:90px; text-align:right; }
-  .reward-tier-row span:nth-child(3) { flex:1; text-align:center; }
-  .reward-tier-row span:nth-child(4) { width:110px; text-align:right; }
-  .reward-tier-row span:nth-child(5) { width:110px; text-align:right; }
-  .reward-tier-row .usd { color: var(--good); }
+  .reward-tier-usd { color: var(--good); font-weight: 700; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -102,12 +90,26 @@
       </table>
     </div>
     <div id="rewardPanel" class="reward-panel" style="display:none">
-      <h3>奖励计算</h3>
-      <div class="reward-body" id="rewardBody">
-        <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
-        <div id="rewardTiersBody" style="width:100%"></div>
-        <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
-        <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+      <h3>奖励计算 <span id="rewardPanelToken" style="font-weight:400;font-size:12px">—</span></h3>
+      <div class="reward-body" id="rewardBody" style="flex-direction:column;align-items:stretch">
+        <table class="stats-table" id="rewardTiersTable" style="width:100%;min-width:auto">
+          <colgroup>
+            <col style="width:70px" />
+            <col style="width:90px" />
+            <col />
+            <col style="width:110px" />
+            <col style="width:110px" />
+          </colgroup>
+          <thead>
+            <tr><th>名次</th><th class="num">总奖励数量</th><th class="num">每人奖励</th><th class="num">USD 价值</th><th class="num">单价</th></tr>
+          </thead>
+          <tbody id="rewardTiersBody"></tbody>
+        </table>
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
+          <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
+          <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+        </div>
       </div>
     </div>
     <div id="deltaAnalysisPanel" class="stats-panel" style="margin-top:10px">
@@ -487,18 +489,19 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
     const rewardPanel = document.getElementById("rewardPanel");
     const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
+    const rewardPanelToken = document.getElementById("rewardPanelToken");
     const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
     const rewardTiersBody = document.getElementById("rewardTiersBody");
     const useTiers = rewardTiers.length > 0;
 
     function buildTierRows(price) {
-      const parts = [`<div class="reward-tier-header"><span>名次</span><span>总奖励数量</span><span>每人奖励</span><span>USD 价值</span><span>单价</span></div>`];
+      const parts = [];
       for (const t of rewardTiers) {
         const pool = parseFloat(t.amount) || 0;
         const count = t.rankMax - t.rankMin + 1;
         const perPerson = count > 0 ? pool / count : 0;
         const usd = price != null ? perPerson * price : null;
-        parts.push(`<div class="reward-tier-row"><span>${t.rankMin} — ${t.rankMax}</span><span>${pool.toLocaleString("en-US")}</span><span>${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</span><span class="usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span>${price != null ? "$" + price.toLocaleString("en-US", {minFractionDigits:4,maxFractionDigits:8}) : "—"}</span></div>`);
+        parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${pool.toLocaleString("en-US")}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</td><td class="num">${price != null ? "$" + price.toLocaleString("en-US", {minFractionDigits:4,maxFractionDigits:8}) : "—"}</td></tr>`);
       }
       return parts.join("");
     }
@@ -507,6 +510,7 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       const hasReward = useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0;
       if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
       rewardPanel.style.display = "";
+      rewardPanelToken.textContent = rewardToken;
       rewardTokenDisplay.textContent = rewardToken;
       if (useTiers) {
         rewardTiersBody.innerHTML = buildTierRows(null);
