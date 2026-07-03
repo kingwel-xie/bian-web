@@ -1582,17 +1582,22 @@ def api_ticker(symbol: str) -> Response:
     safe = symbol.upper().strip()
     if not re.fullmatch(r"[A-Z0-9]{2,30}", safe):
         return jsonify({"error": "invalid symbol"}), 400
-    try:
-        resp = requests.get(
-            f"https://api.binance.com/api/v3/ticker/price?symbol={safe}",
-            timeout=10,
-        )
-        data = resp.json()
-        if "price" in data:
-            return jsonify({"symbol": data["symbol"], "price": float(data["price"])})
-        return jsonify({"error": data.get("msg", "unknown error")}), 400
-    except requests.RequestException as e:
-        return jsonify({"error": str(e)}), 502
+
+    endpoints = [
+        ("spot", f"https://api.binance.com/api/v3/ticker/price?symbol={safe}"),
+        ("futures", f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={safe}"),
+    ]
+    errors = []
+    for market, url in endpoints:
+        try:
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            if "price" in data:
+                return jsonify({"symbol": data["symbol"], "price": float(data["price"]), "market": market})
+            errors.append(f"{market}: {data.get('msg', 'unknown error')}")
+        except requests.RequestException as e:
+            errors.append(f"{market}: {e}")
+    return jsonify({"error": "; ".join(errors)}), 400
 
 
 @app.get("/api/jobs")
