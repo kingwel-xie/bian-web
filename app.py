@@ -1628,7 +1628,9 @@ def api_jobs() -> Response:
     running_statuses = {"running", "queued"}
 
     def sort_key(job):
-        time_key = job.get("updatedAt") or job.get("startedAt") or job.get("createdAt") or ""
+        snapshots = job.get("snapshots") or []
+        data_time = snapshots[-1].get("timestamp") if snapshots else None
+        time_key = data_time or job.get("updatedAt") or job.get("startedAt") or job.get("createdAt") or ""
         return (1 if job.get("status") in running_statuses else 0, time_key)
 
     sorted_jobs = sorted(all_jobs, key=sort_key, reverse=True)
