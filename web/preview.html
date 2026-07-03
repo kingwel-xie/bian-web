@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>排行榜预览</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260703a" />
+<link rel="stylesheet" href="/css888/styles.css?v=20260703b" />
 <style>
   body { padding: 14px; }
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
@@ -54,7 +54,6 @@
   .reward-tier-header span:nth-child(3) { width:110px; text-align:right; }
   .reward-tier-header span:nth-child(4) { width:110px; text-align:right; }
   .reward-tier-row { font-size: 12px; width:100%; display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
-  .reward-tier-row:last-child { border-bottom: none; font-weight: 700; }
   .reward-tier-row span:nth-child(1) { width:70px; text-align:center; color: var(--muted); }
   .reward-tier-row span:nth-child(2) { flex:1; text-align:center; }
   .reward-tier-row span:nth-child(3) { width:110px; text-align:right; }
@@ -493,16 +492,13 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const useTiers = rewardTiers.length > 0;
 
     function buildTierRows(price) {
-      const totalAmt = rewardTiers.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-      const parts = [`<div class="reward-tier-header"><span>名次</span><span>总奖励数量</span><span>USD 价值</span><span>单价</span></div>`];
+      const parts = [`<div class="reward-tier-header"><span>名次</span><span>每人奖励</span><span>USD 价值</span><span>单价</span></div>`];
       for (const t of rewardTiers) {
-        const amt = parseFloat(t.amount) || 0;
-        const usd = price != null ? amt * price : null;
-        parts.push(`<div class="reward-tier-row"><span>${t.rankMin} — ${t.rankMax}</span><span>${amt.toLocaleString("en-US")}</span><span class="usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span>${price != null ? "$" + price.toLocaleString("en-US", {minFractionDigits:4,maxFractionDigits:8}) : "—"}</span></div>`);
-      }
-      if (rewardTiers.length > 1) {
-        const totalUsd = price != null ? totalAmt * price : null;
-        parts.push(`<div class="reward-tier-row"><span>总计</span><span>${totalAmt.toLocaleString("en-US")}</span><span class="usd">${totalUsd != null ? "$" + totalUsd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span></span></div>`);
+        const pool = parseFloat(t.amount) || 0;
+        const count = t.rankMax - t.rankMin + 1;
+        const perPerson = count > 0 ? pool / count : 0;
+        const usd = price != null ? perPerson * price : null;
+        parts.push(`<div class="reward-tier-row"><span>${t.rankMin} — ${t.rankMax}</span><span>${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</span><span class="usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</span><span>${price != null ? "$" + price.toLocaleString("en-US", {minFractionDigits:4,maxFractionDigits:8}) : "—"}</span></div>`);
       }
       return parts.join("");
     }
@@ -533,12 +529,7 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
       } catch (err) {
         rewardPriceDisplay.textContent = "—";
-        if (!useTiers) {
-          rewardValueDisplay.textContent = "错误: " + err.message;
-        } else {
-          const el = rewardTiersBody.querySelector(".reward-tier-row:last-child .usd");
-          if (el) el.textContent = "错误";
-        }
+        rewardValueDisplay.textContent = useTiers ? "" : "错误: " + err.message;
       }
     }
 
