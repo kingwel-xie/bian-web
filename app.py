@@ -1608,6 +1608,19 @@ def api_jobs() -> Response:
     page = max(1, page)
 
     all_jobs = load_jobs()
+    filter_market = (request.args.get("market") or "").strip().lower()
+    filter_search = (request.args.get("search") or "").strip()
+
+    if filter_market in ("um", "spot"):
+        all_jobs = [j for j in all_jobs if (j.get("payload") or {}).get("market") == filter_market]
+
+    if filter_search:
+        q = filter_search.lower()
+        all_jobs = [
+            j for j in all_jobs
+            if q in ((j.get("name") or (j.get("payload") or {}).get("name") or "")).lower()
+        ]
+
     total = len(all_jobs)
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
     page = min(page, total_pages) if total else 1

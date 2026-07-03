@@ -261,6 +261,28 @@ button:disabled {
   font-weight: 900;
 }
 
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.filter-group { display: flex; gap: 2px; }
+.filter-btn {
+  padding: 4px 12px; border: 1px solid var(--line); border-radius: 4px;
+  background: transparent; color: var(--muted); font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: none;
+}
+.filter-btn.active {
+  background: #4a7c8c; color: #fff; border-color: #4a7c8c;
+}
+.filter-btn:not(.active):hover { background: #eee7d9; }
+.filter-search {
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px;
+  font-size: 12px; background: #fffdf8; color: var(--ink); outline: none; width: 180px;
+}
+.filter-search:focus { border-color: var(--accent-2); }
+
 .job-list {
   display: grid;
   gap: 8px;

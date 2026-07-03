@@ -8,6 +8,8 @@ const state = {
   perPage: 20,
   total: 0,
   totalPages: 1,
+  filterMarket: "",
+  filterSearch: "",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -495,6 +497,8 @@ async function loadSuggestions() {
 async function loadJobs(page) {
   const params = new URLSearchParams();
   if (page) params.set("page", page);
+  if (state.filterMarket) params.set("market", state.filterMarket);
+  if (state.filterSearch) params.set("search", state.filterSearch);
   const payload = await api(`/api/jobs?${params}`);
   state._jobs = payload.jobs || [];
   state.page = payload.pagination?.page ?? 1;
@@ -521,6 +525,26 @@ function bind() {
   $("#urlInput").addEventListener("input", () => {
     const suggestions = $("#urlSuggestions");
     if (suggestions.children.length) suggestions.style.display = "flex";
+  });
+
+  // Filter: market
+  document.querySelectorAll("#marketFilter .filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#marketFilter .filter-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.filterMarket = btn.dataset.market;
+      state.page = 1;
+      loadJobs(state.page);
+    });
+  });
+
+  // Filter: search on Enter
+  $("#searchInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      state.filterSearch = e.target.value.trim();
+      state.page = 1;
+      loadJobs(state.page);
+    }
   });
 }
 

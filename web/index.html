@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
-    <link rel="stylesheet" href="/css888/styles.css?v=20260703a" />
+    <link rel="stylesheet" href="/css888/styles.css?v=20260704a" />
   </head>
   <body>
     <main class="shell">
@@ -34,6 +34,14 @@
           <div class="jobs-header">
             <span>任务列表</span>
             <b id="jobCount">0</b>
+          </div>
+          <div class="filter-bar">
+            <span class="filter-group" id="marketFilter">
+              <button class="filter-btn active" data-market="">全部</button>
+              <button class="filter-btn" data-market="um">UM</button>
+              <button class="filter-btn" data-market="spot">SPOT</button>
+            </span>
+            <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" />
           </div>
           <div id="jobList" class="job-list"></div>
         </section>
@@ -81,6 +89,6 @@
       </div>
     </div>
 
-    <script src="/css888/app.js?v=20260703a"></script>
+    <script src="/css888/app.js?v=20260704a"></script>
   </body>
 </html>
