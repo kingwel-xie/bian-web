@@ -105,7 +105,6 @@
         <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
         <div id="rewardTiersBody" style="width:100%"></div>
         <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
-        <div class="reward-item"><div class="label">总价值 (USD)</div><div class="value usd" id="rewardValueDisplay">—</div></div>
         <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
       </div>
     </div>
@@ -487,7 +486,6 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
     const rewardPanel = document.getElementById("rewardPanel");
     const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
     const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
-    const rewardValueDisplay = document.getElementById("rewardValueDisplay");
     const rewardTiersBody = document.getElementById("rewardTiersBody");
     const useTiers = rewardTiers.length > 0;
 
@@ -512,7 +510,6 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         rewardTiersBody.innerHTML = buildTierRows(null);
       }
       rewardPriceDisplay.textContent = "加载中...";
-      rewardValueDisplay.textContent = "加载中...";
       const symbol = rewardToken + "USDT";
       try {
         const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
@@ -520,16 +517,11 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
         if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
         const price = parseFloat(data.price);
         if (useTiers) {
-          const totalAmt = rewardTiers.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
           rewardTiersBody.innerHTML = buildTierRows(price);
-          rewardValueDisplay.textContent = "$" + (totalAmt * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        } else {
-          rewardValueDisplay.textContent = "$" + (rewardAmount * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
       } catch (err) {
         rewardPriceDisplay.textContent = "—";
-        rewardValueDisplay.textContent = useTiers ? "" : "错误: " + err.message;
       }
     }
 
