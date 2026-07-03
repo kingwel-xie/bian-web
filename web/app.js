@@ -195,7 +195,7 @@ function openEditModal(job) {
   document.getElementById("editToken").value = (p.token || (p.symbol || "").replace(/USDT$/i, "") || "").toUpperCase();
   document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
   document.getElementById("editName").value = job.name || p.name || "";
-  document.getElementById("editRewardToken").value = p.rewardToken || "";
+  document.getElementById("editRewardToken").value = p.rewardToken || document.getElementById("editToken").value || "";
   document.getElementById("editRewardAmount").value = p.rewardAmount || "";
   const rid = p.resourceId || "";
   document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
