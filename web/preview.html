@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>排行榜预览</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260621f" />
+<link rel="stylesheet" href="/css888/styles.css?v=20260702c" />
 <style>
   body { padding: 14px; }
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
@@ -41,6 +41,13 @@
   .info-icon { cursor: help; font-size: 11px; opacity: 0.5; } .info-icon:hover { opacity: 1; }
   .sort-icon { font-size: 14px; opacity: 0.5; }
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
+  .reward-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 10px auto 0; }
+  .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); }
+  .reward-body { padding: 12px 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .reward-item { font-size: 13px; }
+  .reward-item .label { color: var(--muted); font-size: 11px; }
+  .reward-item .value { font-weight: 700; font-size: 15px; }
+  .reward-item .value.usd { color: var(--good); }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -56,7 +63,7 @@
   <div class="panel" style="padding:14px">
     <div class="preview-head">
       <div>
-        <h2 style="font-size:18px;margin:0" id="title">排行榜预览</h2>
+        <h2 style="font-size:18px;margin:0;display:inline" id="title">排行榜预览</h2>
         <p class="preview-meta" id="meta">加载中...</p>
       </div>
       <div class="downloads" id="downloadLinks">
@@ -80,6 +87,16 @@
         <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
         <tbody id="teamStatsBody"></tbody>
       </table>
+    </div>
+    <div id="rewardPanel" class="reward-panel" style="display:none">
+      <h3>奖励计算</h3>
+      <div class="reward-body" id="rewardBody">
+        <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
+        <div class="reward-item"><div class="label">奖励数量</div><div class="value" id="rewardAmountDisplay">—</div></div>
+        <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
+        <div class="reward-item"><div class="label">总价值 (USD)</div><div class="value usd" id="rewardValueDisplay">—</div></div>
+        <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+      </div>
     </div>
     <div id="deltaAnalysisPanel" class="stats-panel" style="margin-top:10px">
       <h3>增量分析 <span id="deltaAnalysisSub" style="font-weight:400;font-size:12px;color:var(--muted)"></span></h3>
@@ -451,10 +468,45 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
 
     loadDeltaBtn.addEventListener("click", loadDeltaAnalysis);
     deltaSymbolInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadDeltaAnalysis(); });
+
+    // --- Reward calculation ---
+    const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
+    const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
+    const rewardPanel = document.getElementById("rewardPanel");
+    const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
+    const rewardAmountDisplay = document.getElementById("rewardAmountDisplay");
+    const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
+    const rewardValueDisplay = document.getElementById("rewardValueDisplay");
+
+    async function updateReward() {
+      if (!rewardToken || !rewardAmount) { rewardPanel.style.display = "none"; return; }
+      rewardPanel.style.display = "";
+      rewardTokenDisplay.textContent = rewardToken;
+      rewardAmountDisplay.textContent = rewardAmount.toLocaleString("en-US");
+      rewardPriceDisplay.textContent = "加载中...";
+      rewardValueDisplay.textContent = "加载中...";
+      const symbol = rewardToken + "USDT";
+      try {
+        const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
+        const data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
+        const price = parseFloat(data.price);
+        const value = rewardAmount * price;
+        rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+        rewardValueDisplay.textContent = "$" + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      } catch (err) {
+        rewardPriceDisplay.textContent = "—";
+        rewardValueDisplay.textContent = "错误: " + err.message;
+      }
+    }
+
+    document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);
+    if (rewardToken && rewardAmount) updateReward();
   } catch (err) {
     document.getElementById("meta").textContent = err.message;
   }
 })();
 </script>
+
 </body>
 </html>

@@ -42,7 +42,7 @@
 
     <div id="editModal" class="modal-overlay" style="display:none">
       <div class="modal-box">
-        <h3>编辑参数</h3>
+        <h3>任务配置</h3>
         <p id="editModalMeta" style="font-size:12px;color:var(--muted);margin:4px 0 12px"></p>
         <div class="modal-form">
           <label>Market
@@ -57,6 +57,12 @@
           <label>任务名
             <input id="editName" placeholder="SPOT CELO" />
           </label>
+          <label>奖励币种
+            <input id="editRewardToken" placeholder="BANK" />
+          </label>
+          <label>奖励数量
+            <input id="editRewardAmount" type="number" min="0" step="1" placeholder="5000" />
+          </label>
         </div>
         <div class="modal-actions">
           <button id="editCancelBtn" type="button">取消</button>
@@ -65,6 +71,6 @@
       </div>
     </div>
 
-    <script src="/css888/app.js?v=20260702a"></script>
+    <script src="/css888/app.js?v=20260702c"></script>
   </body>
 </html>

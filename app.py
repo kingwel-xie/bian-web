@@ -1576,6 +1576,25 @@ def api_kline_snapshot(symbol: str) -> Response:
     return jsonify(live_state_payload(state))
 
 
+@app.get("/api/ticker/<symbol>")
+def api_ticker(symbol: str) -> Response:
+    import requests
+    safe = symbol.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9]{2,30}", safe):
+        return jsonify({"error": "invalid symbol"}), 400
+    try:
+        resp = requests.get(
+            f"https://api.binance.com/api/v3/ticker/price?symbol={safe}",
+            timeout=10,
+        )
+        data = resp.json()
+        if "price" in data:
+            return jsonify({"symbol": data["symbol"], "price": float(data["price"])})
+        return jsonify({"error": data.get("msg", "unknown error")}), 400
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 502
+
+
 @app.get("/api/jobs")
 def api_jobs() -> Response:
     page = request.args.get("page", 1, type=int)
@@ -1622,6 +1641,8 @@ def api_jobs() -> Response:
                 "symbol": payload.get("symbol"),
                 "resourceId": payload.get("resourceId"),
                 "url": payload.get("url"),
+                "rewardToken": payload.get("rewardToken"),
+                "rewardAmount": payload.get("rewardAmount"),
             },
             "snapshotCount": len(job.get("snapshots") or []),
             "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
@@ -1702,6 +1723,16 @@ def api_update_job_params(job_id: str) -> Response:
                 p["symbol"] = symbol
                 name = str(body.get("name") or "").strip()
                 job["name"] = name if name else f"{market.upper()} {token}"
+                reward_token = str(body.get("rewardToken") or "").strip().upper()
+                reward_amount = str(body.get("rewardAmount") or "").strip()
+                if reward_token:
+                    p["rewardToken"] = reward_token
+                if reward_amount:
+                    p["rewardAmount"] = reward_amount
+                if not reward_token:
+                    p.pop("rewardToken", None)
+                if not reward_amount:
+                    p.pop("rewardAmount", None)
                 job["updatedAt"] = datetime.now(timezone.utc).isoformat()
                 save_jobs(jobs)
                 return jsonify({"job": job})
@@ -1861,6 +1892,8 @@ def api_job_preview(job_id: str) -> Response:
         preview["market"] = payload.get("market", "").upper()
         preview["symbol"] = payload.get("symbol", "")
         preview["token"] = payload.get("token", "").upper()
+        preview["rewardToken"] = payload.get("rewardToken", "")
+        preview["rewardAmount"] = payload.get("rewardAmount", "")
         job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
         rid = str(payload.get("resourceId") or "").strip()
         preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name

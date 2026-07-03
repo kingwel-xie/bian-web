@@ -195,6 +195,8 @@ function openEditModal(job) {
   document.getElementById("editToken").value = (p.token || (p.symbol || "").replace(/USDT$/i, "") || "").toUpperCase();
   document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
   document.getElementById("editName").value = job.name || p.name || "";
+  document.getElementById("editRewardToken").value = p.rewardToken || "";
+  document.getElementById("editRewardAmount").value = p.rewardAmount || "";
   const rid = p.resourceId || "";
   document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
   document.getElementById("editModal").style.display = "";
@@ -212,11 +214,13 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const token = document.getElementById("editToken").value.trim().toUpperCase();
   const symbol = document.getElementById("editSymbol").value.trim().toUpperCase();
   const name = document.getElementById("editName").value.trim();
+  const rewardToken = document.getElementById("editRewardToken").value.trim().toUpperCase();
+  const rewardAmount = document.getElementById("editRewardAmount").value.trim();
   if (!token || !symbol) { alert("Token 和 Symbol 不能为空"); return; }
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
-      body: JSON.stringify({ market, token, symbol, name: name || undefined }),
+      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardAmount: rewardAmount || undefined }),
     });
     document.getElementById("editModal").style.display = "none";
     _editJobId = null;
@@ -263,7 +267,7 @@ function renderJobs(jobs) {
             ? `<button class="ghost mini danger" type="button" data-kill="${escapeHtml(job.id)}">终止任务</button>`
             : `<button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>`
           }
-          <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">改名</button>
+           <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">配置</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
         <div class="progress">
