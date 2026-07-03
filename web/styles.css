@@ -364,6 +364,12 @@ button:disabled {
   font-weight: 900;
 }
 
+.job-act-time {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .job p,
 .job small {
   display: block;

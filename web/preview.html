@@ -12,21 +12,21 @@
   .preview-meta { color: var(--muted); font-size: 12px; }
   .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
   .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
-  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; }
-  .stats-panel h3::before, .reward-panel h3::before { content: "▾ "; font-size: 11px; }
-  .stats-panel.collapsed h3::before, .reward-panel.collapsed h3::before { content: "▸ "; }
+  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; }
+  .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
   .stats-panel.collapsed > :not(h3), .reward-panel.collapsed > :not(h3) { display: none !important; }
   .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
   .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 10%; } .stats-table .c-count { width: 12%; } .stats-table .c-total { width: 18%; } .stats-table .c-pct { width: 12%; } .stats-table .c-dratio { width: 14%; } .stats-table .c-avg { width: 18%; } .stats-table .c-last { width: 16%; }
-  table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
-  th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; }
+  .stats-table .c-rank { width: 10%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 11%; } .stats-table .c-dratio { width: 12%; } .stats-table .c-avg { width: 19%; } .stats-table .c-median { width: 18%; } .stats-table .c-last { width: 17%; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
   th { padding: 6px 12px; }
   th { position: sticky; top: 0; z-index: 1; background: #eee7d9; color: var(--accent); font-size: 12px; text-transform: uppercase; }
-  .col-rank { width: 56px; } .col-rank-change { width: 56px; } .col-nick { width: 120px; } .col-user { width: 100px; }
-  .col-score { width: 90px; } .col-volume { width: 130px; } .col-delta { width: 110px; } .col-region { width: 70px; }
+  .col-rank { width: 6%; } .col-rank-change { width: 6%; } .col-nick { width: 18%; } .col-user { width: 14%; }
+  .col-score { width: 12%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
   .rank { font-weight: 900; }
   .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
   .chg-up { color: #c0392b; font-weight: 700; } .chg-down { color: #27ae60; font-weight: 700; } .chg-flat { color: #999; }
@@ -56,10 +56,16 @@
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
     .stats-panel { width: 100%; }
-    .stats-table th, .stats-table td { padding: 6px 8px; }
-    .col-nick { width: 100px; } .col-user { width: 80px; } .col-volume { width: 110px; } .col-delta { width: 100px; }
-    .col-rank-change { width: 40px; } .col-score { width: 80px; }
+    .stats-table th, .stats-table td { padding: 6px 4px; font-size: 11px; }
+    .stats-table .c-rank { width: 8%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 11%; } .stats-table .c-dratio { width: 12%; } .stats-table .c-avg { width: 20%; } .stats-table .c-median { width: 19%; } .stats-table .c-last { width: 17%; }
+    table th, table td { padding: 6px 4px; font-size: 11px; }
+    .col-rank { width: 7%; } .col-rank-change { width: 7%; } .col-nick { width: 16%; } .col-user { width: 16%; }
+    .col-score { width: 14%; } .col-volume { width: 16%; } .col-delta { width: 12%; } .col-region { width: 12%; }
     .preview-meta span { display: inline-block; }
+    .reward-panel { width: 100%; }
+    .downloads a { font-size: 11px; padding: 0 10px; min-height: 28px; }
+    #meta span { font-size: 13px !important; }
+    #meta b { font-size: 14px !important; }
   }
 </style>
 </head>
@@ -78,8 +84,8 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-count" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-last" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">末名</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-last" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">末名</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -97,11 +103,11 @@
       <div class="reward-body" id="rewardBody" style="flex-direction:column;align-items:stretch">
         <table class="stats-table" id="rewardTiersTable" style="width:100%;min-width:auto">
           <colgroup>
-            <col style="width:140px" />
-            <col style="width:180px" />
-            <col />
-            <col style="width:110px" />
-            <col style="width:110px" />
+            <col style="width:120px" />
+            <col style="width:150px" />
+            <col style="width:160px" />
+            <col style="width:160px" />
+            <col style="width:160px" />
           </colgroup>
           <thead>
             <tr><th>名次</th><th class="num">总奖励数量</th><th class="num">每人奖励</th><th class="num">USD 价值</th><th class="num">单价</th></tr>
@@ -155,7 +161,8 @@
   </div>
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
+function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
+function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -252,17 +259,28 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       document.getElementById("rankChangeSort")?.setAttribute("title", deltaTip);
     }
 
-    function rangeStats(rows, ranges) {
+    function rangeStats(rows, ranges, prevStats) {
       return ranges.map(([label, min, max]) => {
         const items = rows.filter(r => { const k = Number(r.rank); return k >= min && k <= max; });
         const count = items.length;
         const total = items.reduce((s, r) => s + (Number(r.grade) || 0), 0);
-        const grades = items.map(r => Number(r.grade) || 0).sort((a, b) => a - b);
+        const byGrade = [...items].sort((a, b) => (Number(a.grade) || 0) - (Number(b.grade) || 0));
+        const grades = byGrade.map(r => Number(r.grade) || 0);
         const avg = count ? total / count : 0;
         const med = count ? (count % 2 ? grades[Math.floor(count / 2)] : (grades[count / 2 - 1] + grades[count / 2]) / 2) : 0;
-        const last = items.length ? items[items.length - 1].grade : null;
+        const lastRow = items[items.length - 1];
+        const last = lastRow ? (Number(lastRow.grade) || 0) : 0;
         const sumDelta = items.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
-        return { label, count, total, avg, med, last, sumDelta };
+        let avgDeltaPct = null, medDeltaPct = null, lastDeltaPct = null;
+        if (prevStats) {
+          const prev = prevStats.find(s => s.label === label);
+          if (prev) {
+            avgDeltaPct = prev.avg ? ((avg - prev.avg) / prev.avg * 100) : null;
+            medDeltaPct = prev.med ? ((med - prev.med) / prev.med * 100) : null;
+            lastDeltaPct = prev.last ? ((last - prev.last) / prev.last * 100) : null;
+          }
+        }
+        return { label, count, total, avg, med, last, sumDelta, avgDeltaPct, medDeltaPct, lastDeltaPct };
       });
     }
 
@@ -281,16 +299,16 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
       ["51~200", 51, 200],
       ["201~1000", 201, 1000],
     ];
-    const stats = rangeStats(allRows, ranges);
+    const stats = rangeStats(allRows, ranges, preview.prevStats);
     const totalCount = allRows.length;
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
     const totalDelta = allRows.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
       const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
-      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${s.count}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}</td><td class="num">${fmtVolume(s.med)}</td><td class="num">${s.last != null ? fmtNumber(s.last) : "—"}</td></tr>`;
+      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmtDeltaPct(s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmtDeltaPct(s.medDeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmtDeltaPct(s.lastDeltaPct)}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${totalCount}</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
     let teamOfUser = (preview.teamMap || {});

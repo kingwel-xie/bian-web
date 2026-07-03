@@ -314,7 +314,7 @@ function addCandidate(result, id, source) {
       await page.evaluate(() => window.scrollTo(0, Math.floor(document.body.scrollHeight * 0.55))).catch(() => {});
       await page.waitForTimeout(Math.max(2000, Math.floor(waitMs / 3)));
       result.title = await page.title().catch(() => null);
-      result.activityEnd = await page.evaluate(() => {
+      const actTimes = await page.evaluate(() => {
         function toBj(d) {
           d.setHours(d.getHours() + 8);
           return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
@@ -324,14 +324,23 @@ function addCandidate(result, id, source) {
         if (act) {
           const parts = act[1].match(/(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/g);
           if (parts && parts.length >= 2) {
+            const start = parts[0].replace(/[/]/g, '-');
             const end = parts[parts.length - 1].replace(/[/]/g, '-');
-            return toBj(new Date(end.replace(' ', 'T') + ':00Z'));
+            return {
+              start: toBj(new Date(start.replace(' ', 'T') + ':00Z')),
+              end: toBj(new Date(end.replace(' ', 'T') + ':00Z')),
+            };
           }
         }
-        const end = text.match(/结束时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
-        if (end) return end[1].replace(/[/]/g, '-');
-        return null;
-      }).catch(() => null);
+        const startTime = text.match(/开始时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
+        const endTime = text.match(/结束时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
+        return {
+          start: startTime ? startTime[1].replace(/[/]/g, '-') : null,
+          end: endTime ? endTime[1].replace(/[/]/g, '-') : null,
+        };
+      }).catch(() => ({ start: null, end: null }));
+      result.activityStart = actTimes.start;
+      result.activityEnd = actTimes.end;
     } catch (error) {
       result.errors.push(String(error));
     } finally {
@@ -1049,6 +1058,7 @@ def main() -> int:
                     if c.get("resourceId")
                 )),
                 "activityEnd": discovered.get("activityEnd"),
+                "activityStart": discovered.get("activityStart"),
             }
             print(json.dumps(result, ensure_ascii=False))
         return 0

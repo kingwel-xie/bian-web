@@ -3,6 +3,7 @@ const state = {
   discoveredMarket: null,
   discoveredSymbol: null,
   discoveredActivityEnd: null,
+  discoveredActivityStart: null,
   pollTimer: null,
   editingJobId: null,
   page: 1,
@@ -125,6 +126,7 @@ async function discoverResourceIds() {
       body: JSON.stringify({ url, proxy: "auto", browserWaitMs: 30000, force: true }),
     });
     state.discoveredActivityEnd = result.activityEnd || null;
+    state.discoveredActivityStart = result.activityStart || null;
     renderDiscoveryCards(result, inferred);
   } catch (error) {
     resultsEl.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
@@ -166,12 +168,12 @@ function renderDiscoveryCards(result, inferred) {
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const rid = btn.dataset.rid;
-      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd);
+      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd, state.discoveredActivityStart);
     });
   });
 }
 
-async function startScrapeJob(resourceId, market, symbol, url, activityEnd) {
+async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart) {
   try {
     await api("/api/scrape/jobs", {
       method: "POST",
@@ -183,6 +185,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd) {
         proxy: "auto",
         mode: "scrape",
         activityEnd,
+        activityStart,
       }),
     });
     await loadJobs(1);
@@ -218,6 +221,8 @@ function openEditModal(job) {
   }
   const rid = p.resourceId || "";
   document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
+  document.getElementById("editActivityStart").value = (p.activityStart || "").replace(" ", "T");
+  document.getElementById("editActivityEnd").value = (p.activityEnd || "").replace(" ", "T");
   document.getElementById("editModal").style.display = "";
 }
 
@@ -234,6 +239,8 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const symbol = document.getElementById("editSymbol").value.trim().toUpperCase();
   const name = document.getElementById("editName").value.trim();
   const rewardToken = document.getElementById("editRewardToken").value.trim().toUpperCase();
+  const activityStart = (document.getElementById("editActivityStart").value || "").replace("T", " ") || undefined;
+  const activityEnd = (document.getElementById("editActivityEnd").value || "").replace("T", " ") || undefined;
   if (!token || !symbol) { alert("Token 和 Symbol 不能为空"); return; }
   const rewardTiers = [];
   for (let i = 0; i < 4; i++) {
@@ -250,7 +257,7 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
-      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined }),
+      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined, activityStart, activityEnd }),
     });
     document.getElementById("editModal").style.display = "none";
     _editJobId = null;
@@ -282,23 +289,26 @@ function renderJobs(jobs) {
     const rid = payload.resourceId ? String(payload.resourceId) : "";
     const displayName = rid ? `${jobName}  [${rid}]` : jobName;
     const activityEnd = payload.activityEnd;
+    const activityStart = payload.activityStart;
     const isExpired = activityEnd && new Date(activityEnd + " +08:00") <= new Date();
     const expiredClass = isExpired ? " expired" : "";
     const snapshotTs = job.latestSnapshot;
+    const actTimeText = activityStart || activityEnd ? `活动：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
     return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
             <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
           </strong>
-          <p>${escapeHtml(url || "无 URL")} · ${escapeHtml((payload.market || "").toUpperCase())} ${escapeHtml(payload.symbol || "")}</p>
+          ${actTimeText ? `<div class="job-act-time">${escapeHtml(actTimeText)}</div>` : ""}
+          <p>${escapeHtml(url || "无 URL")}</p>
           <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
           ${job.status === "running" || job.status === "queued"
             ? `<button class="ghost mini danger" type="button" data-kill="${escapeHtml(job.id)}">终止任务</button>`
-            : `<button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">再次抓取</button>`
+            : `<button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">执行</button>`
           }
            <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">配置</button>
           <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
@@ -326,7 +336,7 @@ function renderJobs(jobs) {
       const job = jobs.find((item) => item.id === button.dataset.rerun);
       if (!job) return;
       const p = job.payload || {};
-      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url);
+      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart);
     });
   });
   $("#jobList").querySelectorAll("[data-kill]").forEach((button) => {
@@ -473,6 +483,8 @@ function showCachedDiscovery(url) {
     return;
   }
   state.currentUrl = url;
+  state.discoveredActivityEnd = entry.activityEnd || null;
+  state.discoveredActivityStart = entry.activityStart || null;
   const inferred = inferFromUrl(url);
   state.discoveredMarket = inferred.market;
   state.discoveredSymbol = inferred.symbol;

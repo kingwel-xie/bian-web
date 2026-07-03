@@ -1452,6 +1452,8 @@ def api_discover_cache() -> Response:
             "url": entry.get("url"),
             "title": entry.get("title"),
             "candidates": entry.get("candidates", []),
+            "activityStart": entry.get("activityStart"),
+            "activityEnd": entry.get("activityEnd"),
             "cachedAt": entry.get("cachedAt"),
         })
     entries.sort(key=lambda e: e.get("cachedAt") or "", reverse=True)
@@ -1514,6 +1516,7 @@ def api_discover() -> Response:
                 "url": result.get("url"),
                 "title": result.get("title"),
                 "candidates": result.get("candidates", []),
+                "activityStart": result.get("activityStart"),
                 "activityEnd": result.get("activityEnd"),
                 "cachedAt": datetime.now(timezone.utc).isoformat(),
             }
@@ -1668,6 +1671,7 @@ def api_jobs() -> Response:
                 "rewardAmount": payload.get("rewardAmount"),
                 "rewardTiers": payload.get("rewardTiers"),
                 "activityEnd": payload.get("activityEnd"),
+                "activityStart": payload.get("activityStart"),
             },
             "snapshotCount": len(job.get("snapshots") or []),
             "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
@@ -1769,6 +1773,12 @@ def api_update_job_params(job_id: str) -> Response:
                         p.pop("rewardTiers", None)
                 else:
                     p.pop("rewardTiers", None)
+                for k in ("activityStart", "activityEnd"):
+                    v = body.get(k)
+                    if v:
+                        p[k] = str(v)
+                    else:
+                        p.pop(k, None)
                 job["updatedAt"] = datetime.now(timezone.utc).isoformat()
                 save_jobs(jobs)
                 return jsonify({"job": job})
@@ -1942,6 +1952,29 @@ def api_job_preview(job_id: str) -> Response:
             {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
             for s in snapshots
         ]
+        # Previous snapshot stats for环比计算
+        prev_stats = None
+        if prev_json_path and prev_json_path.exists():
+            prev_data = read_json(prev_json_path, {})
+            prev_rows = prev_data.get("rows") if isinstance(prev_data, dict) else []
+            if isinstance(prev_rows, list):
+                ranges = [("1~5", 1, 5), ("6~20", 6, 20), ("21~50", 21, 50), ("51~200", 51, 200), ("201~1000", 201, 1000)]
+                stats_list = []
+                for label, rmin, rmax in ranges:
+                    items = [r for r in prev_rows if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
+                    n = len(items)
+                    if n == 0:
+                        stats_list.append({"label": label, "total": 0, "avg": 0, "med": 0, "last": 0})
+                        continue
+                    total = sum(float(r.get("grade", 0) or 0) for r in items)
+                    by_grade = sorted(items, key=lambda r: float(r.get("grade", 0) or 0))
+                    grades = [float(r.get("grade", 0) or 0) for r in by_grade]
+                    avg = total / n
+                    med = grades[n // 2] if n % 2 else (grades[n // 2 - 1] + grades[n // 2]) / 2
+                    last = float(items[-1].get("grade", 0) or 0)
+                    stats_list.append({"label": label, "total": total, "avg": avg, "med": med, "last": last})
+                prev_stats = stats_list
+        preview["prevStats"] = prev_stats
         team_db = load_teams_db()
         team_map: dict[str, str] = {}
         for team in team_db.get("teams") or []:
