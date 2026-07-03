@@ -332,6 +332,16 @@ button:disabled {
   box-shadow: inset 2px 0 0 var(--accent-2);
 }
 
+.job.expired {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.job.expired .job-name::after {
+  content: " (已到期)";
+  font-weight: 400;
+}
+
 .job-error {
   grid-column: 1 / -1;
   margin-top: 4px;

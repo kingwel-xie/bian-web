@@ -314,6 +314,24 @@ function addCandidate(result, id, source) {
       await page.evaluate(() => window.scrollTo(0, Math.floor(document.body.scrollHeight * 0.55))).catch(() => {});
       await page.waitForTimeout(Math.max(2000, Math.floor(waitMs / 3)));
       result.title = await page.title().catch(() => null);
+      result.activityEnd = await page.evaluate(() => {
+        function toBj(d) {
+          d.setHours(d.getHours() + 8);
+          return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+        const text = document.body.innerText;
+        const act = text.match(/活动时间[：:]\s*([^\n]{10,80})/i);
+        if (act) {
+          const parts = act[1].match(/(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/g);
+          if (parts && parts.length >= 2) {
+            const end = parts[parts.length - 1].replace(/[/]/g, '-');
+            return toBj(new Date(end.replace(' ', 'T') + ':00Z'));
+          }
+        }
+        const end = text.match(/结束时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
+        if (end) return end[1].replace(/[/]/g, '-');
+        return null;
+      }).catch(() => null);
     } catch (error) {
       result.errors.push(String(error));
     } finally {
@@ -1030,6 +1048,7 @@ def main() -> int:
                     c.get("resourceId") for c in discovered.get("candidates", [])
                     if c.get("resourceId")
                 )),
+                "activityEnd": discovered.get("activityEnd"),
             }
             print(json.dumps(result, ensure_ascii=False))
         return 0

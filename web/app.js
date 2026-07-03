@@ -2,6 +2,7 @@ const state = {
   currentUrl: null,
   discoveredMarket: null,
   discoveredSymbol: null,
+  discoveredActivityEnd: null,
   pollTimer: null,
   editingJobId: null,
   page: 1,
@@ -123,6 +124,7 @@ async function discoverResourceIds() {
       method: "POST",
       body: JSON.stringify({ url, proxy: "auto", browserWaitMs: 30000, force: true }),
     });
+    state.discoveredActivityEnd = result.activityEnd || null;
     renderDiscoveryCards(result, inferred);
   } catch (error) {
     resultsEl.innerHTML = `<div class="err">${escapeHtml(error.message)}</div>`;
@@ -164,12 +166,12 @@ function renderDiscoveryCards(result, inferred) {
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const rid = btn.dataset.rid;
-      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl);
+      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd);
     });
   });
 }
 
-async function startScrapeJob(resourceId, market, symbol, url) {
+async function startScrapeJob(resourceId, market, symbol, url, activityEnd) {
   try {
     await api("/api/scrape/jobs", {
       method: "POST",
@@ -180,6 +182,7 @@ async function startScrapeJob(resourceId, market, symbol, url) {
         url,
         proxy: "auto",
         mode: "scrape",
+        activityEnd,
       }),
     });
     await loadJobs(1);
@@ -278,9 +281,12 @@ function renderJobs(jobs) {
     const jobName = job.name || payload.name || payload.resourceId || job.id;
     const rid = payload.resourceId ? String(payload.resourceId) : "";
     const displayName = rid ? `${jobName}  [${rid}]` : jobName;
+    const activityEnd = payload.activityEnd;
+    const isExpired = activityEnd && new Date(activityEnd + " +08:00") <= new Date();
+    const expiredClass = isExpired ? " expired" : "";
     const snapshotTs = job.latestSnapshot;
     return `
-      <article class="job ${statusClass}" data-job-id="${escapeHtml(job.id)}">
+      <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
             <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>

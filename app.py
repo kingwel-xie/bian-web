@@ -1514,6 +1514,7 @@ def api_discover() -> Response:
                 "url": result.get("url"),
                 "title": result.get("title"),
                 "candidates": result.get("candidates", []),
+                "activityEnd": result.get("activityEnd"),
                 "cachedAt": datetime.now(timezone.utc).isoformat(),
             }
             save_discovery_cache(cache)
@@ -1666,6 +1667,7 @@ def api_jobs() -> Response:
                 "rewardToken": payload.get("rewardToken"),
                 "rewardAmount": payload.get("rewardAmount"),
                 "rewardTiers": payload.get("rewardTiers"),
+                "activityEnd": payload.get("activityEnd"),
             },
             "snapshotCount": len(job.get("snapshots") or []),
             "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
