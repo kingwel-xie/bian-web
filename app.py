@@ -1625,11 +1625,13 @@ def api_jobs() -> Response:
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
     page = min(page, total_pages) if total else 1
 
-    sorted_jobs = sorted(
-        all_jobs,
-        key=lambda j: j.get("updatedAt") or j.get("startedAt") or j.get("createdAt") or "",
-        reverse=True,
-    )
+    running_statuses = {"running", "queued"}
+
+    def sort_key(job):
+        time_key = job.get("updatedAt") or job.get("startedAt") or job.get("createdAt") or ""
+        return (1 if job.get("status") in running_statuses else 0, time_key)
+
+    sorted_jobs = sorted(all_jobs, key=sort_key, reverse=True)
     start = (page - 1) * per_page
     end = start + per_page
     page_jobs = sorted_jobs[start:end]
