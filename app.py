@@ -1614,6 +1614,7 @@ def api_jobs() -> Response:
     all_jobs = load_jobs()
     filter_market = (request.args.get("market") or "").strip().lower()
     filter_search = (request.args.get("search") or "").strip()
+    filter_status = (request.args.get("status") or "").strip().lower()
 
     if filter_market in ("um", "spot"):
         all_jobs = [j for j in all_jobs if (j.get("payload") or {}).get("market") == filter_market]
@@ -1625,17 +1626,18 @@ def api_jobs() -> Response:
             if q in ((j.get("name") or (j.get("payload") or {}).get("name") or "")).lower()
         ]
 
+    if filter_status == "running":
+        all_jobs = [j for j in all_jobs if j.get("status") in ("running", "queued")]
+
     total = len(all_jobs)
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
     page = min(page, total_pages) if total else 1
 
-    running_statuses = {"running", "queued"}
-
     def sort_key(job):
-        snapshots = job.get("snapshots") or []
-        data_time = snapshots[-1].get("timestamp") if snapshots else None
-        time_key = data_time or job.get("updatedAt") or job.get("startedAt") or job.get("createdAt") or ""
-        return (1 if job.get("status") in running_statuses else 0, time_key)
+        end = (job.get("payload") or {}).get("activityEnd", "") or ""
+        if end:
+            return (0, end)
+        return (-1, "")
 
     sorted_jobs = sorted(all_jobs, key=sort_key, reverse=True)
     start = (page - 1) * per_page

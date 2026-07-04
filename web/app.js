@@ -12,6 +12,7 @@ const state = {
   totalPages: 1,
   filterMarket: "",
   filterSearch: "",
+  filterStatus: "running",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -517,6 +518,7 @@ async function loadJobs(page) {
   if (page) params.set("page", page);
   if (state.filterMarket) params.set("market", state.filterMarket);
   if (state.filterSearch) params.set("search", state.filterSearch);
+  if (state.filterStatus) params.set("status", state.filterStatus);
   const payload = await api(`/api/jobs?${params}`);
   state._jobs = payload.jobs || [];
   state.page = payload.pagination?.page ?? 1;
@@ -551,6 +553,17 @@ function bind() {
       document.querySelectorAll("#marketFilter .filter-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       state.filterMarket = btn.dataset.market;
+      state.page = 1;
+      loadJobs(state.page);
+    });
+  });
+
+  // Filter: status
+  document.querySelectorAll("#statusFilter .filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#statusFilter .filter-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.filterStatus = btn.dataset.status;
       state.page = 1;
       loadJobs(state.page);
     });
