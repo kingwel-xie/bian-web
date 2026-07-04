@@ -2049,14 +2049,10 @@ def api_job_preview(job_id: str) -> Response:
                 key = (m.get("nickname") or "").strip()
                 if key and key not in team_lookup:
                     team_lookup[key] = team_name
-                uid = (m.get("userId") or "").strip()
-                if uid and uid not in team_lookup:
-                    team_lookup[uid] = team_name
         team_map: dict[str, str] = {}
         for row in preview.get("rows") or []:
             nick = row.get("nickname") or ""
-            uid = row.get("userId") or ""
-            team_name = team_lookup.get(nickname_value({"nickName": nick})) or team_lookup.get(uid or "")
+            team_name = team_lookup.get(nickname_value({"nickName": nick}))
             if team_name:
                 team_map[nick] = team_name
         preview["teamMap"] = team_map
