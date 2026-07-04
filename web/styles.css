@@ -821,7 +821,15 @@ td:nth-child(2) {
   max-width: 620px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.15);
 }
-.modal-box h3 { margin: 0 0 4px; font-size: 16px; }
+.modal-header { margin-bottom: 6px; }
+.modal-header h3 { margin: 0; font-size: 16px; }
+.modal-title-suffix {
+  font-size: inherit; font-weight: inherit; color: var(--muted);
+}
+.modal-title-suffix code {
+  font-size: inherit; color: var(--muted); background: transparent;
+  font-weight: inherit;
+}
 .modal-form { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
 .form-row { display: flex; gap: 10px; align-items: flex-start; }
 .form-row label { flex: 1; }
@@ -842,6 +850,17 @@ td:nth-child(2) {
 .tier-header span:nth-child(4) { width: 72px; text-align: center; }
 .tier-header span:nth-child(5) { margin: 0 4px 0 8px; }
 .tier-header span:nth-child(6) { width: 100px; text-align: right; }
+.modal-tabs {
+  display: flex; gap: 2px; margin: 10px 0 4px;
+}
+.modal-tab {
+  min-height: 30px; padding: 0 14px; border: 1px solid var(--line);
+  border-radius: 6px 6px 0 0; background: transparent; color: var(--muted);
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.modal-tab.active {
+  background: #fffdf8; color: var(--ink); border-bottom-color: #fffdf8;
+}
 .modal-form input, .modal-form select {
   padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
   font-size: 14px; background: #fffdf8; color: var(--ink); outline: none;

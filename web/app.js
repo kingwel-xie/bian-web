@@ -227,7 +227,9 @@ function openEditModal(job) {
     if (amtEl) amtEl.value = t.amount || "0";
   }
   const rid = p.resourceId || "";
-  document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
+  const displayName = escapeHtml(job.name || p.name || rid || "");
+  const ridHtml = rid ? `<code>${escapeHtml(rid)}</code>` : "";
+  document.getElementById("editModalTitle").innerHTML = `— ${displayName} ${ridHtml}`;
   document.getElementById("editActivityStart").value = (p.activityStart || "").replace(" ", "T");
   document.getElementById("editActivityEnd").value = (p.activityEnd || "").replace(" ", "T");
   document.getElementById("editTop").value = p.top != null ? p.top : (TOP_DEFAULTS[p.market] || 1000);
@@ -237,6 +239,15 @@ function openEditModal(job) {
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
+});
+
+document.querySelectorAll(".modal-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".modal-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelectorAll(".tab-content").forEach((c) => c.style.display = "none");
+    document.getElementById("tab" + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)).style.display = "";
+  });
 });
 
 document.getElementById("editSaveBtn").addEventListener("click", async () => {
