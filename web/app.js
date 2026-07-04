@@ -211,6 +211,10 @@ function openEditModal(job) {
   document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
   document.getElementById("editName").value = job.name || p.name || "";
   document.getElementById("editRewardToken").value = p.rewardToken || document.getElementById("editToken").value || "";
+  const rewardMode = p.rewardMode || "rank";
+  document.getElementById("editRewardMode").value = rewardMode;
+  document.getElementById("rewardRankFields").style.display = rewardMode === "rank" ? "" : "none";
+  document.getElementById("rewardTotalFields").style.display = rewardMode === "total" ? "" : "none";
   const tiers = p.rewardTiers && p.rewardTiers.length ? p.rewardTiers : [
     {rankMin:6, rankMax:20, amount:"0"},
     {rankMin:21, rankMax:50, amount:"0"},
@@ -226,6 +230,8 @@ function openEditModal(job) {
     if (maxEl) maxEl.value = t.rankMax != null ? t.rankMax : "";
     if (amtEl) amtEl.value = t.amount || "0";
   }
+  document.getElementById("editTotalReward").value = p.totalReward || "";
+  document.getElementById("editEligibleUsers").value = p.eligibleUsers != null ? p.eligibleUsers : "";
   const rid = p.resourceId || "";
   const displayName = escapeHtml(job.name || p.name || rid || "");
   const ridHtml = rid ? `<code>${escapeHtml(rid)}</code>` : "";
@@ -239,6 +245,12 @@ function openEditModal(job) {
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
+});
+
+document.getElementById("editRewardMode").addEventListener("change", () => {
+  const mode = document.getElementById("editRewardMode").value;
+  document.getElementById("rewardRankFields").style.display = mode === "rank" ? "" : "none";
+  document.getElementById("rewardTotalFields").style.display = mode === "total" ? "" : "none";
 });
 
 document.querySelectorAll(".modal-tab").forEach((tab) => {
@@ -261,23 +273,31 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const activityStart = (document.getElementById("editActivityStart").value || "").replace("T", " ") || undefined;
   const activityEnd = (document.getElementById("editActivityEnd").value || "").replace("T", " ") || undefined;
   if (!token || !symbol) { alert("Token 和 Symbol 不能为空"); return; }
-  const rewardTiers = [];
-  for (let i = 0; i < 4; i++) {
-    const minEl = document.getElementById("editTier" + i + "Min");
-    const maxEl = document.getElementById("editTier" + i + "Max");
-    const amtEl = document.getElementById("editTier" + i + "Amt");
-    const rmin = parseInt(minEl?.value);
-    const rmax = parseInt(maxEl?.value);
-    const amt = amtEl?.value?.trim() || "0";
-    if (rmin >= 1 && rmax >= rmin) {
-      rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
-    }
-  }
+  const rewardMode = document.getElementById("editRewardMode").value;
   const topVal = parseInt(document.getElementById("editTop").value, 10);
+  const body = { market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardMode, activityStart, activityEnd, top: topVal > 0 ? topVal : undefined };
+  if (rewardMode === "rank") {
+    const rewardTiers = [];
+    for (let i = 0; i < 4; i++) {
+      const minEl = document.getElementById("editTier" + i + "Min");
+      const maxEl = document.getElementById("editTier" + i + "Max");
+      const amtEl = document.getElementById("editTier" + i + "Amt");
+      const rmin = parseInt(minEl?.value);
+      const rmax = parseInt(maxEl?.value);
+      const amt = amtEl?.value?.trim() || "0";
+      if (rmin >= 1 && rmax >= rmin) {
+        rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
+      }
+    }
+    if (rewardTiers.length) body.rewardTiers = rewardTiers;
+  } else {
+    body.totalReward = document.getElementById("editTotalReward").value || undefined;
+    body.eligibleUsers = parseInt(document.getElementById("editEligibleUsers").value, 10) || undefined;
+  }
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
-      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined, activityStart, activityEnd, top: topVal > 0 ? topVal : undefined }),
+      body: JSON.stringify(body),
     });
     document.getElementById("editModal").style.display = "none";
     _editJobId = null;

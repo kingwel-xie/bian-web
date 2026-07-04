@@ -1699,6 +1699,9 @@ def api_jobs() -> Response:
                 "rewardToken": payload.get("rewardToken"),
                 "rewardAmount": payload.get("rewardAmount"),
                 "rewardTiers": payload.get("rewardTiers"),
+                "rewardMode": payload.get("rewardMode"),
+                "totalReward": payload.get("totalReward"),
+                "eligibleUsers": payload.get("eligibleUsers"),
                 "activityEnd": payload.get("activityEnd"),
                 "activityStart": payload.get("activityStart"),
                 "top": payload.get("top"),
@@ -1788,6 +1791,11 @@ def api_update_job_params(job_id: str) -> Response:
                 else:
                     p.pop("rewardToken", None)
                 p.pop("rewardAmount", None)
+                reward_mode = body.get("rewardMode")
+                if reward_mode in ("rank", "total"):
+                    p["rewardMode"] = reward_mode
+                else:
+                    p.pop("rewardMode", None)
                 reward_tiers = body.get("rewardTiers")
                 if isinstance(reward_tiers, list) and reward_tiers:
                     cleaned = []
@@ -1803,6 +1811,19 @@ def api_update_job_params(job_id: str) -> Response:
                         p.pop("rewardTiers", None)
                 else:
                     p.pop("rewardTiers", None)
+                total_reward = body.get("totalReward")
+                if total_reward:
+                    p["totalReward"] = str(total_reward)
+                else:
+                    p.pop("totalReward", None)
+                eligible_users = body.get("eligibleUsers")
+                if eligible_users is not None:
+                    try:
+                        p["eligibleUsers"] = int(eligible_users)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    p.pop("eligibleUsers", None)
                 for k in ("activityStart", "activityEnd"):
                     v = body.get(k)
                     if v:
@@ -1979,6 +2000,9 @@ def api_job_preview(job_id: str) -> Response:
         preview["rewardToken"] = payload.get("rewardToken", "")
         preview["rewardAmount"] = payload.get("rewardAmount", "")
         preview["rewardTiers"] = payload.get("rewardTiers")
+        preview["rewardMode"] = payload.get("rewardMode")
+        preview["totalReward"] = payload.get("totalReward")
+        preview["eligibleUsers"] = payload.get("eligibleUsers")
         if preview.get("rewardTiers"):
             preview["totalRewardAmount"] = sum(
                 int(t.get("amount", 0)) for t in preview["rewardTiers"]

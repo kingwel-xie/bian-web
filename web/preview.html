@@ -51,6 +51,7 @@
   .reward-item .label { color: var(--muted); font-size: 11px; }
   .reward-item .value { font-weight: 700; font-size: 15px; }
   .reward-item .value.usd { color: var(--good); }
+  .reward-total-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0; }
   .reward-tier-usd { color: var(--good); font-weight: 700; }
   @media (max-width: 640px) {
     body { padding: 6px; }
@@ -115,6 +116,14 @@
           </thead>
           <tbody id="rewardTiersBody"></tbody>
         </table>
+        <div id="rewardTotalBody" style="display:none">
+          <div class="reward-total-grid">
+            <div class="reward-item"><div class="label">总奖池</div><div class="value" id="rewardPoolDisplay">—</div></div>
+            <div class="reward-item"><div class="label">有效用户数</div><div class="value" id="rewardEligibleDisplay">—</div></div>
+            <div class="reward-item"><div class="label">累积交易量</div><div class="value" id="rewardVolumeDisplay">—</div></div>
+            <div class="reward-item"><div class="label">每一万交易量奖励</div><div class="value" id="rewardPerMDisplay">—</div></div>
+          </div>
+        </div>
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:4px">
           <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
           <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
@@ -519,12 +528,18 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
     const rewardTiers = previewData.rewardTiers || [];
     const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
+    const rewardMode = previewData.rewardMode || "rank";
+    const totalReward = parseFloat(previewData.totalReward) || 0;
+    const eligibleUsers = parseInt(previewData.eligibleUsers) || 0;
     const rewardPanel = document.getElementById("rewardPanel");
     const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
     const rewardPanelToken = document.getElementById("rewardPanelToken");
     const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
     const rewardTiersBody = document.getElementById("rewardTiersBody");
-    const useTiers = rewardTiers.length > 0;
+    const rewardTiersTable = document.getElementById("rewardTiersTable");
+    const rewardTotalBody = document.getElementById("rewardTotalBody");
+    const useTotal = rewardMode === "total" && totalReward > 0 && eligibleUsers > 0;
+    const useTiers = !useTotal && rewardTiers.length > 0;
 
     function buildTierRows(price) {
       const parts = [];
@@ -538,14 +553,44 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       return parts.join("");
     }
 
+    function computeTotalReward(price) {
+      // Sum restoredTradingVolume of top eligibleUsers rows
+      const sorted = [...allRows].sort((a, b) => (a.rank || 999999) - (b.rank || 999999));
+      const top = sorted.slice(0, eligibleUsers);
+      let totalVolume = 0;
+      for (const r of top) {
+        const v = parseFloat(r.restoredTradingVolume || r.tradingVolume) || 0;
+        totalVolume += v;
+      }
+      const volumePer10K = totalVolume / 10_000;
+      const perM = volumePer10K > 0 ? totalReward / volumePer10K : 0;
+      const nf = (v, d) => (v != null ? Number(v).toLocaleString("en-US", {minimumFractionDigits:0, maximumFractionDigits:d}) : "—");
+      const fmtVolume = (v) => {
+        if (!Number.isFinite(v)) return "—";
+        if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
+        if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
+        if (v >= 1000) return (v / 1000).toFixed(2) + "K";
+        return v.toFixed(2);
+      };
+      document.getElementById("rewardPoolDisplay").textContent = nf(totalReward, 2) + " " + rewardToken;
+      document.getElementById("rewardEligibleDisplay").textContent = nf(eligibleUsers, 0);
+      document.getElementById("rewardVolumeDisplay").textContent = fmtVolume(totalVolume);
+      document.getElementById("rewardPerMDisplay").innerHTML = (perM > 0 ? nf(perM, 4) : "—") + " " + rewardToken + (price != null ? ` (≈ $${nf(perM * price, 2)})` : "");
+    }
+
     async function updateReward() {
-      const hasReward = useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0;
+      const hasReward = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
       if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
       rewardPanel.style.display = "";
       rewardPanelToken.textContent = rewardToken;
       rewardTokenDisplay.textContent = rewardToken;
+      rewardTiersTable.style.display = useTiers ? "" : "none";
+      rewardTotalBody.style.display = useTotal ? "" : "none";
       if (useTiers) {
         rewardTiersBody.innerHTML = buildTierRows(null);
+      }
+      if (useTotal) {
+        computeTotalReward(null);
       }
       rewardPriceDisplay.textContent = "加载中...";
       const symbol = rewardToken + "USDT";
@@ -557,6 +602,9 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
         if (useTiers) {
           rewardTiersBody.innerHTML = buildTierRows(price);
         }
+        if (useTotal) {
+          computeTotalReward(price);
+        }
         rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
       } catch (err) {
         rewardPriceDisplay.textContent = "—";
@@ -564,7 +612,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     }
 
     document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);
-    if (rewardToken && (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0)) updateReward();
+    if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward();
 
     // --- Collapsible panels ---
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
