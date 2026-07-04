@@ -74,7 +74,7 @@ function inferFromUrl(rawUrl) {
   const segments = path.split("/").filter(Boolean);
   const slug = segments[segments.length - 1] || "";
   const lowerSlug = slug.toLowerCase();
-  const market = lowerSlug.includes("spot") ? "spot" : "um";
+  const market = lowerSlug.includes("saving") ? "saving" : lowerSlug.includes("spot") ? "spot" : "um";
 
   const patterns = [
     /^([a-z0-9]+)-spot-/i,

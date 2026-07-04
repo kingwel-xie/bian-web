@@ -48,7 +48,7 @@ SCRAPE_PAGE_SIZE = 100
 
 _running_processes: dict[str, subprocess.Popen] = {}
 _rp_lock = threading.Lock()
-SCRAPE_MARKETS = {"um", "spot"}
+SCRAPE_MARKETS = {"um", "spot", "saving"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
 
@@ -101,7 +101,7 @@ def normalize_scrape_symbol(raw_symbol: Any) -> tuple[str, str]:
 def normalize_scrape_market(raw_market: Any) -> str:
     market = str(raw_market or "").lower().strip()
     if market not in SCRAPE_MARKETS:
-        raise ScriptError("market 只能是 um 或 spot。")
+        raise ScriptError("market 只能是 um、spot 或 saving。")
     return market
 
 
@@ -1616,7 +1616,7 @@ def api_jobs() -> Response:
     filter_search = (request.args.get("search") or "").strip()
     filter_active = request.args.get("active", "").strip().lower()
 
-    if filter_market in ("um", "spot"):
+    if filter_market in SCRAPE_MARKETS:
         all_jobs = [j for j in all_jobs if (j.get("payload") or {}).get("market") == filter_market]
 
     if filter_search:
@@ -1747,8 +1747,8 @@ def api_update_job_params(job_id: str) -> Response:
     token = str(body.get("token") or "").strip().upper()
     symbol = str(body.get("symbol") or "").strip().upper()
 
-    if market not in ("um", "spot"):
-        return jsonify({"error": "market 必须为 um 或 spot"}), 400
+    if market not in SCRAPE_MARKETS:
+        return jsonify({"error": "market 必须为 um、spot 或 saving"}), 400
     if not token or not re.match(r"^[A-Z0-9]{1,24}$", token):
         return jsonify({"error": "token 格式无效"}), 400
     if not symbol or not re.match(r"^[A-Z0-9]{2,30}$", symbol):
