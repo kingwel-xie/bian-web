@@ -4,6 +4,7 @@ const state = {
   discoveredSymbol: null,
   discoveredActivityEnd: null,
   discoveredActivityStart: null,
+  discoveredTop: 1000,
   pollTimer: null,
   editingJobId: null,
   page: 1,
@@ -14,6 +15,8 @@ const state = {
   filterSearch: "",
   filterActive: true,
 };
+
+const TOP_DEFAULTS = { um: 400, spot: 1000, saving: 1500 };
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -75,6 +78,8 @@ function inferFromUrl(rawUrl) {
   const slug = segments[segments.length - 1] || "";
   const lowerSlug = slug.toLowerCase();
   const market = lowerSlug.includes("saving") ? "saving" : lowerSlug.includes("spot") ? "spot" : "um";
+
+  state.discoveredTop = TOP_DEFAULTS[market] || 1000;
 
   const patterns = [
     /^([a-z0-9]+)-spot-/i,
@@ -169,12 +174,12 @@ function renderDiscoveryCards(result, inferred) {
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const rid = btn.dataset.rid;
-      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd, state.discoveredActivityStart);
+      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd, state.discoveredActivityStart, state.discoveredTop);
     });
   });
 }
 
-async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart) {
+async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart, top) {
   try {
     await api("/api/scrape/jobs", {
       method: "POST",
@@ -187,6 +192,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
         mode: "scrape",
         activityEnd,
         activityStart,
+        top: top != null ? top : (TOP_DEFAULTS[market] || 1000),
       }),
     });
     await loadJobs(1);
@@ -224,6 +230,7 @@ function openEditModal(job) {
   document.getElementById("editModalMeta").textContent = rid ? `resourceId ${rid}` : "";
   document.getElementById("editActivityStart").value = (p.activityStart || "").replace(" ", "T");
   document.getElementById("editActivityEnd").value = (p.activityEnd || "").replace(" ", "T");
+  document.getElementById("editTop").value = p.top != null ? p.top : (TOP_DEFAULTS[p.market] || 1000);
   document.getElementById("editModal").style.display = "";
 }
 
@@ -255,10 +262,11 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
       rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
     }
   }
+  const topVal = parseInt(document.getElementById("editTop").value, 10);
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
-      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined, activityStart, activityEnd }),
+      body: JSON.stringify({ market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardTiers: rewardTiers.length ? rewardTiers : undefined, activityStart, activityEnd, top: topVal > 0 ? topVal : undefined }),
     });
     document.getElementById("editModal").style.display = "none";
     _editJobId = null;
@@ -281,7 +289,8 @@ function renderJobs(jobs) {
     const payload = job.payload || {};
     const progress = job.progress || {};
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
-    const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/1000 rows` : "";
+    const topValue = payload.top || 1000;
+    const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
     const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
@@ -337,7 +346,7 @@ function renderJobs(jobs) {
       const job = jobs.find((item) => item.id === button.dataset.rerun);
       if (!job) return;
       const p = job.payload || {};
-      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart);
+      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top);
     });
   });
   $("#jobList").querySelectorAll("[data-kill]").forEach((button) => {

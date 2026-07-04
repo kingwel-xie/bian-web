@@ -43,7 +43,7 @@ SPOT_KLINES = "https://api.binance.com/api/v3/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
-SCRAPE_TOP = 1000
+SCRAPE_TOP_DEFAULTS: dict[str, int] = {"um": 400, "spot": 1000, "saving": 1500}
 SCRAPE_PAGE_SIZE = 100
 
 _running_processes: dict[str, subprocess.Popen] = {}
@@ -114,6 +114,16 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
     resource_id = str(payload.get("resourceId") or "").strip()
     if not resource_id or not re.fullmatch(r"\d{1,12}", resource_id):
         raise ScriptError("resourceId 必须是数字。")
+    raw_top = payload.get("top")
+    if raw_top is not None:
+        try:
+            top = int(raw_top)
+        except (TypeError, ValueError):
+            raise ScriptError("top 必须是数字。")
+        if top < 1 or top > 10000:
+            raise ScriptError("top 必须在 1-10000 之间。")
+    else:
+        top = SCRAPE_TOP_DEFAULTS.get(market, 1000)
     return {
         **payload,
         "mode": "scrape",
@@ -123,7 +133,7 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "name": resource_id,
         "url": url,
         "resourceId": resource_id,
-        "top": SCRAPE_TOP,
+        "top": top,
         "pageSize": SCRAPE_PAGE_SIZE,
     }
 
@@ -226,7 +236,7 @@ def infer_name_from_file(path: Path) -> str | None:
 
 def load_snapshots(activity_dir: Path, name: str) -> list[dict[str, Any]]:
     snapshots: list[dict[str, Any]] = []
-    for path in sorted(activity_dir.glob(f"*_{name}_top500.json")):
+    for path in sorted(activity_dir.glob(f"*_{name}_top*.json")):
         try:
             data = read_json(path, {})
             meta = data.get("meta") or {}
@@ -296,7 +306,7 @@ def activity_directory(name: str) -> Path | None:
     for activity_dir in sorted(DATA_ROOT.iterdir() if DATA_ROOT.exists() else []):
         if not activity_dir.is_dir() or activity_dir.name.startswith("."):
             continue
-        json_files = sorted(activity_dir.glob("*_top500.json"))
+        json_files = sorted(activity_dir.glob("*_top*.json"))
         if json_files and infer_name_from_file(json_files[-1]) == safe_name:
             return activity_dir
     return None
@@ -308,7 +318,7 @@ def ms_to_bj(ms: int) -> datetime:
 
 def load_snapshot_records(activity_dir: Path, name: str) -> list[dict[str, Any]]:
     records = []
-    for path in sorted(activity_dir.glob(f"*_{name}_top500.json")):
+    for path in sorted(activity_dir.glob(f"*_{name}_top*.json")):
         data = read_json(path, {})
         if not isinstance(data, dict):
             continue
@@ -685,7 +695,7 @@ def discover_activities() -> list[dict[str, Any]]:
     for activity_dir in sorted(DATA_ROOT.iterdir() if DATA_ROOT.exists() else []):
         if not activity_dir.is_dir() or activity_dir.name.startswith("."):
             continue
-        json_files = sorted(activity_dir.glob("*_top500.json"))
+        json_files = sorted(activity_dir.glob("*_top*.json"))
         if not json_files:
             continue
         name = infer_name_from_file(json_files[-1]) or activity_dir.name
@@ -754,7 +764,7 @@ def scrape_command(payload: dict[str, Any]) -> list[str]:
         "--activity",
         f"{normalized['name']}={normalized['url']}",
         "--top",
-        str(SCRAPE_TOP),
+        str(normalized["top"]),
         "--page-size",
         str(SCRAPE_PAGE_SIZE),
         "--output-root",
@@ -1082,18 +1092,21 @@ def scrape_preview_from_json(
     }
 
 
-def latest_scrape_preview(name: str, limit: int = 1000) -> dict[str, Any] | None:
+def latest_scrape_preview(name: str, limit: int | None = None) -> dict[str, Any] | None:
     safe_name = str(name or "").lower().strip()
     if not re.fullmatch(r"[a-z0-9_-]+", safe_name):
         return None
     activity_dir = DATA_ROOT / safe_name
     if not activity_dir.is_dir():
         return None
-    candidates = sorted(activity_dir.glob(f"*_{safe_name}_top{SCRAPE_TOP}.json"), key=lambda p: p.stat().st_mtime)
+    candidates = sorted(activity_dir.glob(f"*_{safe_name}_top*.json"), key=lambda p: p.stat().st_mtime)
     if not candidates:
         candidates = sorted(activity_dir.glob("*_top*.json"), key=lambda p: p.stat().st_mtime)
     if not candidates:
         return None
+    if limit is None:
+        data = read_json(candidates[-1], {})
+        limit = data.get("top") if isinstance(data, dict) else 1000
     return scrape_preview_from_json(candidates[-1], limit=limit)
 
 
@@ -1113,14 +1126,17 @@ def attach_scrape_preview(result: Any) -> Any:
             xlsx_path = ensure_scrape_xlsx(Path(str(json_path)), str(current.get("name") or "leaderboard"))
             current["xlsxUrl"] = public_file_or_none(xlsx_path)
             try:
-                current["preview"] = scrape_preview_from_json(Path(str(json_path)), limit=1000)
+                json_path_obj = Path(str(json_path))
+                preview_data = read_json(json_path_obj, {})
+                preview_top = preview_data.get("top") if isinstance(preview_data, dict) else None
+                current["preview"] = scrape_preview_from_json(json_path_obj, limit=preview_top or 1000)
             except Exception as exc:
                 current["previewError"] = str(exc)
         enriched.append(current)
     return enriched
 
 
-def progress_from_stderr(stderr_text: str, status: str = "running") -> dict[str, Any]:
+def progress_from_stderr(stderr_text: str, status: str = "running", top: int = 1000) -> dict[str, Any]:
     progress: dict[str, Any] = {
         "stage": "queued" if status == "queued" else "starting",
         "label": "等待开始" if status == "queued" else "启动抓取脚本",
@@ -1157,7 +1173,7 @@ def progress_from_stderr(stderr_text: str, status: str = "running") -> dict[str,
                 "currentPage": page,
                 "totalPages": total_pages,
                 "pageRows": page_rows,
-                "rowsFetched": min(page * SCRAPE_PAGE_SIZE, SCRAPE_TOP),
+                "rowsFetched": min(page * SCRAPE_PAGE_SIZE, top),
             }
         )
 
@@ -1171,10 +1187,11 @@ def progress_from_stderr(stderr_text: str, status: str = "running") -> dict[str,
 
 
 def run_job(job_id: str, payload: dict[str, Any]) -> None:
+    top = payload.get("top") or 1000
     update_job(
         job_id,
         status="running",
-        progress=progress_from_stderr("", "running"),
+        progress=progress_from_stderr("", "running", top=top),
         startedAt=datetime.now(timezone.utc).isoformat(),
     )
     command = job_command(payload)
@@ -1199,7 +1216,7 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
                 update_job(
                     job_id,
                     stderr=stderr_tail,
-                    progress=progress_from_stderr(stderr_tail, "running"),
+                    progress=progress_from_stderr(stderr_tail, "running", top=top),
                 )
 
     threads = []
@@ -1236,7 +1253,7 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
         returnCode=return_code,
         stdout=stdout[-12000:],
         stderr=combined_stderr,
-        progress=progress_from_stderr(combined_stderr, status),
+        progress=progress_from_stderr(combined_stderr, status, top=top),
         result=result,
         finishedAt=datetime.now(timezone.utc).isoformat(),
     )
@@ -1684,6 +1701,7 @@ def api_jobs() -> Response:
                 "rewardTiers": payload.get("rewardTiers"),
                 "activityEnd": payload.get("activityEnd"),
                 "activityStart": payload.get("activityStart"),
+                "top": payload.get("top"),
             },
             "snapshotCount": len(job.get("snapshots") or []),
             "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
@@ -1791,6 +1809,14 @@ def api_update_job_params(job_id: str) -> Response:
                         p[k] = str(v)
                     else:
                         p.pop(k, None)
+                top = body.get("top")
+                if top is not None:
+                    try:
+                        p["top"] = int(top)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    p.pop("top", None)
                 job["updatedAt"] = datetime.now(timezone.utc).isoformat()
                 save_jobs(jobs)
                 return jsonify({"job": job})
@@ -1946,7 +1972,7 @@ def api_job_preview(job_id: str) -> Response:
                 if prev_path_str:
                     prev_json_path = Path(str(prev_path_str))
 
-        preview = scrape_preview_from_json(json_path, limit=1000, previous_json_path=prev_json_path)
+        preview = scrape_preview_from_json(json_path, limit=payload.get("top") or 1000, previous_json_path=prev_json_path)
         preview["market"] = payload.get("market", "").upper()
         preview["symbol"] = payload.get("symbol", "")
         preview["token"] = payload.get("token", "").upper()
@@ -1992,12 +2018,23 @@ def api_job_preview(job_id: str) -> Response:
                 prev_stats = stats_list
         preview["prevStats"] = prev_stats
         team_db = load_teams_db()
-        team_map: dict[str, str] = {}
+        team_lookup: dict[str, str] = {}
         for team in team_db.get("teams") or []:
+            team_name = team.get("name", "")
             for m in team.get("members") or []:
-                key = (m.get("nickname") or "").strip() or (m.get("userId") or "").strip()
-                if key:
-                    team_map[key] = team.get("name", "")
+                key = (m.get("nickname") or "").strip()
+                if key and key not in team_lookup:
+                    team_lookup[key] = team_name
+                uid = (m.get("userId") or "").strip()
+                if uid and uid not in team_lookup:
+                    team_lookup[uid] = team_name
+        team_map: dict[str, str] = {}
+        for row in preview.get("rows") or []:
+            nick = row.get("nickname") or ""
+            uid = row.get("userId") or ""
+            team_name = team_lookup.get(nickname_value({"nickName": nick})) or team_lookup.get(uid or "")
+            if team_name:
+                team_map[nick] = team_name
         preview["teamMap"] = team_map
         return jsonify(preview)
     except Exception as exc:

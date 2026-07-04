@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
-    <link rel="stylesheet" href="/css888/styles.css?v=20260704b" />
+    <link rel="stylesheet" href="/css888/styles.css?v=20260704c" />
   </head>
   <body>
     <main class="shell">
@@ -12,7 +12,7 @@
         <div>
           <p class="eyebrow">BINANCE LEADBOARD CAPTURE</p>
           <h1>纯抓榜任务台</h1>
-          <p class="subtitle">粘贴 Binance 活动 URL 发现 resourceId，点击后抓取前 1000 名并在线预览。</p>
+          <p class="subtitle">粘贴 Binance 活动 URL 发现 resourceId，点击后抓取排行榜并在线预览。默认行数：UM 400 / SPOT 1000 / SAVING 1500。</p>
           <p style="margin:10px 0 0;font-size:13px"><a href="teams.html" style="color:var(--accent-2)">🏆 团队管理</a></p>
         </div>
       </header>
@@ -81,7 +81,9 @@
             <label>活动结束
               <input id="editActivityEnd" type="datetime-local" />
             </label>
-            <label></label>
+            <label>抓取行数
+              <input id="editTop" type="number" min="1" max="10000" value="1000" />
+            </label>
           </div>
           <hr class="form-divider">
           <div class="form-row">
@@ -104,6 +106,6 @@
       </div>
     </div>
 
-    <script src="/css888/app.js?v=20260704b"></script>
+    <script src="/css888/app.js?v=20260704c"></script>
   </body>
 </html>
