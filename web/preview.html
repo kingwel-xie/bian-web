@@ -20,7 +20,7 @@
   .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
   .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 10%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 11%; } .stats-table .c-dratio { width: 12%; } .stats-table .c-avg { width: 19%; } .stats-table .c-median { width: 18%; } .stats-table .c-last { width: 17%; }
+  .stats-table .c-rank { width: 9%; } .stats-table .c-total { width: 12%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; } .stats-table .c-avg { width: 16%; } .stats-table .c-median { width: 14%; } .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 14%; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
   th { padding: 6px 12px; }
@@ -57,7 +57,7 @@
     .panel[style] { padding: 6px !important; }
     .stats-panel { width: 100%; }
     .stats-table th, .stats-table td { padding: 6px 4px; font-size: 11px; }
-    .stats-table .c-rank { width: 8%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 11%; } .stats-table .c-dratio { width: 12%; } .stats-table .c-avg { width: 20%; } .stats-table .c-median { width: 19%; } .stats-table .c-last { width: 17%; }
+    .stats-table .c-rank { width: 8%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; } .stats-table .c-avg { width: 17%; } .stats-table .c-median { width: 14%; }   .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 13%; }
     table th, table td { padding: 6px 4px; font-size: 11px; }
     .col-rank { width: 7%; } .col-rank-change { width: 7%; } .col-nick { width: 16%; } .col-user { width: 16%; }
     .col-score { width: 14%; } .col-volume { width: 16%; } .col-delta { width: 12%; } .col-region { width: 12%; }
@@ -85,8 +85,8 @@
       <div class="stats-panel">
         <h3>基础统计</h3>
         <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-last" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">末名</th></tr></thead>
+          <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
+          <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
       </div>
@@ -277,19 +277,21 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
         const grades = byGrade.map(r => Number(r.grade) || 0);
         const avg = count ? total / count : 0;
         const med = count ? (count % 2 ? grades[Math.floor(count / 2)] : (grades[count / 2 - 1] + grades[count / 2]) / 2) : 0;
+        const q1 = count ? grades[Math.min(Math.floor(count * 0.25), grades.length - 1)] : 0;
         const lastRow = items[items.length - 1];
         const last = lastRow ? (Number(lastRow.grade) || 0) : 0;
         const sumDelta = items.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
-        let avgDeltaPct = null, medDeltaPct = null, lastDeltaPct = null;
+        let avgDeltaPct = null, medDeltaPct = null, q1DeltaPct = null, lastDeltaPct = null;
         if (prevStats) {
           const prev = prevStats.find(s => s.label === label);
           if (prev) {
             avgDeltaPct = prev.avg ? ((avg - prev.avg) / prev.avg * 100) : null;
             medDeltaPct = prev.med ? ((med - prev.med) / prev.med * 100) : null;
+            q1DeltaPct = prev.q1 ? ((q1 - prev.q1) / prev.q1 * 100) : null;
             lastDeltaPct = prev.last ? ((last - prev.last) / prev.last * 100) : null;
           }
         }
-        return { label, count, total, avg, med, last, sumDelta, avgDeltaPct, medDeltaPct, lastDeltaPct };
+        return { label, count, total, avg, med, q1, last, sumDelta, avgDeltaPct, medDeltaPct, q1DeltaPct, lastDeltaPct };
       });
     }
 
@@ -315,9 +317,9 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
       const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
-      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmtDeltaPct(s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmtDeltaPct(s.medDeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmtDeltaPct(s.lastDeltaPct)}</td></tr>`;
+      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmtDeltaPct(s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmtDeltaPct(s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmtDeltaPct(s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmtDeltaPct(s.lastDeltaPct)}</td></tr>`;
     }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
 
     let deltaSort = false;
     let teamOfUser = (preview.teamMap || {});

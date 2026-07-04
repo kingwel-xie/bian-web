@@ -1966,15 +1966,17 @@ def api_job_preview(job_id: str) -> Response:
                     items = [r for r in prev_rows if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
                     n = len(items)
                     if n == 0:
-                        stats_list.append({"label": label, "total": 0, "avg": 0, "med": 0, "last": 0})
+                        stats_list.append({"label": label, "total": 0, "avg": 0, "med": 0, "q1": 0, "last": 0})
                         continue
                     total = sum(float(r.get("grade", 0) or 0) for r in items)
                     by_grade = sorted(items, key=lambda r: float(r.get("grade", 0) or 0))
                     grades = [float(r.get("grade", 0) or 0) for r in by_grade]
                     avg = total / n
                     med = grades[n // 2] if n % 2 else (grades[n // 2 - 1] + grades[n // 2]) / 2
+                    q1_index = int(n * 0.25)
+                    q1 = grades[min(q1_index, n - 1)]
                     last = float(items[-1].get("grade", 0) or 0)
-                    stats_list.append({"label": label, "total": total, "avg": avg, "med": med, "last": last})
+                    stats_list.append({"label": label, "total": total, "avg": avg, "med": med, "q1": q1, "last": last})
                 prev_stats = stats_list
         preview["prevStats"] = prev_stats
         team_db = load_teams_db()
