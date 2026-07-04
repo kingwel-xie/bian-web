@@ -559,14 +559,10 @@ function bind() {
   });
 
   // Filter: active (未到期)
-  document.querySelectorAll("#activeFilter .filter-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll("#activeFilter .filter-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.filterActive = btn.dataset.active === "true";
-      state.page = 1;
-      loadJobs(state.page);
-    });
+  document.getElementById("activeFilter").addEventListener("change", () => {
+    state.filterActive = document.getElementById("activeFilter").checked;
+    state.page = 1;
+    loadJobs(state.page);
   });
 
   // Filter: search on Enter

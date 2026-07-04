@@ -41,10 +41,9 @@
               <button class="filter-btn" data-market="um">UM</button>
               <button class="filter-btn" data-market="spot">SPOT</button>
             </span>
-            <span class="filter-group" id="activeFilter">
-              <button class="filter-btn active" data-active="true">仅未到期</button>
-              <button class="filter-btn" data-active="">含已到期</button>
-            </span>
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;text-transform:none;font-weight:400;cursor:pointer;white-space:nowrap">
+              <input id="activeFilter" type="checkbox" checked /> 仅未到期
+            </label>
             <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" />
           </div>
           <div id="jobList" class="job-list"></div>
