@@ -290,17 +290,17 @@ function renderJobs(jobs) {
     const displayName = rid ? `${jobName}  [${rid}]` : jobName;
     const activityEnd = payload.activityEnd;
     const activityStart = payload.activityStart;
-    const isExpired = activityEnd && new Date(activityEnd + " +08:00") <= new Date();
+    const isExpired = activityEnd && new Date(activityEnd + " +08:00") <= new Date(Date.now() - 86400000);
     const expiredClass = isExpired ? " expired" : "";
     const snapshotTs = job.latestSnapshot;
-    const actTimeText = activityStart || activityEnd ? `活动：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
+    const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
     return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
             <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
+            ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
           </strong>
-          ${actTimeText ? `<div class="job-act-time">${escapeHtml(actTimeText)}</div>` : ""}
           <p>${escapeHtml(url || "无 URL")}</p>
           <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}

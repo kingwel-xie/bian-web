@@ -332,6 +332,13 @@ function addCandidate(result, id, source) {
             };
           }
         }
+        const bareRange = text.match(/(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})\s*[~–—-]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/);
+        if (bareRange) {
+          return {
+            start: bareRange[1].replace(/[/]/g, '-'),
+            end: bareRange[2].replace(/[/]/g, '-'),
+          };
+        }
         const startTime = text.match(/开始时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
         const endTime = text.match(/结束时间[：:]\s*(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})/i);
         return {

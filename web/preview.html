@@ -74,6 +74,7 @@
     <div class="preview-head">
       <div>
         <h2 style="font-size:18px;margin:0;display:inline" id="title">排行榜预览</h2>
+        <span id="actTime" style="margin-left:12px;font-size:12px;color:var(--muted)"></span>
         <p class="preview-meta" id="meta">加载中...</p>
       </div>
       <div class="downloads" id="downloadLinks">
@@ -188,6 +189,14 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     const heading = preview.taskName || [preview.market, preview.token || preview.symbol].filter(Boolean).join(" ") || preview.name || "排行榜预览";
     document.title = heading + " — 排行榜预览";
     document.getElementById("title").textContent = heading;
+    const actS = preview.activityStart, actE = preview.activityEnd;
+    document.getElementById("actTime").textContent = actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    const expired = actE && new Date(actE + " +08:00") <= new Date(Date.now() - 86400000);
+    if (expired) {
+      document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span> <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;
+      document.getElementById("actTime").style.color = "#999";
+      document.getElementById("meta").style.opacity = "0.5";
+    }
     const eligibleVolume = preview.meta?.eligibleTradingVolume;
     const eligibleText = eligibleVolume ? fmtNumber(eligibleVolume) : "—";
     const totalUsers = preview.meta?.total;

@@ -1948,6 +1948,8 @@ def api_job_preview(job_id: str) -> Response:
         job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
         rid = str(payload.get("resourceId") or "").strip()
         preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
+        preview["activityStart"] = payload.get("activityStart")
+        preview["activityEnd"] = payload.get("activityEnd")
         preview["snapshots"] = [
             {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
             for s in snapshots
