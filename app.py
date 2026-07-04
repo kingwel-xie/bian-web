@@ -1614,7 +1614,7 @@ def api_jobs() -> Response:
     all_jobs = load_jobs()
     filter_market = (request.args.get("market") or "").strip().lower()
     filter_search = (request.args.get("search") or "").strip()
-    filter_status = (request.args.get("status") or "").strip().lower()
+    filter_active = request.args.get("active", "").strip().lower()
 
     if filter_market in ("um", "spot"):
         all_jobs = [j for j in all_jobs if (j.get("payload") or {}).get("market") == filter_market]
@@ -1626,8 +1626,18 @@ def api_jobs() -> Response:
             if q in ((j.get("name") or (j.get("payload") or {}).get("name") or "")).lower()
         ]
 
-    if filter_status == "running":
-        all_jobs = [j for j in all_jobs if j.get("status") in ("running", "queued")]
+    if filter_active == "true":
+        now_bj = datetime.now(timezone.utc).astimezone(BJ)
+        cutoff = now_bj - timedelta(days=1)
+        def is_active(job):
+            end_str = (job.get("payload") or {}).get("activityEnd", "") or ""
+            if not end_str:
+                return True
+            try:
+                return datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ) > cutoff
+            except ValueError:
+                return True
+        all_jobs = [j for j in all_jobs if is_active(j)]
 
     total = len(all_jobs)
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1

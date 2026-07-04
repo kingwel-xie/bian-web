@@ -12,7 +12,7 @@ const state = {
   totalPages: 1,
   filterMarket: "",
   filterSearch: "",
-  filterStatus: "running",
+  filterActive: true,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -518,7 +518,7 @@ async function loadJobs(page) {
   if (page) params.set("page", page);
   if (state.filterMarket) params.set("market", state.filterMarket);
   if (state.filterSearch) params.set("search", state.filterSearch);
-  if (state.filterStatus) params.set("status", state.filterStatus);
+  if (state.filterActive) params.set("active", "true");
   const payload = await api(`/api/jobs?${params}`);
   state._jobs = payload.jobs || [];
   state.page = payload.pagination?.page ?? 1;
@@ -558,12 +558,12 @@ function bind() {
     });
   });
 
-  // Filter: status
-  document.querySelectorAll("#statusFilter .filter-btn").forEach((btn) => {
+  // Filter: active (未到期)
+  document.querySelectorAll("#activeFilter .filter-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll("#statusFilter .filter-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll("#activeFilter .filter-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      state.filterStatus = btn.dataset.status;
+      state.filterActive = btn.dataset.active === "true";
       state.page = 1;
       loadJobs(state.page);
     });
