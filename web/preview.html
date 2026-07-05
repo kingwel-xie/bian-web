@@ -12,13 +12,13 @@
   .preview-meta { color: var(--muted); font-size: 12px; }
   .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
   .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
-  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 6px 16px; font-size: 12px; text-transform: uppercase; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.03em; }
   .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; }
   .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
   .stats-panel.collapsed > :not(h3), .reward-panel.collapsed > :not(h3) { display: none !important; }
   .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .stats-table th, .stats-table td { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid rgba(46,42,36,0.08); }
-  .stats-table th { background: transparent; font-weight: 700; position: static; text-transform: none; font-size: 12px; color: var(--muted); }
+  .stats-table th, .stats-table td { font-size: 13px; }
+  .stats-table th { font-weight: 700; position: static; background: #eee7d9; color: var(--accent); text-transform: uppercase; }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
   .stats-table .c-rank { width: 9%; } .stats-table .c-total { width: 12%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; } .stats-table .c-avg { width: 16%; } .stats-table .c-median { width: 14%; } .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 14%; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -102,14 +102,6 @@
         </table>
       </div>
     </div>
-    <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
-      <h3>分团队统计</h3>
-      <table class="stats-table">
-        <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
-        <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
-        <tbody id="teamStatsBody"></tbody>
-      </table>
-    </div>
     <div id="rewardPanel" class="reward-panel" style="display:none">
       <h3>奖励计算 <span id="rewardPanelToken" style="font-weight:400;font-size:12px">—</span></h3>
       <div class="reward-body" id="rewardBody" style="flex-direction:column;align-items:stretch">
@@ -170,11 +162,19 @@
         </div>
       </div>
     </div>
+    <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
+      <h3>分团队统计</h3>
+      <table class="stats-table">
+        <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
+        <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
+        <tbody id="teamStatsBody"></tbody>
+      </table>
+    </div>
     <hr class="sep" />
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
-        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th style="display:flex;align-items:center;gap:2px"><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" style="flex:1;min-width:0;width:auto;max-width:180px" /><button id="searchClearBtn" class="search-clear" type="button">✕</button></th><th>User ID</th><th class="num">分数</th><th class="num" style="cursor:pointer" id="volumeSort">真实成交量 <span class="sort-icon" id="volumeSortIcon"></span></th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
+        <thead><tr>        <th><select id="teamFilter"><option value="">全部</option></select></th><th><div style="display:flex;align-items:center;gap:2px"><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" style="flex:1;min-width:0;width:auto;max-width:180px" /><button id="searchClearBtn" class="search-clear" type="button">✕</button></div></th><th>User ID</th><th class="num">分数</th><th class="num" style="cursor:pointer" id="volumeSort">真实成交量 <span class="sort-icon" id="volumeSortIcon"></span></th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
         <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
@@ -183,6 +183,7 @@
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -208,6 +209,14 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     if (!resp.ok || preview.error) throw new Error(preview.error || "加载失败");
 
     const allRows = preview.rows || [];
+    allRows.sort((a, b) => (Number(a.rank) || 0) - (Number(b.rank) || 0));
+    for (const r of allRows) {
+      r._g = Number(r.grade) || 0;
+      r._dg = Number(r.deltaGrade) || 0;
+      r._v = Number(r.restoredTradingVolume ?? r.tradingVolume ?? 0);
+      r._nl = (r.nickname || "").toLowerCase();
+      r._pr = r.prevRank != null ? Number(r.prevRank) : null;
+    }
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
     const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
     const heading = preview.taskName || [preview.market, preview.token || preview.symbol].filter(Boolean).join(" ") || preview.name || "排行榜预览";
@@ -320,17 +329,17 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
 
     function rangeStats(rows, ranges, prevStats) {
       return ranges.map(([label, min, max]) => {
-        const items = rows.filter(r => { const k = Number(r.rank); return k >= min && k <= max; });
+        const start = min - 1;
+        const end = Math.min(max, rows.length);
+        const items = rows.slice(start, end);
         const count = items.length;
-        const total = items.reduce((s, r) => s + (Number(r.grade) || 0), 0);
-        const byGrade = [...items].sort((a, b) => (Number(a.grade) || 0) - (Number(b.grade) || 0));
-        const grades = byGrade.map(r => Number(r.grade) || 0);
+        const total = items.reduce((s, r) => s + r._g, 0);
+        const grades = items.map(r => r._g).sort((a, b) => a - b);
         const avg = count ? total / count : 0;
         const med = count ? (count % 2 ? grades[Math.floor(count / 2)] : (grades[count / 2 - 1] + grades[count / 2]) / 2) : 0;
         const q1 = count ? grades[Math.min(Math.floor(count * 0.25), grades.length - 1)] : 0;
-        const lastRow = items[items.length - 1];
-        const last = lastRow ? (Number(lastRow.grade) || 0) : 0;
-        const sumDelta = items.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
+        const last = items.length ? items[items.length - 1]._g : 0;
+        const sumDelta = items.reduce((s, r) => s + r._dg, 0);
         let avgDeltaPct = null, medDeltaPct = null, q1DeltaPct = null, lastDeltaPct = null;
         if (prevStats) {
           const prev = prevStats.find(s => s.label === label);
@@ -376,8 +385,8 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
           : [["1~5",1,5],["6~20",6,20],["21~50",21,50],["51~200",51,200],["201~1000",201,1000]];
     const stats = rangeStats(allRows, ranges, preview.prevStats);
     const totalCount = allRows.length;
-    const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
-    const totalDelta = allRows.reduce((s, r) => s + (Number(r.deltaGrade) || 0), 0);
+    const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
+    const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
     document.getElementById("statsBody").innerHTML = stats.map(s => {
       const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
       const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
@@ -411,8 +420,8 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       if (t) {
         if (!teamMap[t]) teamMap[t] = { count: 0, totalGrade: 0, totalDelta: 0 };
         teamMap[t].count++;
-        teamMap[t].totalGrade += Number(r.grade) || 0;
-        teamMap[t].totalDelta += Number(r.deltaGrade) || 0;
+        teamMap[t].totalGrade += r._g;
+        teamMap[t].totalDelta += r._dg;
       }
     }
     const teamEntries = Object.entries(teamMap).sort((a, b) => b[1].count - a[1].count);
@@ -430,78 +439,92 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     let teamFilter = "";
     let rankChangeSort = "";
 
-    function render() {
+    function renderRows() {
       const q = document.getElementById("searchInput").value.trim().toLowerCase();
-      document.getElementById("searchClearBtn").style.display = q ? "inline" : "none";
-      let rows = allRows.filter(r => {
-        const txt = String(r.nickname || "").toLowerCase();
-        if (q && !txt.includes(q)) return false;
-        if (teamFilter) {
-          const t = teamOfUser[r.nickname] || "";
-          if (t !== teamFilter) return false;
-        }
-        return true;
-      });
-      if (volumeSort) {
-        rows = [...rows].sort((a, b) => {
-          const va = Number(a.restoredTradingVolume ?? a.tradingVolume ?? 0);
-          const vb = Number(b.restoredTradingVolume ?? b.tradingVolume ?? 0);
-          return vb - va;
+      let rows = allRows;
+      if (q || teamFilter) {
+        rows = allRows.filter(r => {
+          if (q && !r._nl.includes(q)) return false;
+          if (teamFilter) {
+            const t = teamOfUser[r.nickname] || "";
+            if (t !== teamFilter) return false;
+          }
+          return true;
         });
       }
+      if (volumeSort) {
+        rows = [...rows].sort((a, b) => b._v - a._v);
+      }
       if (deltaSort) {
-        rows = [...rows].sort((a, b) => (b.deltaGrade ?? -Infinity) - (a.deltaGrade ?? -Infinity));
+        rows = [...rows].sort((a, b) => (b._dg || -Infinity) - (a._dg || -Infinity));
       }
       if (rankChangeSort) {
         rows = [...rows].sort((a, b) => {
-          const da = (a.prevRank ?? a.rank) - a.rank;
-          const db = (b.prevRank ?? b.rank) - b.rank;
+          const da = (a._pr ?? a.rank) - a.rank;
+          const db = (b._pr ?? b.rank) - b.rank;
           return rankChangeSort === "up" ? da - db : db - da;
         });
       }
-      document.getElementById("volumeSortIcon").innerHTML = volumeSort ? "▼" : "↕";
-      document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
-      document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
       document.getElementById("rows").innerHTML = rows.length ? rows.map(r => {
         const teamName = teamOfUser[r.nickname] || "";
         const nickHtml = teamName
           ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
           : escapeHtml(r.nickname || "—");
-        const prev = r.prevRank;
-        const chg = prev != null ? prev - r.rank : null;
-        const chgHtml = chg == null ? "—" : chg > 0 ? `<span class="chg-up">↑${chg}</span>` : chg < 0 ? `<span class="chg-down">↓${-chg}</span>` : `<span class="chg-flat">-</span>`;
+        const chgHtml = r._pr == null ? "—"
+          : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
+          : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
+          : `<span class="chg-flat">-</span>`;
         return `<tr><td>${escapeHtml(r.rank)}</td>
         <td class="tl">${nickHtml}</td>
         <td class="tl">${escapeHtml(r.userId || "—")}</td>
-        <td class="num">${fmtNumber(r.grade)}</td>
-        <td class="num">${fmtNumber(r.restoredTradingVolume || r.tradingVolume)}</td>
-        <td class="num">${r.deltaGrade == null ? "—" : fmtNumber(r.deltaGrade)}</td>
+        <td class="num">${fmtNumber(r._g)}</td>
+        <td class="num">${fmtNumber(r._v)}</td>
+        <td class="num">${r._dg ? fmtNumber(r._dg) : "—"}</td>
         <td class="num">${chgHtml}</td>
         <td class="num">${escapeHtml(r.region || "—")}</td></tr>`;
       }).join("") : `<tr><td colspan="8" class="empty">${q || teamFilter ? "没有匹配。" : "没有数据。"}</td></tr>`;
     }
-    render();
 
-    document.getElementById("searchInput").addEventListener("input", render);
+    function updateSortIcons() {
+      document.getElementById("volumeSortIcon").innerHTML = volumeSort ? "▼" : "↕";
+      document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
+      document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
+    }
+
+    function updateClearBtn() {
+      const q = document.getElementById("searchInput").value.trim();
+      document.getElementById("searchClearBtn").style.display = q ? "inline" : "none";
+    }
+
+    const render = debounce(() => { renderRows(); updateSortIcons(); }, 150);
+    renderRows();
+    updateSortIcons();
+
+    document.getElementById("searchInput").addEventListener("input", () => { updateClearBtn(); render(); });
     document.getElementById("searchClearBtn").addEventListener("click", () => {
       document.getElementById("searchInput").value = "";
-      render();
+      updateClearBtn();
+      renderRows();
+      updateSortIcons();
     });
     teamFilterEl.addEventListener("change", () => {
       teamFilter = teamFilterEl.value;
-      render();
+      renderRows();
+      updateSortIcons();
     });
     document.getElementById("volumeSort").addEventListener("click", () => {
       volumeSort = !volumeSort;
       deltaSort = false;
       rankChangeSort = "";
-      render();
+      renderRows();
+      updateSortIcons();
     });
     document.querySelector(".sort-delta").addEventListener("click", () => {
       deltaSort = !deltaSort;
       volumeSort = false;
       rankChangeSort = "";
-      render();
+      renderRows();
+      updateSortIcons();
     });
     document.getElementById("rankChangeSort").addEventListener("click", () => {
       if (!rankChangeSort) rankChangeSort = "up";
@@ -509,7 +532,8 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       else rankChangeSort = "";
       deltaSort = false;
       volumeSort = false;
-      render();
+      renderRows();
+      updateSortIcons();
     });
 
     // --- Delta analysis ---
