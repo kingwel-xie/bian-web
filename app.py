@@ -1663,16 +1663,16 @@ def api_jobs() -> Response:
     def sort_key(job):
         end_str = (job.get("payload") or {}).get("activityEnd", "") or ""
         if not end_str:
-            return (0, float("inf"), "")
+            return (1, "", "")
         try:
             end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
             ts = end_dt.timestamp()
             now_bj = datetime.now(timezone.utc).astimezone(BJ)
             if end_dt < now_bj:
-                return (1, -ts, "")
+                return (2, -ts, "")
             return (0, ts, "")
         except ValueError:
-            return (0, end_str, "")
+            return (1, end_str, "")
 
     sorted_jobs = sorted(all_jobs, key=sort_key)
     start = (page - 1) * per_page
