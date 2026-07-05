@@ -2032,7 +2032,24 @@ def api_job_preview(job_id: str) -> Response:
             prev_data = read_json(prev_json_path, {})
             prev_rows = prev_data.get("rows") if isinstance(prev_data, dict) else []
             if isinstance(prev_rows, list):
-                ranges = [("1~5", 1, 5), ("6~20", 6, 20), ("21~50", 21, 50), ("51~200", 51, 200), ("201~1000", 201, 1000)]
+                r_mode = payload.get("rewardMode") or "rank"
+                r_tiers = payload.get("rewardTiers") or []
+                r_eligible = int(payload.get("eligibleUsers") or 0)
+                if r_mode == "rank" and r_tiers:
+                    sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
+                    ranges = []
+                    cursor = 1
+                    for t in sorted_tiers:
+                        rmin = t.get("rankMin", 0)
+                        rmax = t.get("rankMax", 0)
+                        if rmin > cursor:
+                            ranges.append((f"{cursor}~{rmin-1}", cursor, rmin-1))
+                        ranges.append((f"{rmin}~{rmax}", rmin, rmax))
+                        cursor = rmax + 1
+                elif r_mode == "total" and r_eligible > 0:
+                    ranges = [(f"1~{r_eligible}", 1, r_eligible)]
+                else:
+                    ranges = [("1~5",1,5),("6~20",6,20),("21~50",21,50),("51~200",51,200),("201~1000",201,1000)]
                 stats_list = []
                 for label, rmin, rmax in ranges:
                     items = [r for r in prev_rows if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
