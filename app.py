@@ -1661,12 +1661,20 @@ def api_jobs() -> Response:
     page = min(page, total_pages) if total else 1
 
     def sort_key(job):
-        end = (job.get("payload") or {}).get("activityEnd", "") or ""
-        if end:
-            return (0, end)
-        return (-1, "")
+        end_str = (job.get("payload") or {}).get("activityEnd", "") or ""
+        if not end_str:
+            return (0, float("inf"), "")
+        try:
+            end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+            ts = end_dt.timestamp()
+            now_bj = datetime.now(timezone.utc).astimezone(BJ)
+            if end_dt < now_bj:
+                return (1, -ts, "")
+            return (0, ts, "")
+        except ValueError:
+            return (0, end_str, "")
 
-    sorted_jobs = sorted(all_jobs, key=sort_key, reverse=True)
+    sorted_jobs = sorted(all_jobs, key=sort_key)
     start = (page - 1) * per_page
     end = start + per_page
     page_jobs = sorted_jobs[start:end]
