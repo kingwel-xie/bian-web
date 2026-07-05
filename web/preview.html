@@ -44,6 +44,8 @@
   .info-icon { cursor: help; font-size: 11px; opacity: 0.5; } .info-icon:hover { opacity: 1; }
   .sort-icon { font-size: 14px; opacity: 0.5; }
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
+  .search-clear { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 13px; color: var(--muted); line-height: 1; display: none; vertical-align: middle; }
+  .search-clear:hover { color: var(--ink); }
   .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
   .compare-btn:hover { background: #f5f0e8; }
@@ -172,14 +174,14 @@
     <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
       <table>
         <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
-        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" /></th><th>User ID</th><th class="num">分数</th><th class="num">真实成交量</th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
+        <thead><tr><th><select id="teamFilter"><option value="">全部</option></select></th><th style="display:flex;align-items:center;gap:2px"><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" style="flex:1;min-width:0;width:auto;max-width:180px" /><button id="searchClearBtn" class="search-clear" type="button">✕</button></th><th>User ID</th><th class="num">分数</th><th class="num" style="cursor:pointer" id="volumeSort">真实成交量 <span class="sort-icon" id="volumeSortIcon"></span></th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
         <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
   </div>
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"; }
+function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
 
 (async () => {
@@ -378,6 +380,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     }
 
     let deltaSort = false;
+    let volumeSort = false;
     let teamOfUser = (preview.teamMap || {});
 
     // populate team filter
@@ -415,6 +418,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
 
     function render() {
       const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      document.getElementById("searchClearBtn").style.display = q ? "inline" : "none";
       let rows = allRows.filter(r => {
         const txt = String(r.nickname || "").toLowerCase();
         if (q && !txt.includes(q)) return false;
@@ -424,6 +428,13 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
         }
         return true;
       });
+      if (volumeSort) {
+        rows = [...rows].sort((a, b) => {
+          const va = Number(a.restoredTradingVolume ?? a.tradingVolume ?? 0);
+          const vb = Number(b.restoredTradingVolume ?? b.tradingVolume ?? 0);
+          return vb - va;
+        });
+      }
       if (deltaSort) {
         rows = [...rows].sort((a, b) => (b.deltaGrade ?? -Infinity) - (a.deltaGrade ?? -Infinity));
       }
@@ -434,6 +445,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
           return rankChangeSort === "up" ? da - db : db - da;
         });
       }
+      document.getElementById("volumeSortIcon").innerHTML = volumeSort ? "▼" : "↕";
       document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
       document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
       document.getElementById("rows").innerHTML = rows.length ? rows.map(r => {
@@ -457,12 +469,23 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     render();
 
     document.getElementById("searchInput").addEventListener("input", render);
+    document.getElementById("searchClearBtn").addEventListener("click", () => {
+      document.getElementById("searchInput").value = "";
+      render();
+    });
     teamFilterEl.addEventListener("change", () => {
       teamFilter = teamFilterEl.value;
       render();
     });
+    document.getElementById("volumeSort").addEventListener("click", () => {
+      volumeSort = !volumeSort;
+      deltaSort = false;
+      rankChangeSort = "";
+      render();
+    });
     document.querySelector(".sort-delta").addEventListener("click", () => {
       deltaSort = !deltaSort;
+      volumeSort = false;
       rankChangeSort = "";
       render();
     });
@@ -471,6 +494,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       else if (rankChangeSort === "up") rankChangeSort = "down";
       else rankChangeSort = "";
       deltaSort = false;
+      volumeSort = false;
       render();
     });
 
