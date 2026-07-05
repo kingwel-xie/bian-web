@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>排行榜预览</title>
-<link rel="stylesheet" href="/css888/styles.css?v=20260704c" />
+<link rel="stylesheet" href="/css888/styles.css?v=20260704d" />
 <style>
   body { padding: 14px; }
   .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
@@ -44,6 +44,13 @@
   .info-icon { cursor: help; font-size: 11px; opacity: 0.5; } .info-icon:hover { opacity: 1; }
   .sort-icon { font-size: 14px; opacity: 0.5; }
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
+  .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+  .compare-btn:hover { background: #f5f0e8; }
+  .compare-btn input { display: none; }
+  .compare-btn:has(input:checked) { background: #e1f3f6; color: var(--accent-2); border-color: var(--accent-2); font-weight: 700; }
+  .snapshot-section { display: inline-flex; align-items: center; gap: 8px; }
+  .compare-section { display: inline-flex; align-items: center; gap: 8px; padding-left: 14px; margin-left: 4px; border-left: 1px solid var(--line); }
   .reward-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 10px auto 0; }
   .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); }
   .reward-body { padding: 12px 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
@@ -82,6 +89,7 @@
       </div>
     </div>
     <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
+    <hr class="sep" id="snapSep" style="margin:6px 0 14px 0" />
     <div class="preview-body">
       <div class="stats-panel">
         <h3>基础统计</h3>
@@ -179,6 +187,7 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
   const jobId = params.get("job");
   if (!jobId) { document.getElementById("meta").textContent = "缺少 job 参数。"; return; }
   const snapshotParam = params.get("snapshot") || "";
+  const compareParam = params.get("compare") || "";
 
   function fmtSnapshotTs(ts) {
     if (!ts) return "—";
@@ -187,7 +196,11 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
   }
 
   try {
-    const url = "/api/jobs/" + encodeURIComponent(jobId) + "/preview" + (snapshotParam ? "?snapshot=" + encodeURIComponent(snapshotParam) : "");
+    const qp = new URLSearchParams();
+    if (snapshotParam) qp.set("snapshot", snapshotParam);
+    if (compareParam) qp.set("compare", compareParam);
+    const qs = qp.toString();
+    const url = "/api/jobs/" + encodeURIComponent(jobId) + "/preview" + (qs ? "?" + qs : "");
     const resp = await fetch(url);
     const preview = await resp.json();
     if (!resp.ok || preview.error) throw new Error(preview.error || "加载失败");
@@ -224,29 +237,55 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
       preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
       preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
-      preview.discoveryUrl ? `<a href="${escapeHtml(preview.discoveryUrl)}">Discovery</a>` : "",
     ].filter(Boolean).join("");
 
     const snaps = preview.snapshots || [];
     const snapBar = document.getElementById("snapshotBar");
     if (snaps.length > 1) {
       const selected = snapshotParam || snaps[snaps.length - 1].timestamp;
+      const defaultCompare = snaps.length > 1 ? snaps[snaps.length - 2].timestamp : "";
+      const compareVal = compareParam || (snaps.findIndex(s => s.timestamp === selected) > 0 ? snaps[snaps.findIndex(s => s.timestamp === selected) - 1].timestamp : defaultCompare);
       snapBar.style.display = "flex";
       snapBar.innerHTML = `
-        <label for="snapshotSelect">快照版本</label>
-        <select id="snapshotSelect">
-          ${snaps.toReversed().map(s => `
-            <option value="${escapeHtml(s.timestamp)}" ${s.timestamp === selected ? "selected" : ""}>
-              ${escapeHtml(fmtSnapshotTs(s.timestamp))} (${s.rows ?? "?"} 行)
-            </option>
-          `).join("")}
-        </select>
-        <button id="deleteSnapshotBtn" type="button" style="background:none;border:1px solid #e0c8b0;border-radius:6px;cursor:pointer;padding:4px 10px;font-size:12px;color:#b34a4a;white-space:nowrap">删除</button>
+        <div class="snapshot-section">
+          <label for="snapshotSelect">快照版本</label>
+          <select id="snapshotSelect">
+            ${snaps.toReversed().map(s => `
+              <option value="${escapeHtml(s.timestamp)}" ${s.timestamp === selected ? "selected" : ""}>
+                ${escapeHtml(fmtSnapshotTs(s.timestamp))} (${s.rows ?? "?"} 行)
+              </option>
+            `).join("")}
+          </select>
+          <button id="deleteSnapshotBtn" type="button" style="background:none;border:1px solid #e0c8b0;border-radius:6px;cursor:pointer;padding:4px 10px;font-size:12px;color:#b34a4a;white-space:nowrap">删除</button>
+        </div>
+        <div class="compare-section">
+          <label style="font-size:12px;color:var(--muted);white-space:nowrap">对比快照</label>
+          <div class="compare-group">
+            ${snaps.toReversed().filter(s => s.timestamp !== selected).map(s => `
+              <label class="compare-btn">
+                <input type="radio" name="compare" value="${escapeHtml(s.timestamp)}" ${s.timestamp === compareVal ? "checked" : ""}>
+                <span>${escapeHtml(fmtSnapshotTs(s.timestamp))}</span>
+              </label>
+            `).join("")}
+          </div>
+        </div>
       `;
-      document.getElementById("snapshotSelect").addEventListener("change", (e) => {
+      function goWithParams(snap, comp) {
         const url = new URL(location.href);
-        url.searchParams.set("snapshot", e.target.value);
+        if (snap) url.searchParams.set("snapshot", snap);
+        else url.searchParams.delete("snapshot");
+        if (comp) url.searchParams.set("compare", comp);
+        else url.searchParams.delete("compare");
         location.href = url.href;
+      }
+      document.getElementById("snapshotSelect").addEventListener("change", (e) => {
+        const checked = document.querySelector("input[name='compare']:checked");
+        goWithParams(e.target.value, checked ? checked.value : "");
+      });
+      document.querySelectorAll("input[name='compare']").forEach(input => {
+        input.addEventListener("change", (e) => {
+          goWithParams(document.getElementById("snapshotSelect").value, e.target.value);
+        });
       });
       document.getElementById("deleteSnapshotBtn").addEventListener("click", () => {
         const sel = document.getElementById("snapshotSelect");
@@ -263,10 +302,10 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       });
     }
 
-    // delta tooltip
+    // delta comparison info
     const curTs = snapshotParam || (snaps.length ? snaps[snaps.length - 1].timestamp : null);
-    let prevTs = null;
-    if (curTs) {
+    let prevTs = compareParam || null;
+    if (!prevTs && curTs) {
       const idx = snaps.findIndex(s => s.timestamp === curTs);
       if (idx > 0) prevTs = snaps[idx - 1].timestamp;
     }
@@ -333,7 +372,9 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
     // show delta snapshot time in stats panel title
     const statsTitle = document.querySelector(".stats-panel h3");
     if (statsTitle && prevTs) {
-      statsTitle.textContent = "基础统计 — 增量快照 " + fmtSnapshotTs(prevTs);
+      statsTitle.textContent = "基础统计 — 增量对比 " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
+    } else if (statsTitle) {
+      statsTitle.textContent = "基础统计";
     }
 
     let deltaSort = false;

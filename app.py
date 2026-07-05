@@ -1981,7 +1981,17 @@ def api_job_preview(job_id: str) -> Response:
 
     try:
         prev_json_path = None
-        if snapshots:
+        compare_ts = request.args.get("compare")
+        if compare_ts and snapshots:
+            compare_entry = next(
+                (s for s in snapshots if s.get("timestamp") == compare_ts),
+                None,
+            )
+            if compare_entry:
+                p = compare_entry.get("json")
+                if p and Path(str(p)).exists():
+                    prev_json_path = Path(str(p))
+        if prev_json_path is None and snapshots:
             json_path_str = str(json_path)
             current_idx = next(
                 (i for i, s in enumerate(snapshots) if s.get("json") == json_path_str),
