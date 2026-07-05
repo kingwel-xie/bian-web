@@ -353,13 +353,27 @@ function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0
       return v.toFixed(2);
     }
 
-    const ranges = [
-      ["1~5", 1, 5],
-      ["6~20", 6, 20],
-      ["21~50", 21, 50],
-      ["51~200", 51, 200],
-      ["201~1000", 201, 1000],
-    ];
+    const rMode = preview.rewardMode || "rank";
+    const rTiers = preview.rewardTiers || [];
+    const rEligible = parseInt(preview.eligibleUsers) || 0;
+    const ranges =
+      rMode === "rank" && rTiers.length > 0
+        ? (() => {
+            const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
+            const result = [];
+            let cursor = 1;
+            for (const t of sorted) {
+              if (t.rankMin > cursor) {
+                result.push([`${cursor}~${t.rankMin - 1}`, cursor, t.rankMin - 1]);
+              }
+              result.push([`${t.rankMin}~${t.rankMax}`, t.rankMin, t.rankMax]);
+              cursor = t.rankMax + 1;
+            }
+            return result;
+          })()
+        : rMode === "total" && rEligible > 0
+          ? [[`1~${rEligible}`, 1, rEligible]]
+          : [["1~5",1,5],["6~20",6,20],["21~50",21,50],["51~200",51,200],["201~1000",201,1000]];
     const stats = rangeStats(allRows, ranges, preview.prevStats);
     const totalCount = allRows.length;
     const totalVolume = allRows.reduce((s, r) => s + (Number(r.grade) || 0), 0);
