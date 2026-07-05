@@ -1668,7 +1668,7 @@ def api_jobs() -> Response:
             end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
             ts = end_dt.timestamp()
             now_bj = datetime.now(timezone.utc).astimezone(BJ)
-            if end_dt < now_bj:
+            if end_dt + timedelta(hours=24) < now_bj:
                 return (2, -ts, "")
             return (0, ts, "")
         except ValueError:
