@@ -20,7 +20,7 @@
   .sticky-left th { background: #eee7d9; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
   th.sticky-left, td.sticky-left { width: 60px; }
-  th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
+  th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; margin-top: 6px; }
   th .job-name { font-size: 14px; font-weight: 700; }
   th .job-start { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; }
   .job-divider { border-right: 2px solid var(--line-strong); }
@@ -169,7 +169,11 @@ function renderAnalysis(data) {
         headHtml.push(`<span class="job-start">${escapeHtml(timeStr)}</span>`);
       }
     }
-    if (j.rewardToken) headHtml.push(`<span class="job-sub">奖励: ${escapeHtml(j.rewardToken)}</span>`);
+    if (j.rewardToken) {
+      let sub = `奖励: ${escapeHtml(j.rewardToken)}`;
+      if (j.rewardPriceUsd != null) sub += ` (@ $${j.rewardPriceUsd.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:8})})`;
+      headHtml.push(`<span class="job-sub">${sub}</span>`);
+    }
     headHtml.push('</th>');
   }
   headHtml.push('</tr><tr>');

@@ -1762,11 +1762,28 @@ def get_token_price(reward_token: str, activity_end: str) -> float | None:
         return 1.0
     try:
         dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
-        end_ms = int(dt.astimezone(timezone.utc).timestamp() * 1000)
     except (ValueError, OSError):
         return None
-    symbol = token + "USDT"
     import requests as req
+    now_bj = datetime.now(timezone.utc).astimezone(BJ)
+    # Activity not yet ended → use live ticker price
+    if dt > now_bj:
+        safe = token + "USDT"
+        for ticker_url in (
+            f"https://api.binance.com/api/v3/ticker/price?symbol={safe}",
+            f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={safe}",
+        ):
+            try:
+                resp = req.get(ticker_url, timeout=10)
+                data = resp.json()
+                if "price" in data:
+                    return float(data["price"])
+            except Exception:
+                continue
+        return None
+    # Activity ended → use historical kline close at end time
+    end_ms = int(dt.astimezone(timezone.utc).timestamp() * 1000)
+    symbol = token + "USDT"
     for url in (SPOT_KLINES, FAPI_KLINES):
         try:
             resp = req.get(
@@ -1862,12 +1879,27 @@ def api_analysis() -> Response:
 
         reward_token = (payload.get("rewardToken") or "").strip().upper()
         activity_end = payload.get("activityEnd")
-        price = job.get("rewardPriceUsd")
-        if price is None and reward_token and activity_end:
+        # Determine if activity is still active
+        is_active = False
+        if activity_end:
+            try:
+                end_dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+                is_active = end_dt > datetime.now(timezone.utc).astimezone(BJ)
+            except (ValueError, OSError):
+                pass
+        if is_active:
+            # Active jobs: always fetch live price
             price = get_token_price(reward_token, activity_end)
-            if price is not None:
-                job["rewardPriceUsd"] = price
-                needs_save = True
+            job["rewardPriceUsd"] = price
+            needs_save = True
+        else:
+            # Ended jobs: use cached price or fetch once
+            price = job.get("rewardPriceUsd")
+            if price is None and reward_token and activity_end:
+                price = get_token_price(reward_token, activity_end)
+                if price is not None:
+                    job["rewardPriceUsd"] = price
+                    needs_save = True
 
         ranges_out: list[dict[str, Any]] = []
         for i, (rmin, rmax) in enumerate(ranges):
