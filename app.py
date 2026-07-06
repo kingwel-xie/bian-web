@@ -1838,7 +1838,10 @@ def api_analysis() -> Response:
         if not limited:
             continue
 
+        reward_mode = payload.get("rewardMode") or "rank"
         for r in limited:
+            if reward_mode != "rank":
+                continue
             seq = int(r.get("sequence") or 0)
             if seq > max_rank:
                 max_rank = seq
