@@ -12,7 +12,7 @@
   .market-btn.active { background: #e1f3f6; color: var(--accent-2); border-color: var(--accent-2); }
   .market-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
-  table { border-collapse: collapse; table-layout: fixed; width: 100%; }
+  table { border-collapse: collapse; table-layout: fixed; }
   th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 6px 8px; text-align: left; white-space: nowrap; font-size: 12px; }
   th { position: sticky; top: 0; z-index: 2; background: #eee7d9; color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; user-select: none; }
   .sticky-left { position: sticky; left: 0; z-index: 3; background: #eee7d9; }
@@ -131,9 +131,12 @@ function renderAnalysis(data) {
   }
   document.getElementById("tableSection").style.display = "";
 
-  // Set table width to match column widths (sticky-left + num columns)
   const table = document.querySelector("#tableSection table");
   table.style.width = (100 + jobs.length * 3 * 140) + "px";
+  // colgroup for explicit column widths
+  const colgroup = document.createElement("colgroup");
+  colgroup.innerHTML = '<col style="width:100px">' + '<col style="width:140px"><col style="width:140px"><col style="width:140px">'.repeat(jobs.length);
+  table.insertBefore(colgroup, table.firstChild);
 
   // Build header: row 1 (job names), row 2 (sub columns)
   const headHtml = ['<tr><th class="sticky-left" rowspan="2">排名区间</th>'];
