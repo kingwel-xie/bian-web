@@ -50,6 +50,9 @@
   .bar-rect:hover { stroke: #333; stroke-width: 1.5; }
   .chart-legend { font-size: 10px; }
   .chart-legend rect { cursor: pointer; }
+  .chart-group-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; }
+  .chart-group-btn:hover { background: #f5f0e8; }
+  .chart-group-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .chart-axis-label { font-size: 11px; fill: #333; text-anchor: middle; }
   .chart-tooltip { position: fixed; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 100; }
 </style>
@@ -85,7 +88,13 @@
     <hr class="page-sep">
 
     <div class="analysis-panel">
-      <h3 style="margin:0 0 10px;font-size:13px;color:var(--accent)">每 $1 奖励成交量</h3>
+      <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励成交量</h3>
+        <div id="chartGroupToggle" class="btn-group" style="margin-left:auto">
+          <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
+          <button class="chart-group-btn" data-mode="job">按任务分组</button>
+        </div>
+      </div>
       <div id="efficiencyWrap" class="chart-wrap">
         <svg id="efficiencyChart" height="400"></svg>
       </div>
@@ -162,6 +171,7 @@ let currentMarket = "spot";
 let selectedJobIds = null;
 let allRankJobs = [];
 let _cachedRanges = [];
+let _chartGroupBy = "tier"; // "tier" | "job"
 
 async function loadAnalysis(market) {
   document.getElementById("loading").style.display = "";
@@ -353,31 +363,55 @@ function renderEfficiencyChart(jobs, ranges) {
   const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   if (!visible.length) { document.getElementById("efficiencyChart").innerHTML = ""; return; }
 
-  const COLORS = ["#2980b9", "#e67e22", "#27ae60", "#c0392b", "#8e44ad", "#16a085", "#d35400", "#2c3e50"];
+  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
+  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
 
-  // Gather bars: for each tier, collect each job's efficiency value
+  const groupBy = _chartGroupBy;
+
+  // --- Collect groups ---
   const groups = [];
-  for (let ri = 0; ri < ranges.length; ri++) {
-    const label = ranges[ri].label;
-    const bars = [];
+  if (groupBy === "tier") {
+    // Each group = one range, bars = one per visible job
+    for (let ri = 0; ri < ranges.length; ri++) {
+      const label = ranges[ri].label;
+      const bars = [];
+      for (let ji = 0; ji < visible.length; ji++) {
+        const j = visible[ji];
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const pool = tierAmountForRange(j.rewardTiers, label);
+        if (pool == null) continue;
+        const poolUsd = pool * (j.rewardPriceUsd ?? 1);
+        if (poolUsd <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].total / poolUsd, tierLabel: label });
+      }
+      if (bars.length) groups.push({ label, bars, keyIdx: -1 });
+    }
+  } else {
+    // Each group = one job, bars = one per range with data
     for (let ji = 0; ji < visible.length; ji++) {
       const j = visible[ji];
-      if (!j.ranges || !j.ranges[ri]) continue;
-      const pool = tierAmountForRange(j.rewardTiers, label);
-      if (pool == null) continue;
-      const poolUsd = pool * (j.rewardPriceUsd ?? 1);
-      if (poolUsd <= 0) continue;
-      const eff = j.ranges[ri].total / poolUsd;
-      bars.push({ jobIdx: ji, job: j, eff });
+      const bars = [];
+      for (let ri = 0; ri < ranges.length; ri++) {
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const label = ranges[ri].label;
+        const pool = tierAmountForRange(j.rewardTiers, label);
+        if (pool == null) continue;
+        const poolUsd = pool * (j.rewardPriceUsd ?? 1);
+        if (poolUsd <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].total / poolUsd, tierLabel: label });
+      }
+      if (bars.length) {
+        const name = j.name || j.resourceId || j.id;
+        groups.push({ label: name, bars, keyIdx: ji });
+      }
     }
-    if (bars.length) groups.push({ label, bars });
   }
   if (!groups.length) { document.getElementById("efficiencyChart").innerHTML = ""; return; }
 
-  // Find max efficiency across all bars
+  // Find max eff and number of bars per group
   const allEff = groups.flatMap(g => g.bars.map(b => b.eff));
   const maxEff = Math.max(...allEff) || 1;
-  const numBars = visible.length;
+  const numBars = Math.max(...groups.map(g => g.bars.length));
 
   // Dimensions
   const W = 60 + groups.length * (numBars * 20 + 24);
@@ -388,6 +422,7 @@ function renderEfficiencyChart(jobs, ranges) {
   const barW = Math.min(16, groupW / numBars - 2);
 
   function sy(v) { return MT + PH - (v / maxEff) * PH; }
+  function fmtLabel(s) { return s.length > 10 ? escapeHtml(s.slice(0, 9)) + "⋯" : escapeHtml(s); }
 
   let svg = `<g class="chart-axis">`;
 
@@ -409,10 +444,8 @@ function renderEfficiencyChart(jobs, ranges) {
   for (let gi = 0; gi < groups.length; gi++) {
     const g = groups[gi];
     const gx = ML + gi * groupW + groupW / 2;
-    // Group label
-    svg += `<text class="bar-group-label" x="${gx}" y="${MT + PH + 18}">${escapeHtml(g.label)}</text>`;
+    svg += `<text class="bar-group-label" x="${gx}" y="${MT + PH + 18}">${fmtLabel(g.label)}</text>`;
 
-    // Bars within group, centered
     const startX = gx - (g.bars.length * barW + (g.bars.length - 1) * 2) / 2;
     for (let bi = 0; bi < g.bars.length; bi++) {
       const b = g.bars[bi];
@@ -421,8 +454,14 @@ function renderEfficiencyChart(jobs, ranges) {
       const by = sy(b.eff);
       const name = escapeHtml(b.job.name || b.job.resourceId || b.job.id);
       const effStr = fmtVolume(b.eff);
-      svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${COLORS[b.jobIdx % COLORS.length]}" opacity=".85"
-        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(g.label)}\\n效率: ${effStr}/\\$')"
+      let color;
+      if (groupBy === "tier") {
+        color = JOB_COLORS[b.jobIdx % JOB_COLORS.length];
+      } else {
+        color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
+      }
+      svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${color}" opacity=".85"
+        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n效率: ${effStr}/\\$')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
     }
@@ -431,17 +470,31 @@ function renderEfficiencyChart(jobs, ranges) {
   // Legend (vertical, right side)
   let legendW = 0;
   const LEGEND_PAD = 10;
-  const names = visible.map(j => escapeHtml(j.name || j.resourceId || j.id));
-  // Approximate text width: 7px per char + 16px (swatch + gap)
-  const maxNameLen = Math.max(...names.map(n => n.length));
+  let legendEntries;
+  if (groupBy === "tier") {
+    legendEntries = visible.map((j, ji) => ({ label: escapeHtml(j.name || j.resourceId || j.id), color: JOB_COLORS[ji % JOB_COLORS.length] }));
+  } else {
+    // Collect unique tier labels that have data
+    const used = new Set();
+    const entries = [];
+    for (const g of groups) {
+      for (const b of g.bars) {
+        if (!used.has(b.tierIdx)) {
+          used.add(b.tierIdx);
+          entries.push({ label: escapeHtml(b.tierLabel), color: TIER_COLORS[b.tierIdx % TIER_COLORS.length] });
+        }
+      }
+    }
+    legendEntries = entries;
+  }
+  const maxNameLen = Math.max(...legendEntries.map(e => e.label.length)) || 1;
   legendW = maxNameLen * 7 + 26 + LEGEND_PAD;
   const Lx = ML + PW + 10;
-  for (let ji = 0; ji < visible.length; ji++) {
-    const j = visible[ji];
-    const name = names[ji];
-    const yy = MT + 10 + ji * 18;
-    svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${COLORS[ji % COLORS.length]}" rx="2"/>`;
-    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${name}</text>`;
+  for (let li = 0; li < legendEntries.length; li++) {
+    const e = legendEntries[li];
+    const yy = MT + 10 + li * 18;
+    svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
   }
   const W2 = ML + PW + 10 + legendW + MR;
 
@@ -518,7 +571,17 @@ document.getElementById("btnSpot").addEventListener("click", () => {
   document.querySelectorAll(".market-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("btnSpot").classList.add("active");
   currentMarket = "spot";
-  loadAnalysis("spot");
+loadAnalysis("spot");
+
+// Chart group toggle
+document.getElementById("chartGroupToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll(".chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _chartGroupBy = btn.dataset.mode;
+  renderEfficiencyChart(allRankJobs, _cachedRanges);
+});
 });
 
 document.getElementById("btnUm").addEventListener("click", () => {
@@ -529,6 +592,16 @@ document.getElementById("btnUm").addEventListener("click", () => {
 });
 
 loadAnalysis("spot");
+
+// Chart group toggle
+document.getElementById("chartGroupToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll(".chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _chartGroupBy = btn.dataset.mode;
+  renderEfficiencyChart(allRankJobs, _cachedRanges);
+});
 </script>
 </body>
 </html>
