@@ -87,7 +87,7 @@
     <div class="analysis-panel">
       <h3 style="margin:0 0 10px;font-size:13px;color:var(--accent)">每 $1 奖励成交量</h3>
       <div id="efficiencyWrap" class="chart-wrap">
-        <svg id="efficiencyChart" width="100%" height="400"></svg>
+        <svg id="efficiencyChart" height="400"></svg>
       </div>
     </div>
 
@@ -429,7 +429,7 @@ function renderEfficiencyChart(jobs, ranges) {
   }
 
   // Legend (top-right, below title)
-  const lx = ML + PW - 10;
+  let lx = ML + PW - 10;
   for (let ji = visible.length - 1; ji >= 0; ji--) {
     const j = visible[ji];
     const name = escapeHtml(j.name || j.resourceId || j.id);
@@ -439,7 +439,9 @@ function renderEfficiencyChart(jobs, ranges) {
     lx -= 100;
   }
 
-  document.getElementById("efficiencyChart").innerHTML = svg;
+  const chartEl = document.getElementById("efficiencyChart");
+  chartEl.setAttribute("width", W);
+  chartEl.innerHTML = svg;
 }
 
 // Bar chart tooltip
