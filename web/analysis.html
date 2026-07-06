@@ -20,9 +20,9 @@
   .sticky-left th { background: #eee7d9; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
   th.sticky-left, td.sticky-left { width: 60px; }
-  th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
+  th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
   th .job-name { font-size: 14px; font-weight: 700; }
-  th .job-time { font-size: 10px; font-weight: 400; color: var(--muted); display: block; margin-top: 2px; }
+  th .job-time { font-size: 10px; font-weight: 400; color: var(--muted); margin-left: 6px; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -161,8 +161,8 @@ function renderAnalysis(data) {
     const start = j.activityStart || "";
     const end = j.activityEnd || "";
     if (start || end) {
-      let timeStr = start ? start.replace(" ", "<br>") + " ~ " : "~ ";
-      timeStr += end ? end.replace(" ", "<br>") : "";
+      let timeStr = start ? start + " ~ " : "~ ";
+      timeStr += end ? end : "";
       headHtml.push(`<span class="job-time">${timeStr}</span>`);
     }
     headHtml.push('</th>');
