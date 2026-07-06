@@ -6,7 +6,8 @@
 <title>任务分析</title>
 <link rel="stylesheet" href="/css888/styles.css?v=20260705" />
 <style>
-  .page-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .page-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .page-head .sep { width: 100%; border: none; border-top: 1px solid var(--line); margin: 0; }
   .market-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); padding: 0 16px; cursor: pointer; font-weight: 700; font-size: 13px; user-select: none; }
   .market-btn:hover { background: #f5f0e8; }
   .market-btn.active { background: #e1f3f6; color: var(--accent-2); border-color: var(--accent-2); }
@@ -43,7 +44,8 @@
 <body>
 <main class="shell">
   <div class="page-head">
-    <h2>任务分析</h2>
+    <h2 style="margin-bottom:0">任务分析</h2>
+    <hr class="sep">
     <div style="display:flex;gap:6px">
       <button class="market-btn active" data-market="spot" id="btnSpot">SPOT</button>
       <button class="market-btn" data-market="um" id="btnUm">UM</button>
