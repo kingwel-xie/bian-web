@@ -203,9 +203,9 @@ function renderAnalysis(data) {
       let ppStr = "—";
       if (perPerson != null && perPerson > 0) {
         if (j.rewardPriceUsd != null) {
-          ppStr = "$" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
+          ppStr = "$" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
         } else {
-          ppStr = perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
+          ppStr = perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
         }
       }
       const sep = ji < jobs.length - 1 ? ' job-divider' : '';
@@ -235,14 +235,14 @@ function renderAnalysis(data) {
         const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
         const totalUsd = (j.rewardPriceUsd != null) ? "($" + (j.totalReward * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
         const perPerson = j.eligibleUsers > 0 ? j.totalReward / j.eligibleUsers : 0;
-        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) + ")" : "";
+        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
         return `<div class="total-card">
           <div class="name">${escapeHtml(name)}</div>
           <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)} ${totalUsd}</span></div>
           <div class="sub">总奖池</div>
           <div class="value">${j.eligibleUsers.toLocaleString("en-US")}</div>
           <div class="sub">有效用户数</div>
-          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) : "—"} <span class="token">${perPersonUsd}</span></div>
+          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—"} <span class="token">${perPersonUsd}</span></div>
           <div class="sub">人均奖励(USD)</div>
         </div>`;
       }).join("") + '</div>';
