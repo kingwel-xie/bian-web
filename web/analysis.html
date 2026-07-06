@@ -25,7 +25,6 @@
   th .job-name { font-size: 14px; font-weight: 700; }
   th .job-start { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; }
   th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
-  th .job-end { font-size: 12px; font-weight: 400; color: var(--muted); display: block; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -160,9 +159,18 @@ function renderAnalysis(data) {
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
     const cls = ji < jobs.length - 1 ? ' class="job-divider"' : '';
     headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span class="job-name">${escapeHtml(name)}</span>`);
-    if (j.activityStart) headHtml.push(`<span class="job-start">起始: ${escapeHtml(j.activityStart)}</span>`);
+    {
+      const s = j.activityStart || "";
+      const e = j.activityEnd || "";
+      if (s || e) {
+        let timeStr = "";
+        if (s) timeStr += s;
+        if (s && e) timeStr += " ~ ";
+        if (e) timeStr += e;
+        headHtml.push(`<span class="job-start">${escapeHtml(timeStr)}</span>`);
+      }
+    }
     if (j.rewardToken) headHtml.push(`<span class="job-sub">奖励: ${escapeHtml(j.rewardToken)}</span>`);
-    if (j.activityEnd) headHtml.push(`<span class="job-end">结束: ${escapeHtml(j.activityEnd)}</span>`);
     headHtml.push('</th>');
   }
   headHtml.push('</tr><tr>');
