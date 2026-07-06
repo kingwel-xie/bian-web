@@ -637,6 +637,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
     const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
     const rewardTiers = previewData.rewardTiers || [];
     const rewardPriceUsd = previewData.rewardPriceUsd != null ? parseFloat(previewData.rewardPriceUsd) : null;
+    const rewardPriceIsLive = previewData.rewardPriceIsLive === true;
     const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
     const rewardMode = previewData.rewardMode || "rank";
     const totalReward = parseFloat(previewData.totalReward) || 0;
@@ -724,9 +725,15 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
       if (useTotal) {
         computeTotalReward(price);
       }
-      rewardPriceDisplay.textContent = fromApi
-        ? "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 })
-        : "(历史) $" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+      let priceLabel = "";
+      if (fromApi) {
+        priceLabel = "";
+      } else if (rewardPriceIsLive) {
+        priceLabel = "实时";
+      } else {
+        priceLabel = "收盘";
+      }
+      rewardPriceDisplay.textContent = (priceLabel ? `(${priceLabel}) ` : "") + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
     }
 
     document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);

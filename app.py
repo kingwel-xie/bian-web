@@ -1879,12 +1879,12 @@ def api_analysis() -> Response:
 
         reward_token = (payload.get("rewardToken") or "").strip().upper()
         activity_end = payload.get("activityEnd")
-        # Determine if activity is still active
+        # Determine if activity is still active (matches sort_key: 24h grace)
         is_active = False
         if activity_end:
             try:
                 end_dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
-                is_active = end_dt > datetime.now(timezone.utc).astimezone(BJ)
+                is_active = end_dt + timedelta(hours=24) > datetime.now(timezone.utc).astimezone(BJ)
             except (ValueError, OSError):
                 pass
         if is_active:
@@ -1925,6 +1925,7 @@ def api_analysis() -> Response:
             "totalVolume": total_volume,
             "rewardToken": reward_token,
             "rewardPriceUsd": price,
+            "rewardPriceIsLive": is_active,
             "activityStart": payload.get("activityStart"),
             "activityEnd": payload.get("activityEnd"),
             "rewardMode": reward_mode,
@@ -2324,10 +2325,16 @@ def api_job_preview(job_id: str) -> Response:
             if team_name:
                 team_map[nick] = team_name
         preview["teamMap"] = team_map
-        preview["rewardPriceUsd"] = get_token_price(
-            payload.get("rewardToken", ""),
-            payload.get("activityEnd", ""),
-        )
+        p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
+        p_activity_end = payload.get("activityEnd", "")
+        preview["rewardPriceUsd"] = get_token_price(p_reward_token, p_activity_end)
+        preview["rewardPriceIsLive"] = False
+        if p_activity_end:
+            try:
+                p_end_dt = datetime.strptime(p_activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+                preview["rewardPriceIsLive"] = p_end_dt + timedelta(hours=24) > datetime.now(timezone.utc).astimezone(BJ)
+            except (ValueError, OSError):
+                pass
         return jsonify(preview)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
