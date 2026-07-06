@@ -689,7 +689,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
       document.getElementById("rewardPerMDisplay").innerHTML = (perM > 0 ? nf(perM, 4) : "—") + " " + rewardToken + (price != null ? ` (≈ $${nf(perM * price, 2)})` : "");
     }
 
-    async function updateReward() {
+    async function updateReward(forceApi) {
       const hasReward = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
       if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
       rewardPanel.style.display = "";
@@ -703,8 +703,13 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
       if (useTotal) {
         computeTotalReward(null);
       }
-      let price = rewardPriceUsd;
+      let price;
       let fromApi = false;
+      if (forceApi) {
+        price = null;
+      } else {
+        price = rewardPriceUsd;
+      }
       if (price == null) {
         rewardPriceDisplay.textContent = "加载中...";
         const symbol = rewardToken + "USDT";
@@ -725,19 +730,12 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
       if (useTotal) {
         computeTotalReward(price);
       }
-      let priceLabel = "";
-      if (fromApi) {
-        priceLabel = "";
-      } else if (rewardPriceIsLive) {
-        priceLabel = "实时";
-      } else {
-        priceLabel = "收盘";
-      }
-      rewardPriceDisplay.textContent = (priceLabel ? `(${priceLabel}) ` : "") + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+      const label = fromApi ? "" : (rewardPriceIsLive ? "实时" : "收盘");
+      rewardPriceDisplay.textContent = (label ? `(${label}) ` : "") + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
     }
 
-    document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);
-    if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward();
+    document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
+    if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
 
     // --- Collapsible panels ---
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
