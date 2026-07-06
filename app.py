@@ -1754,6 +1754,37 @@ def _extend_ranges(max_rank: int) -> list[tuple[int, int]]:
     return ranges
 
 
+def get_token_price(reward_token: str, activity_end: str) -> float | None:
+    if not reward_token or not activity_end:
+        return None
+    token = reward_token.strip().upper()
+    if token in ("USDT", "USDC"):
+        return 1.0
+    try:
+        dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+        end_ms = int(dt.astimezone(timezone.utc).timestamp() * 1000)
+    except (ValueError, OSError):
+        return None
+    symbol = token + "USDT"
+    import requests as req
+    for url in (SPOT_KLINES, FAPI_KLINES):
+        try:
+            resp = req.get(
+                url,
+                params={"symbol": symbol, "interval": "1h", "endTime": end_ms, "limit": 1},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list) and len(data) > 0:
+                    close = float(data[0][4])
+                    if close > 0:
+                        return close
+        except Exception:
+            continue
+    return None
+
+
 @app.get("/api/analysis")
 def api_analysis() -> Response:
     market = (request.args.get("market") or "").strip().lower()
@@ -1804,6 +1835,7 @@ def api_analysis() -> Response:
     ranges = _extend_ranges(max_rank)
 
     results: list[dict[str, Any]] = []
+    needs_save = False
     for entry in job_data:
         job = entry["job"]
         payload = entry["payload"]
@@ -1828,6 +1860,15 @@ def api_analysis() -> Response:
         total_reward = float(payload.get("totalReward") or 0)
         eligible_users = int(payload.get("eligibleUsers") or 0)
 
+        reward_token = (payload.get("rewardToken") or "").strip().upper()
+        activity_end = payload.get("activityEnd")
+        price = job.get("rewardPriceUsd")
+        if price is None and reward_token and activity_end:
+            price = get_token_price(reward_token, activity_end)
+            if price is not None:
+                job["rewardPriceUsd"] = price
+                needs_save = True
+
         ranges_out: list[dict[str, Any]] = []
         for i, (rmin, rmax) in enumerate(ranges):
             rs = range_stats[i]
@@ -1850,7 +1891,8 @@ def api_analysis() -> Response:
             "activityEnd": payload.get("activityEnd"),
             "rowCount": len(rows),
             "totalVolume": total_volume,
-            "rewardToken": (payload.get("rewardToken") or "").strip().upper(),
+            "rewardToken": reward_token,
+            "rewardPriceUsd": price,
             "activityStart": payload.get("activityStart"),
             "activityEnd": payload.get("activityEnd"),
             "rewardMode": reward_mode,
@@ -1862,6 +1904,10 @@ def api_analysis() -> Response:
             "eligibleUsers": eligible_users,
             "ranges": ranges_out,
         })
+
+    if needs_save:
+        with state_lock:
+            save_jobs(all_jobs)
 
     # sort: active asc → no end → expired desc
     def sort_key(j):

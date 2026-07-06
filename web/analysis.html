@@ -22,9 +22,7 @@
   th.sticky-left, td.sticky-left { width: 60px; }
   th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
   th .job-name { font-size: 14px; font-weight: 700; }
-  th .job-name { font-size: 14px; font-weight: 700; }
   th .job-start { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; }
-  th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -35,6 +33,7 @@
   .total-card .name { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
   .total-card .value { font-size: 14px; font-weight: 700; margin-top: 4px; }
   .total-card .token { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .total-card .usd { color: #22a6b3; font-weight: 400; font-size: 11px; }
   .total-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 </style>
 </head>
@@ -176,7 +175,7 @@ function renderAnalysis(data) {
   headHtml.push('</tr><tr>');
   for (let ji = 0; ji < jobs.length; ji++) {
     const sep = ji < jobs.length - 1 ? ' job-divider' : '';
-    headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励</th>`);
+    headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励(USD)</th>`);
   }
   headHtml.push('</tr>');
   document.getElementById("tableHead").innerHTML = headHtml.join("");
@@ -197,7 +196,14 @@ function renderAnalysis(data) {
       const q1 = rdata ? rdata.q1 : 0;
       const last = rdata ? rdata.last : 0;
       const perPerson = (j.rewardMode === "rank") ? tierPerPerson(j.rewardTiers, label) : null;
-      const ppStr = (perPerson != null && perPerson > 0) ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) : "—";
+      let ppStr = "—";
+      if (perPerson != null && perPerson > 0) {
+        if (j.rewardPriceUsd != null) {
+          ppStr = "$" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
+        } else {
+          ppStr = perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
+        }
+      }
       const sep = ji < jobs.length - 1 ? ' job-divider' : '';
       bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${ppStr}</td>`);
     }
@@ -223,12 +229,17 @@ function renderAnalysis(data) {
     sec.innerHTML = '<h3>总量模式奖励</h3><div class="total-grid">' +
       totalJobs.map(j => {
         const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
+        const totalUsd = (j.rewardPriceUsd != null) ? "($" + (j.totalReward * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
+        const perPerson = j.eligibleUsers > 0 ? j.totalReward / j.eligibleUsers : 0;
+        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) + ")" : "";
         return `<div class="total-card">
           <div class="name">${escapeHtml(name)}</div>
-          <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)}</span></div>
+          <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)} ${totalUsd}</span></div>
           <div class="sub">总奖池</div>
           <div class="value">${j.eligibleUsers.toLocaleString("en-US")}</div>
           <div class="sub">有效用户数</div>
+          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) : "—"} <span class="token">${perPersonUsd}</span></div>
+          <div class="sub">人均奖励(USD)</div>
         </div>`;
       }).join("") + '</div>';
   }
