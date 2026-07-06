@@ -20,9 +20,9 @@
   .sticky-left th { background: #eee7d9; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
   th.sticky-left, td.sticky-left { width: 60px; }
-  th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+  th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
   th .job-name { font-size: 14px; font-weight: 700; }
-  th .job-time { font-size: 10px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  th .job-time { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -157,7 +157,7 @@ function renderAnalysis(data) {
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
     const cls = ji < jobs.length - 1 ? ' class="job-divider"' : '';
     headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span class="job-name">${escapeHtml(name)}</span>`);
-    if (j.rewardToken) headHtml.push(`<span class="job-sub">${escapeHtml(j.rewardToken)}</span>`);
+    if (j.rewardToken) headHtml.push(`<span class="job-sub">奖励: ${escapeHtml(j.rewardToken)}</span>`);
     const start = j.activityStart || "";
     const end = j.activityEnd || "";
     if (start || end) {
