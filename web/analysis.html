@@ -183,7 +183,7 @@ function renderAnalysis(data) {
   headHtml.push('</tr><tr>');
   for (let ji = 0; ji < jobs.length; ji++) {
     const sep = ji < jobs.length - 1 ? ' job-divider' : '';
-    headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励(USD)</th>`);
+    headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励</th>`);
   }
   headHtml.push('</tr>');
   document.getElementById("tableHead").innerHTML = headHtml.join("");
