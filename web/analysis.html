@@ -35,6 +35,9 @@
   .total-card .token { font-weight: 400; color: var(--muted); font-size: 12px; }
   .total-card .usd { color: #22a6b3; font-weight: 400; font-size: 11px; }
   .total-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .job-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .job-selector button { font-size: 12px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .job-selector button.selected { background: #eee7d9; border-color: var(--accent); color: var(--accent); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -46,6 +49,8 @@
       <button class="market-btn" data-market="um" id="btnUm">UM</button>
     </div>
   </div>
+
+  <div id="jobSelector" class="job-selector" style="display:none"></div>
 
   <div id="loading" class="empty">加载中...</div>
 
@@ -113,6 +118,8 @@ function tierPerPerson(tiers, label) {
 }
 
 let currentMarket = "spot";
+let selectedJobIds = null;
+let allRankJobs = [];
 
 async function loadAnalysis(market) {
   document.getElementById("loading").style.display = "";
@@ -121,6 +128,8 @@ async function loadAnalysis(market) {
   document.getElementById("tableBody").innerHTML = "";
   document.getElementById("totalModeSection").style.display = "none";
   document.getElementById("totalModeSection").innerHTML = "";
+  document.getElementById("jobSelector").style.display = "none";
+  document.getElementById("jobSelector").innerHTML = "";
 
   try {
     const resp = await fetch("/api/analysis?market=" + encodeURIComponent(market));
@@ -133,30 +142,106 @@ async function loadAnalysis(market) {
 }
 
 function renderAnalysis(data) {
-  const jobs = data.jobs || [];
+  const rawJobs = data.jobs || [];
   const ranges = data.ranges || [];
 
   document.getElementById("loading").style.display = "none";
-  if (!jobs.length) {
+
+  // Only rank-mode jobs in main table
+  allRankJobs = rawJobs.filter(j => j.rewardMode === "rank");
+  if (!rawJobs.length) {
     document.getElementById("tableSection").style.display = "";
     document.getElementById("tableBody").innerHTML = '<tr><td colspan="100" class="empty">没有数据。</td></tr>';
     return;
   }
+  if (!allRankJobs.length) {
+    document.getElementById("tableSection").style.display = "";
+    document.getElementById("tableBody").innerHTML = '<tr><td colspan="100" class="empty">没有排名模式的任务。</td></tr>';
+    return;
+  }
+
+  // Job selector
+  selectedJobIds = allRankJobs.map(j => j.id);
+  renderJobSelector(allRankJobs, ranges);
+  renderTable(allRankJobs, ranges);
+
+  // Total mode section (always show regardless of selection)
+  const totalJobs = rawJobs.filter(j => j.rewardMode === "total" && j.totalReward > 0 && j.eligibleUsers > 0);
+  if (totalJobs.length) {
+    const sec = document.getElementById("totalModeSection");
+    sec.style.display = "";
+    sec.innerHTML = '<h3>总量模式奖励</h3><div class="total-grid">' +
+      totalJobs.map(j => {
+        const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
+        const totalUsd = (j.rewardPriceUsd != null) ? "($" + (j.totalReward * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
+        const perPerson = j.eligibleUsers > 0 ? j.totalReward / j.eligibleUsers : 0;
+        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
+        return `<div class="total-card">
+          <div class="name">${escapeHtml(name)}</div>
+          <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)} ${totalUsd}</span></div>
+          <div class="sub">总奖池</div>
+          <div class="value">${j.eligibleUsers.toLocaleString("en-US")}</div>
+          <div class="sub">有效用户数</div>
+          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—"} <span class="token">${perPersonUsd}</span></div>
+          <div class="sub">人均奖励(USD)</div>
+        </div>`;
+      }).join("") + '</div>';
+  }
+}
+
+function renderJobSelector(jobs, ranges) {
+  const sel = document.getElementById("jobSelector");
+  sel.style.display = "flex";
+  const parts = jobs.map((j, i) =>
+    `<button class="selected" data-idx="${i}">${escapeHtml(j.name || j.resourceId || j.id)}</button>`
+  ).join("");
+  sel.innerHTML = parts;
+  sel.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx);
+      const id = jobs[idx].id;
+      const pos = selectedJobIds.indexOf(id);
+      if (pos >= 0) {
+        selectedJobIds.splice(pos, 1);
+        btn.classList.remove("selected");
+      } else {
+        selectedJobIds.push(id);
+        btn.classList.add("selected");
+      }
+      if (selectedJobIds.length === 0) {
+        selectedJobIds.push(id);
+        btn.classList.add("selected");
+        return;
+      }
+      renderTable(allRankJobs, ranges);
+    });
+  });
+}
+
+function renderTable(jobs, ranges) {
+  const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   document.getElementById("tableSection").style.display = "";
+  if (!visible.length) {
+    document.getElementById("tableBody").innerHTML = '<tr><td colspan="100" class="empty">请至少选择一个任务。</td></tr>';
+    return;
+  }
 
   const COLS_PER_JOB = 7;
   const table = document.querySelector("#tableSection table");
-  table.style.width = (60 + jobs.length * COLS_PER_JOB * 84) + "px";
+  // Remove existing colgroup
+  const oldCg = table.querySelector("colgroup");
+  if (oldCg) oldCg.remove();
+  table.style.width = (60 + visible.length * COLS_PER_JOB * 84) + "px";
   const colgroup = document.createElement("colgroup");
-  colgroup.innerHTML = '<col style="width:60px">' + '<col style="width:84px">'.repeat(jobs.length * COLS_PER_JOB);
+  colgroup.innerHTML = '<col style="width:60px">' + '<col style="width:84px">'.repeat(visible.length * COLS_PER_JOB);
   table.insertBefore(colgroup, table.firstChild);
 
   // Build header: row 1 (job names), row 2 (sub columns)
   const headHtml = ['<tr><th class="sticky-left" rowspan="2">排名区间</th>'];
-  for (let ji = 0; ji < jobs.length; ji++) {
-    const j = jobs[ji];
+  for (let ji = 0; ji < visible.length; ji++) {
+    const j = visible[ji];
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
-    const cls = ji < jobs.length - 1 ? ' class="job-divider"' : '';
+    const cls = ji < visible.length - 1 ? ' class="job-divider"' : '';
     headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span class="job-name">${escapeHtml(name)}</span>`);
     {
       const s = j.activityStart || "";
@@ -181,8 +266,8 @@ function renderAnalysis(data) {
     headHtml.push('</th>');
   }
   headHtml.push('</tr><tr>');
-  for (let ji = 0; ji < jobs.length; ji++) {
-    const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+  for (let ji = 0; ji < visible.length; ji++) {
+    const sep = ji < visible.length - 1 ? ' job-divider' : '';
     headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励</th>`);
   }
   headHtml.push('</tr>');
@@ -194,8 +279,8 @@ function renderAnalysis(data) {
     const r = ranges[ri];
     const label = r.label;
     bodyParts.push(`<tr><td class="sticky-left">${escapeHtml(label)}</td>`);
-    for (let ji = 0; ji < jobs.length; ji++) {
-      const j = jobs[ji];
+    for (let ji = 0; ji < visible.length; ji++) {
+      const j = visible[ji];
       const rdata = (j.ranges && j.ranges[ri]) ? j.ranges[ri] : null;
       const total = rdata ? rdata.total : 0;
       const pct = rdata ? rdata.pct : 0;
@@ -203,7 +288,7 @@ function renderAnalysis(data) {
       const med = rdata ? rdata.med : 0;
       const q1 = rdata ? rdata.q1 : 0;
       const last = rdata ? rdata.last : 0;
-      const perPerson = (j.rewardMode === "rank") ? tierPerPerson(j.rewardTiers, label) : null;
+      const perPerson = tierPerPerson(j.rewardTiers, label);
       let ppStr = "—";
       if (perPerson != null && perPerson > 0) {
         if (j.rewardPriceUsd != null) {
@@ -212,7 +297,7 @@ function renderAnalysis(data) {
           ppStr = perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
         }
       }
-      const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+      const sep = ji < visible.length - 1 ? ' job-divider' : '';
       bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${ppStr}</td>`);
     }
     bodyParts.push('</tr>');
@@ -220,37 +305,14 @@ function renderAnalysis(data) {
 
   // Total row
   bodyParts.push('<tr class="row-total"><td class="sticky-left">合计</td>');
-  for (let ji = 0; ji < jobs.length; ji++) {
-    const j = jobs[ji];
-    const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+  for (let ji = 0; ji < visible.length; ji++) {
+    const j = visible[ji];
+    const sep = ji < visible.length - 1 ? ' job-divider' : '';
     bodyParts.push(`<td class="num">${fmtVolume(j.totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num${sep}">—</td>`);
   }
   bodyParts.push('</tr>');
 
   document.getElementById("tableBody").innerHTML = bodyParts.join("");
-
-  // Total mode section
-  const totalJobs = jobs.filter(j => j.rewardMode === "total" && j.totalReward > 0 && j.eligibleUsers > 0);
-  if (totalJobs.length) {
-    const sec = document.getElementById("totalModeSection");
-    sec.style.display = "";
-    sec.innerHTML = '<h3>总量模式奖励</h3><div class="total-grid">' +
-      totalJobs.map(j => {
-        const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
-        const totalUsd = (j.rewardPriceUsd != null) ? "($" + (j.totalReward * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
-        const perPerson = j.eligibleUsers > 0 ? j.totalReward / j.eligibleUsers : 0;
-        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
-        return `<div class="total-card">
-          <div class="name">${escapeHtml(name)}</div>
-          <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)} ${totalUsd}</span></div>
-          <div class="sub">总奖池</div>
-          <div class="value">${j.eligibleUsers.toLocaleString("en-US")}</div>
-          <div class="sub">有效用户数</div>
-          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—"} <span class="token">${perPersonUsd}</span></div>
-          <div class="sub">人均奖励(USD)</div>
-        </div>`;
-      }).join("") + '</div>';
-  }
 }
 
 document.getElementById("btnSpot").addEventListener("click", () => {
