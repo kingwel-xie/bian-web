@@ -731,7 +731,12 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
         computeTotalReward(price);
       }
       const label = fromApi ? "" : (rewardPriceIsLive ? "实时" : "收盘");
-      rewardPriceDisplay.textContent = (label ? `(${label}) ` : "") + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+      const labelHtml = label
+        ? (rewardPriceIsLive
+          ? '<span style="color:#c0392b;font-weight:700">(' + label + ')</span> '
+          : '(' + label + ') ')
+        : "";
+      rewardPriceDisplay.innerHTML = labelHtml + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
     }
 
     document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));

@@ -19,7 +19,7 @@
   .sticky-left td { background: #fffdf8; }
   .sticky-left th { background: #eee7d9; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
-  th.sticky-left, td.sticky-left { width: 60px; }
+  th.sticky-left, td.sticky-left { width: 72px; }
   th .job-sub { font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; margin-top: 6px; }
   th .job-name { font-size: 14px; font-weight: 700; }
   th .job-start { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; }
@@ -231,9 +231,9 @@ function renderTable(jobs, ranges) {
   // Remove existing colgroup
   const oldCg = table.querySelector("colgroup");
   if (oldCg) oldCg.remove();
-  table.style.width = (60 + visible.length * COLS_PER_JOB * 84) + "px";
+  table.style.width = (72 + visible.length * COLS_PER_JOB * 84) + "px";
   const colgroup = document.createElement("colgroup");
-  colgroup.innerHTML = '<col style="width:60px">' + '<col style="width:84px">'.repeat(visible.length * COLS_PER_JOB);
+  colgroup.innerHTML = '<col style="width:72px">' + '<col style="width:84px">'.repeat(visible.length * COLS_PER_JOB);
   table.insertBefore(colgroup, table.firstChild);
 
   // Build header: row 1 (job names), row 2 (sub columns)
@@ -258,8 +258,9 @@ function renderTable(jobs, ranges) {
       let sub = `奖励: ${escapeHtml(j.rewardToken)}`;
       if (j.rewardPriceUsd != null) {
         const priceStr = j.rewardPriceUsd.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:8});
+        const tagCls = j.rewardPriceIsLive ? ' style="color:#c0392b;font-weight:700"' : '';
         const tag = j.rewardPriceIsLive ? "实时" : "收盘";
-        sub += ` (@ $${priceStr} ${tag})`;
+        sub += ` (@ $${priceStr} <span${tagCls}>${tag}</span>)`;
       }
       headHtml.push(`<span class="job-sub">${sub}</span>`);
     }
