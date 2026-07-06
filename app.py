@@ -1851,6 +1851,8 @@ def api_analysis() -> Response:
             "rowCount": len(rows),
             "totalVolume": total_volume,
             "rewardToken": (payload.get("rewardToken") or "").strip().upper(),
+            "activityStart": payload.get("activityStart"),
+            "activityEnd": payload.get("activityEnd"),
             "rewardMode": reward_mode,
             "rewardTiers": [
                 {"rankMin": t["rankMin"], "rankMax": t["rankMax"], "amount": float(t.get("amount", 0))}

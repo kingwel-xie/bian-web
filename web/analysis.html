@@ -21,6 +21,8 @@
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
   th.sticky-left, td.sticky-left { width: 60px; }
   th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
+  th .job-name { font-size: 14px; font-weight: 700; }
+  th .job-time { font-size: 10px; font-weight: 400; color: var(--muted); display: block; margin-top: 2px; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
@@ -154,8 +156,15 @@ function renderAnalysis(data) {
     const j = jobs[ji];
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
     const cls = ji < jobs.length - 1 ? ' class="job-divider"' : '';
-    headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span>${escapeHtml(name)}</span>`);
-    if (j.token) headHtml.push(`<span class="job-sub">${escapeHtml(j.token)}</span>`);
+    headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span class="job-name">${escapeHtml(name)}</span>`);
+    if (j.rewardToken) headHtml.push(`<span class="job-sub">${escapeHtml(j.rewardToken)}</span>`);
+    const start = j.activityStart || "";
+    const end = j.activityEnd || "";
+    if (start || end) {
+      let timeStr = start ? start.replace(" ", "<br>") + " ~ " : "~ ";
+      timeStr += end ? end.replace(" ", "<br>") : "";
+      headHtml.push(`<span class="job-time">${timeStr}</span>`);
+    }
     headHtml.push('</th>');
   }
   headHtml.push('</tr><tr>');
