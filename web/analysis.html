@@ -21,6 +21,7 @@
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 140px; }
   th.sticky-left, td.sticky-left { width: 100px; }
   th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
+  .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
   .empty { color: var(--muted); text-align: center; padding: 18px; }
   .total-mode-section { margin-top: 14px; }
@@ -131,31 +132,30 @@ function renderAnalysis(data) {
   }
   document.getElementById("tableSection").style.display = "";
 
+  const COLS_PER_JOB = 6;
   const table = document.querySelector("#tableSection table");
-  table.style.width = (100 + jobs.length * 3 * 140) + "px";
-  // colgroup for explicit column widths
+  table.style.width = (100 + jobs.length * COLS_PER_JOB * 140) + "px";
   const colgroup = document.createElement("colgroup");
-  colgroup.innerHTML = '<col style="width:100px">' + '<col style="width:140px"><col style="width:140px"><col style="width:140px">'.repeat(jobs.length);
+  colgroup.innerHTML = '<col style="width:100px">' + '<col style="width:140px">'.repeat(jobs.length * COLS_PER_JOB);
   table.insertBefore(colgroup, table.firstChild);
 
   // Build header: row 1 (job names), row 2 (sub columns)
   const headHtml = ['<tr><th class="sticky-left" rowspan="2">排名区间</th>'];
-  for (const j of jobs) {
+  for (let ji = 0; ji < jobs.length; ji++) {
+    const j = jobs[ji];
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
-    headHtml.push(`<th colspan="3"><span>${escapeHtml(name)}</span>`);
+    const cls = ji < jobs.length - 1 ? ' class="job-divider"' : '';
+    headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span>${escapeHtml(name)}</span>`);
     if (j.token) headHtml.push(`<span class="job-sub">${escapeHtml(j.token)}</span>`);
     headHtml.push('</th>');
   }
   headHtml.push('</tr><tr>');
-  for (const j of jobs) {
-    headHtml.push('<th class="num">总成交量</th><th class="num">占比</th><th class="num">奖励</th>');
+  for (let ji = 0; ji < jobs.length; ji++) {
+    const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+    headHtml.push(`<th class="num">总成交量</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">奖励</th>`);
   }
   headHtml.push('</tr>');
   document.getElementById("tableHead").innerHTML = headHtml.join("");
-
-  // Find max total across jobs for highlighting
-  const totals = jobs.map(j => j.totalVolume || 0);
-  const colCount = jobs.length;
 
   // Build body: one row per range
   const bodyParts = [];
@@ -163,23 +163,28 @@ function renderAnalysis(data) {
     const r = ranges[ri];
     const label = r.label;
     bodyParts.push(`<tr><td class="sticky-left">${escapeHtml(label)}</td>`);
-    for (let ji = 0; ji < colCount; ji++) {
+    for (let ji = 0; ji < jobs.length; ji++) {
       const j = jobs[ji];
       const rdata = (j.ranges && j.ranges[ri]) ? j.ranges[ri] : null;
       const total = rdata ? rdata.total : 0;
-      const pct = rdata ? rdata.pct : 0;
+      const avg = rdata ? rdata.avg : 0;
+      const med = rdata ? rdata.med : 0;
+      const q1 = rdata ? rdata.q1 : 0;
+      const last = rdata ? rdata.last : 0;
       const amt = (j.rewardMode === "rank") ? tierAmountForRange(j.rewardTiers, label) : null;
       const amtStr = (amt != null && amt > 0) ? amt.toLocaleString("en-US") : "—";
-      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${amtStr}</td>`);
+      const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${amtStr}</td>`);
     }
     bodyParts.push('</tr>');
   }
 
   // Total row
   bodyParts.push('<tr class="row-total"><td class="sticky-left">合计</td>');
-  for (let ji = 0; ji < colCount; ji++) {
+  for (let ji = 0; ji < jobs.length; ji++) {
     const j = jobs[ji];
-    bodyParts.push(`<td class="num">${fmtVolume(j.totalVolume)}</td><td class="num">100%</td><td class="num">—</td>`);
+    const sep = ji < jobs.length - 1 ? ' job-divider' : '';
+    bodyParts.push(`<td class="num">${fmtVolume(j.totalVolume)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num${sep}">—</td>`);
   }
   bodyParts.push('</tr>');
 

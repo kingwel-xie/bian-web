@@ -1809,11 +1809,18 @@ def api_analysis() -> Response:
         payload = entry["payload"]
         rows = entry["rows"]
 
-        range_totals = []
+        range_stats: list[dict[str, Any]] = []
         total_volume = 0
         for rmin, rmax in ranges:
-            s = sum(float(r.get("grade", 0)) for r in rows if rmin <= int(r.get("sequence") or 0) <= rmax)
-            range_totals.append(s)
+            items = [float(r.get("grade", 0)) for r in rows if rmin <= int(r.get("sequence") or 0) <= rmax]
+            s = sum(items)
+            n = len(items)
+            avg = s / n if n else 0
+            sorted_items = sorted(items)
+            med = sorted_items[n // 2] if n else 0
+            q1 = sorted_items[min(int(n * 0.25), n - 1)] if n else 0
+            last = items[-1] if items else 0
+            range_stats.append({"total": s, "avg": avg, "med": med, "q1": q1, "last": last})
             total_volume += s
 
         reward_tiers = payload.get("rewardTiers") or []
@@ -1823,12 +1830,16 @@ def api_analysis() -> Response:
 
         ranges_out: list[dict[str, Any]] = []
         for i, (rmin, rmax) in enumerate(ranges):
-            t = range_totals[i]
-            pct = round(t / total_volume * 100, 1) if total_volume else 0
+            rs = range_stats[i]
+            pct = round(rs["total"] / total_volume * 100, 1) if total_volume else 0
             ranges_out.append({
                 "label": f"{rmin}~{rmax}",
-                "total": t,
+                "total": rs["total"],
                 "pct": pct,
+                "avg": rs["avg"],
+                "med": rs["med"],
+                "q1": rs["q1"],
+                "last": rs["last"],
             })
 
         results.append({
