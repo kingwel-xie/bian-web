@@ -18,8 +18,8 @@
   .sticky-left { position: sticky; left: 0; z-index: 3; background: #eee7d9; }
   .sticky-left td { background: #fffdf8; }
   .sticky-left th { background: #eee7d9; }
-  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 140px; }
-  th.sticky-left, td.sticky-left { width: 100px; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; width: 84px; }
+  th.sticky-left, td.sticky-left { width: 60px; }
   th .job-sub { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); display: block; }
   .job-divider { border-right: 2px solid var(--line-strong); }
   .row-total { font-weight: 700; border-top: 2px solid rgba(46,42,36,0.15); }
@@ -143,9 +143,9 @@ function renderAnalysis(data) {
 
   const COLS_PER_JOB = 7;
   const table = document.querySelector("#tableSection table");
-  table.style.width = (100 + jobs.length * COLS_PER_JOB * 140) + "px";
+  table.style.width = (60 + jobs.length * COLS_PER_JOB * 84) + "px";
   const colgroup = document.createElement("colgroup");
-  colgroup.innerHTML = '<col style="width:100px">' + '<col style="width:140px">'.repeat(jobs.length * COLS_PER_JOB);
+  colgroup.innerHTML = '<col style="width:60px">' + '<col style="width:84px">'.repeat(jobs.length * COLS_PER_JOB);
   table.insertBefore(colgroup, table.firstChild);
 
   // Build header: row 1 (job names), row 2 (sub columns)
