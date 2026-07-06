@@ -428,19 +428,25 @@ function renderEfficiencyChart(jobs, ranges) {
     }
   }
 
-  // Legend (top-right, below title)
-  let lx = ML + PW - 10;
-  for (let ji = visible.length - 1; ji >= 0; ji--) {
+  // Legend (vertical, right side)
+  let legendW = 0;
+  const LEGEND_PAD = 10;
+  const names = visible.map(j => escapeHtml(j.name || j.resourceId || j.id));
+  // Approximate text width: 7px per char + 16px (swatch + gap)
+  const maxNameLen = Math.max(...names.map(n => n.length));
+  legendW = maxNameLen * 7 + 26 + LEGEND_PAD;
+  const Lx = ML + PW + 10;
+  for (let ji = 0; ji < visible.length; ji++) {
     const j = visible[ji];
-    const name = escapeHtml(j.name || j.resourceId || j.id);
-    const yy = MT - (visible.length - 1 - ji) * 16 - 4;
-    svg += `<rect x="${lx - 80}" y="${yy}" width="10" height="10" fill="${COLORS[ji % COLORS.length]}" rx="2"/>`;
-    svg += `<text x="${lx - 66}" y="${yy + 9}" font-size="10" fill="#444">${name}</text>`;
-    lx -= 100;
+    const name = names[ji];
+    const yy = MT + 10 + ji * 18;
+    svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${COLORS[ji % COLORS.length]}" rx="2"/>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${name}</text>`;
   }
+  const W2 = ML + PW + 10 + legendW + MR;
 
   const chartEl = document.getElementById("efficiencyChart");
-  chartEl.setAttribute("width", W);
+  chartEl.setAttribute("width", W2);
   chartEl.innerHTML = svg;
 }
 
