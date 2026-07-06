@@ -2324,6 +2324,10 @@ def api_job_preview(job_id: str) -> Response:
             if team_name:
                 team_map[nick] = team_name
         preview["teamMap"] = team_map
+        preview["rewardPriceUsd"] = get_token_price(
+            payload.get("rewardToken", ""),
+            payload.get("activityEnd", ""),
+        )
         return jsonify(preview)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

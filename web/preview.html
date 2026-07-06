@@ -636,6 +636,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
     // --- Reward calculation ---
     const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
     const rewardTiers = previewData.rewardTiers || [];
+    const rewardPriceUsd = previewData.rewardPriceUsd != null ? parseFloat(previewData.rewardPriceUsd) : null;
     const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
     const rewardMode = previewData.rewardMode || "rank";
     const totalReward = parseFloat(previewData.totalReward) || 0;
@@ -701,23 +702,31 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
       if (useTotal) {
         computeTotalReward(null);
       }
-      rewardPriceDisplay.textContent = "加载中...";
-      const symbol = rewardToken + "USDT";
-      try {
-        const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
-        const data = await resp.json();
-        if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
-        const price = parseFloat(data.price);
-        if (useTiers) {
-          rewardTiersBody.innerHTML = buildTierRows(price);
+      let price = rewardPriceUsd;
+      let fromApi = false;
+      if (price == null) {
+        rewardPriceDisplay.textContent = "加载中...";
+        const symbol = rewardToken + "USDT";
+        try {
+          const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
+          const data = await resp.json();
+          if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
+          price = parseFloat(data.price);
+          fromApi = true;
+        } catch (err) {
+          rewardPriceDisplay.textContent = "—";
+          return;
         }
-        if (useTotal) {
-          computeTotalReward(price);
-        }
-        rewardPriceDisplay.textContent = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
-      } catch (err) {
-        rewardPriceDisplay.textContent = "—";
       }
+      if (useTiers) {
+        rewardTiersBody.innerHTML = buildTierRows(price);
+      }
+      if (useTotal) {
+        computeTotalReward(price);
+      }
+      rewardPriceDisplay.textContent = fromApi
+        ? "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 })
+        : "(历史) $" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
     }
 
     document.getElementById("refreshRewardBtn").addEventListener("click", updateReward);
