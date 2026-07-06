@@ -100,6 +100,15 @@ function tierAmountForRange(tiers, label) {
   return tiers.find(t => t.rankMin === rmin && t.rankMax === rmax)?.amount ?? null;
 }
 
+function tierPerPerson(tiers, label) {
+  const amt = tierAmountForRange(tiers, label);
+  if (amt == null) return null;
+  const parts = label.split("~").map(Number);
+  if (parts.length !== 2) return null;
+  const count = parts[1] - parts[0] + 1;
+  return count > 0 ? amt / count : null;
+}
+
 let currentMarket = "spot";
 
 async function loadAnalysis(market) {
@@ -132,7 +141,7 @@ function renderAnalysis(data) {
   }
   document.getElementById("tableSection").style.display = "";
 
-  const COLS_PER_JOB = 6;
+  const COLS_PER_JOB = 7;
   const table = document.querySelector("#tableSection table");
   table.style.width = (100 + jobs.length * COLS_PER_JOB * 140) + "px";
   const colgroup = document.createElement("colgroup");
@@ -152,7 +161,7 @@ function renderAnalysis(data) {
   headHtml.push('</tr><tr>');
   for (let ji = 0; ji < jobs.length; ji++) {
     const sep = ji < jobs.length - 1 ? ' job-divider' : '';
-    headHtml.push(`<th class="num">总成交量</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">奖励</th>`);
+    headHtml.push(`<th class="num">总成交量</th><th class="num">分档占比</th><th class="num">均值</th><th class="num">中位</th><th class="num">Q1</th><th class="num">末位</th><th class="num${sep}">人均奖励</th>`);
   }
   headHtml.push('</tr>');
   document.getElementById("tableHead").innerHTML = headHtml.join("");
@@ -167,14 +176,15 @@ function renderAnalysis(data) {
       const j = jobs[ji];
       const rdata = (j.ranges && j.ranges[ri]) ? j.ranges[ri] : null;
       const total = rdata ? rdata.total : 0;
+      const pct = rdata ? rdata.pct : 0;
       const avg = rdata ? rdata.avg : 0;
       const med = rdata ? rdata.med : 0;
       const q1 = rdata ? rdata.q1 : 0;
       const last = rdata ? rdata.last : 0;
-      const amt = (j.rewardMode === "rank") ? tierAmountForRange(j.rewardTiers, label) : null;
-      const amtStr = (amt != null && amt > 0) ? amt.toLocaleString("en-US") : "—";
+      const perPerson = (j.rewardMode === "rank") ? tierPerPerson(j.rewardTiers, label) : null;
+      const ppStr = (perPerson != null && perPerson > 0) ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4}) : "—";
       const sep = ji < jobs.length - 1 ? ' job-divider' : '';
-      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${amtStr}</td>`);
+      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${ppStr}</td>`);
     }
     bodyParts.push('</tr>');
   }
@@ -184,7 +194,7 @@ function renderAnalysis(data) {
   for (let ji = 0; ji < jobs.length; ji++) {
     const j = jobs[ji];
     const sep = ji < jobs.length - 1 ? ' job-divider' : '';
-    bodyParts.push(`<td class="num">${fmtVolume(j.totalVolume)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num${sep}">—</td>`);
+    bodyParts.push(`<td class="num">${fmtVolume(j.totalVolume)}</td><td class="num">100%</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num${sep}">—</td>`);
   }
   bodyParts.push('</tr>');
 
