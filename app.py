@@ -1436,6 +1436,13 @@ def team_html() -> Response:
     return response
 
 
+@app.get("/analysis.html")
+def analysis_html() -> Response:
+    response = send_from_directory(app.static_folder, "analysis.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 @app.get("/api/overview")
 def api_overview() -> Response:
     return jsonify({"dataRoot": str(DATA_ROOT), "activities": discover_activities()})
@@ -1730,6 +1737,141 @@ def api_jobs() -> Response:
             "total": total,
             "totalPages": total_pages,
         },
+    })
+
+
+_ANALYSIS_RANGES = [(1, 5), (6, 20), (21, 50), (51, 200), (201, 1000)]
+
+
+def _extend_ranges(max_rank: int) -> list[tuple[int, int]]:
+    ranges = list(_ANALYSIS_RANGES)
+    if max_rank > 1000:
+        start = 1001
+        while start <= max_rank:
+            end = min(start + 999, max_rank)
+            ranges.append((start, end))
+            start = end + 1
+    return ranges
+
+
+@app.get("/api/analysis")
+def api_analysis() -> Response:
+    market = (request.args.get("market") or "").strip().lower()
+    if market not in ("spot", "um"):
+        return jsonify({"error": "market must be spot or um"}), 400
+
+    all_jobs = load_jobs()
+    candidates = [
+        j for j in all_jobs
+        if j.get("status") == "completed"
+        and (j.get("payload") or {}).get("market") == market
+    ]
+
+    job_data: list[dict[str, Any]] = []
+    max_rank = 0
+
+    for job in candidates:
+        payload = job.get("payload", {})
+        snapshots = job.get("snapshots") or []
+        if not snapshots:
+            continue
+        json_path_str = snapshots[-1].get("json")
+        if not json_path_str:
+            continue
+        json_path = Path(str(json_path_str))
+        if not json_path.exists():
+            continue
+        data = read_json(json_path, {})
+        rows = data.get("rows") if isinstance(data, dict) else []
+        if not isinstance(rows, list):
+            continue
+        limit = payload.get("top") or 1000
+        limited = rows[:limit]
+        if not limited:
+            continue
+
+        for r in limited:
+            seq = int(r.get("sequence") or 0)
+            if seq > max_rank:
+                max_rank = seq
+
+        job_data.append({
+            "job": job,
+            "payload": payload,
+            "rows": limited,
+        })
+
+    ranges = _extend_ranges(max_rank)
+
+    results: list[dict[str, Any]] = []
+    for entry in job_data:
+        job = entry["job"]
+        payload = entry["payload"]
+        rows = entry["rows"]
+
+        range_totals = []
+        total_volume = 0
+        for rmin, rmax in ranges:
+            s = sum(float(r.get("grade", 0)) for r in rows if rmin <= int(r.get("sequence") or 0) <= rmax)
+            range_totals.append(s)
+            total_volume += s
+
+        reward_tiers = payload.get("rewardTiers") or []
+        reward_mode = payload.get("rewardMode") or "rank"
+        total_reward = float(payload.get("totalReward") or 0)
+        eligible_users = int(payload.get("eligibleUsers") or 0)
+
+        ranges_out: list[dict[str, Any]] = []
+        for i, (rmin, rmax) in enumerate(ranges):
+            t = range_totals[i]
+            pct = round(t / total_volume * 100, 1) if total_volume else 0
+            ranges_out.append({
+                "label": f"{rmin}~{rmax}",
+                "total": t,
+                "pct": pct,
+            })
+
+        results.append({
+            "id": job.get("id"),
+            "name": job.get("name"),
+            "resourceId": payload.get("resourceId"),
+            "token": payload.get("token"),
+            "activityEnd": payload.get("activityEnd"),
+            "rowCount": len(rows),
+            "totalVolume": total_volume,
+            "rewardToken": (payload.get("rewardToken") or "").strip().upper(),
+            "rewardMode": reward_mode,
+            "rewardTiers": [
+                {"rankMin": t["rankMin"], "rankMax": t["rankMax"], "amount": float(t.get("amount", 0))}
+                for t in reward_tiers
+            ],
+            "totalReward": total_reward,
+            "eligibleUsers": eligible_users,
+            "ranges": ranges_out,
+        })
+
+    # sort: active asc → no end → expired desc
+    def sort_key(j):
+        end_str = (j.get("activityEnd") or "").strip()
+        if not end_str:
+            return (1, "", "")
+        try:
+            end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+            ts = end_dt.timestamp()
+            now_bj = datetime.now(timezone.utc).astimezone(BJ)
+            if end_dt + timedelta(hours=24) < now_bj:
+                return (2, -ts, "")
+            return (0, ts, "")
+        except ValueError:
+            return (1, end_str, "")
+
+    results.sort(key=sort_key)
+
+    return jsonify({
+        "market": market,
+        "maxRank": max_rank,
+        "ranges": [{"label": f"{r[0]}~{r[1]}", "min": r[0], "max": r[1]} for r in ranges],
+        "jobs": results,
     })
 
 
