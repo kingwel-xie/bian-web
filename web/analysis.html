@@ -42,13 +42,16 @@
   .job-selector button.selected { background: #81c784; border-color: #66bb6a; color: #fff; font-weight: 700; }
   .page-sep { width: 100%; border: none; border-top: 1px solid var(--line); margin: 14px 0; }
   .analysis-extra { margin-top: 4px; }
-  .chart-controls { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; font-size: 12px; }
-  .chart-controls select { font-size: 12px; padding: 2px 6px; }
+  .analysis-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; padding: 14px; }
+  .chart-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 12px; }
+  .chart-controls label { font-weight: 700; color: var(--accent); }
+  .chart-controls .tier-cb { display: inline-flex; align-items: center; gap: 3px; margin-right: 4px; cursor: pointer; }
+  .chart-controls .tier-cb input { cursor: pointer; }
   .chart-wrap { overflow-x: auto; }
   .chart-wrap svg { display: block; }
   .chart-dot { cursor: pointer; }
   .chart-dot:hover { stroke: #333; stroke-width: 2; }
-  .chart-tooltip { position: absolute; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 10; }
+  .chart-tooltip { position: fixed; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 100; }
   .chart-axis text { font-size: 10px; fill: #666; }
   .chart-axis-label { font-size: 11px; fill: #333; text-anchor: middle; }
   .chart-title { font-size: 13px; fill: var(--accent); text-anchor: middle; font-weight: 700; }
@@ -84,24 +87,28 @@
   <div id="analysisExtra" class="analysis-extra" style="display:none">
     <hr class="page-sep">
 
-    <div class="chart-controls">
-      <label>档位：</label>
-      <select id="tierSelector"></select>
-    </div>
+    <div class="analysis-panel">
+      <div class="chart-controls">
+        <label>档位：</label>
+        <div id="tierCheckboxes"></div>
+      </div>
 
-    <div id="scatterWrap" class="chart-wrap">
-      <svg id="scatterChart" width="100%" height="400"></svg>
+      <div id="scatterWrap" class="chart-wrap">
+        <svg id="scatterChart" width="100%" height="400"></svg>
+      </div>
     </div>
 
     <hr class="page-sep">
 
-    <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">弹力系数</h3>
-    <p style="font-size:11px;color:var(--muted);margin:0 0 8px">相邻档位成交量比值（>100% 排名升高量反大，&lt;100% 正常衰减）</p>
-    <div class="table-wrap">
-      <table id="elasticityTable" style="width:auto;min-width:auto">
-        <thead id="elasticityHead"></thead>
-        <tbody id="elasticityBody"></tbody>
-      </table>
+    <div class="analysis-panel">
+      <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">弹力系数</h3>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 8px">相邻档位成交量比值（>100% 排名升高量反大，&lt;100% 正常衰减）</p>
+      <div class="table-wrap">
+        <table id="elasticityTable" style="width:auto;min-width:auto">
+          <thead id="elasticityHead"></thead>
+          <tbody id="elasticityBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </main>
@@ -344,38 +351,47 @@ function renderAnalysisExtra(jobs, ranges) {
   const el = document.getElementById("analysisExtra");
   el.style.display = "";
 
-  // Populate tier selector
-  const sel = document.getElementById("tierSelector");
-  sel.innerHTML = ranges.map((r, i) => `<option value="${i}">${escapeHtml(r.label)}</option>`).join("");
-  sel.onchange = () => drawScatterChart(visible, ranges);
+  // Build tier checkboxes
+  const container = document.getElementById("tierCheckboxes");
+  container.innerHTML = ranges.map((r, i) =>
+    `<label class="tier-cb"><input type="checkbox" checked data-idx="${i}"> ${escapeHtml(r.label)}</label>`
+  ).join("");
+  container.querySelectorAll("input").forEach(cb => {
+    cb.addEventListener("change", () => drawScatterChart(visible, ranges));
+  });
   drawScatterChart(visible, ranges);
   renderElasticityTable(visible, ranges);
 }
 
 function drawScatterChart(jobs, ranges) {
-  const idx = parseInt(document.getElementById("tierSelector").value);
-  const r = ranges[idx];
-  if (!r) return;
-  const label = r.label;
+  const cbs = document.querySelectorAll("#tierCheckboxes input:checked");
+  const selected = Array.from(cbs).map(cb => parseInt(cb.dataset.idx));
+  if (!selected.length) { document.getElementById("scatterChart").innerHTML = ""; return; }
 
-  // Build data points: { job, x: per-person reward USD, y: tier volume }
-  const points = [];
-  for (const j of jobs) {
-    if (!j.ranges || !j.ranges[idx]) continue;
-    const pp = tierPerPerson(j.rewardTiers, label);
-    if (pp == null) continue;
-    const x = pp * (j.rewardPriceUsd ?? 1);
-    const y = j.ranges[idx].total;
-    points.push({ job: j, x, y });
+  const COLORS = ["#e67e22", "#2980b9", "#27ae60", "#c0392b", "#8e44ad", "#16a085", "#d35400", "#2c3e50"];
+
+  // Gather all points across selected tiers
+  const allPoints = [];
+  for (const idx of selected) {
+    const r = ranges[idx];
+    if (!r) continue;
+    const label = r.label;
+    for (const j of jobs) {
+      if (!j.ranges || !j.ranges[idx]) continue;
+      const pp = tierPerPerson(j.rewardTiers, label);
+      if (pp == null) continue;
+      const x = pp * (j.rewardPriceUsd ?? 1);
+      const y = j.ranges[idx].total;
+      allPoints.push({ job: j, x, y, tier: label, tierIdx: idx, color: COLORS[idx % COLORS.length] });
+    }
   }
-  if (!points.length) return;
+  if (!allPoints.length) { document.getElementById("scatterChart").innerHTML = ""; return; }
 
   // Scales
-  const pad = 0.05;
-  const xMin = Math.min(...points.map(p => p.x));
-  const xMax = Math.max(...points.map(p => p.x));
+  const xMin = Math.min(...allPoints.map(p => p.x));
+  const xMax = Math.max(...allPoints.map(p => p.x));
   const yMin = 0;
-  const yMax = Math.max(...points.map(p => p.y));
+  const yMax = Math.max(...allPoints.map(p => p.y));
   const xRange = xMax - xMin || 1;
   const yRange = yMax - yMin || 1;
 
@@ -386,11 +402,10 @@ function drawScatterChart(jobs, ranges) {
   function sx(v) { return ML + ((v - xMin) / xRange) * PW; }
   function sy(v) { return MT + PH - ((v - yMin) / yRange) * PH; }
 
-  let svg = `<g class="chart-axis">`;
+  let svg = '<g class="chart-axis">';
 
-  // Y axis line
+  // Y axis
   svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
-  // Y ticks
   const yTicks = 5;
   for (let i = 0; i <= yTicks; i++) {
     const v = yMin + (yRange * i / yTicks);
@@ -398,9 +413,8 @@ function drawScatterChart(jobs, ranges) {
     svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${fmtVolume(v)}</text>`;
   }
-  // X axis line
+  // X axis
   svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
-  // X ticks
   const xTicks = 6;
   for (let i = 0; i <= xTicks; i++) {
     const v = xMin + (xRange * i / xTicks);
@@ -412,14 +426,27 @@ function drawScatterChart(jobs, ranges) {
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">成交量</text>`;
   svg += `</g>`;
 
+  // Legend
+  const legendTiers = [...new Set(allPoints.map(p => p.tierIdx))].sort();
+  let lx = ML + PW - 10;
+  for (let i = legendTiers.length - 1; i >= 0; i--) {
+    const ti = legendTiers[i];
+    const c = COLORS[ti % COLORS.length];
+    const lbl = ranges[ti] ? ranges[ti].label : "";
+    svg += `<rect x="${lx - 70}" y="${MT + 4}" width="10" height="10" fill="${c}" rx="2"/>`;
+    svg += `<text x="${lx - 56}" y="${MT + 12}" font-size="10" fill="#666">${escapeHtml(lbl)}</text>`;
+    lx -= 90;
+  }
+
   // Data points
-  for (const p of points) {
+  for (const p of allPoints) {
     const cx = sx(p.x), cy = sy(p.y);
     const name = escapeHtml(p.job.name || p.job.resourceId || p.job.id);
     const xStr = p.x.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
     const yStr = fmtVolume(p.y);
-    svg += `<circle class="chart-dot" cx="${cx}" cy="${cy}" r="5" fill="#e67e22" opacity=".85"
-      onmouseenter="showTooltip(event,'${name}\\n奖励: $${xStr}\\n成交: ${yStr}')"
+    svg += `<circle class="chart-dot" cx="${cx}" cy="${cy}" r="5" fill="${p.color}" opacity=".85"
+      onmouseenter="showTooltip(event,'${name} [${escapeHtml(p.tier)}]\\n奖励: $${xStr}\\n成交: ${yStr}')"
+      onmousemove="moveTooltip(event)"
       onmouseleave="hideTooltip()"/>`;
   }
 
@@ -432,17 +459,18 @@ function showTooltip(evt, html) {
   if (!_tooltip) {
     _tooltip = document.createElement("div");
     _tooltip.className = "chart-tooltip";
-    document.getElementById("scatterWrap").appendChild(_tooltip);
+    document.body.appendChild(_tooltip);
   }
   _tooltip.style.display = "";
   _tooltip.innerHTML = html.replace(/\n/g, "<br>");
-
-  // Use clientX/Y or fallback
-  const cx = evt.clientX || evt.pageX || 0;
-  const cy = evt.clientY || evt.pageY || 0;
-  const rect = document.getElementById("scatterWrap").getBoundingClientRect();
-  _tooltip.style.left = (cx - rect.left + 12) + "px";
-  _tooltip.style.top = (cy - rect.top - 10) + "px";
+  _tooltip.style.left = (evt.clientX + 14) + "px";
+  _tooltip.style.top = (evt.clientY - 8) + "px";
+}
+function moveTooltip(evt) {
+  if (_tooltip) {
+    _tooltip.style.left = (evt.clientX + 14) + "px";
+    _tooltip.style.top = (evt.clientY - 8) + "px";
+  }
 }
 function hideTooltip() {
   if (_tooltip) _tooltip.style.display = "none";
