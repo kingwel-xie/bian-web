@@ -164,29 +164,6 @@ function renderAnalysis(data) {
   selectedJobIds = allRankJobs.map(j => j.id);
   renderJobSelector(allRankJobs, ranges);
   renderTable(allRankJobs, ranges);
-
-  // Total mode section (always show regardless of selection)
-  const totalJobs = rawJobs.filter(j => j.rewardMode === "total" && j.totalReward > 0 && j.eligibleUsers > 0);
-  if (totalJobs.length) {
-    const sec = document.getElementById("totalModeSection");
-    sec.style.display = "";
-    sec.innerHTML = '<h3>总量模式奖励</h3><div class="total-grid">' +
-      totalJobs.map(j => {
-        const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
-        const totalUsd = (j.rewardPriceUsd != null) ? "($" + (j.totalReward * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
-        const perPerson = j.eligibleUsers > 0 ? j.totalReward / j.eligibleUsers : 0;
-        const perPersonUsd = (j.rewardPriceUsd != null && perPerson > 0) ? "($" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + ")" : "";
-        return `<div class="total-card">
-          <div class="name">${escapeHtml(name)}</div>
-          <div class="value">${j.totalReward.toLocaleString("en-US")} <span class="token">${escapeHtml(j.rewardToken)} ${totalUsd}</span></div>
-          <div class="sub">总奖池</div>
-          <div class="value">${j.eligibleUsers.toLocaleString("en-US")}</div>
-          <div class="sub">有效用户数</div>
-          <div class="value">${perPerson > 0 ? perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—"} <span class="token">${perPersonUsd}</span></div>
-          <div class="sub">人均奖励(USD)</div>
-        </div>`;
-      }).join("") + '</div>';
-  }
 }
 
 function renderJobSelector(jobs, ranges) {
