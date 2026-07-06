@@ -37,8 +37,10 @@
   .total-card .usd { color: #22a6b3; font-weight: 400; font-size: 11px; }
   .total-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .job-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .job-selector button { font-size: 12px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); cursor: pointer; white-space: nowrap; }
-  .job-selector button.selected { background: #eee7d9; border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .job-selector button { font-size: 12px; padding: 4px 12px; border: 1px solid #d4c5a9; border-radius: 20px; background: #faf8f4; color: #8a7a5a; cursor: pointer; white-space: nowrap; transition: all .15s; }
+  .job-selector button:hover { background: #f0e8d8; border-color: #b8a88a; }
+  .job-selector button.selected { background: #d4c5a9; border-color: #b8a88a; color: #fff; font-weight: 700; }
+  .page-sep { width: 100%; border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 </style>
 </head>
 <body>
@@ -53,6 +55,8 @@
   </div>
 
   <div id="jobSelector" class="job-selector" style="display:none"></div>
+
+  <hr class="page-sep" id="tableSep" style="display:none">
 
   <div id="loading" class="empty">加载中...</div>
 
@@ -132,6 +136,7 @@ async function loadAnalysis(market) {
   document.getElementById("totalModeSection").innerHTML = "";
   document.getElementById("jobSelector").style.display = "none";
   document.getElementById("jobSelector").innerHTML = "";
+  document.getElementById("tableSep").style.display = "none";
 
   try {
     const resp = await fetch("/api/analysis?market=" + encodeURIComponent(market));
@@ -171,6 +176,7 @@ function renderAnalysis(data) {
 function renderJobSelector(jobs, ranges) {
   const sel = document.getElementById("jobSelector");
   sel.style.display = "flex";
+  document.getElementById("tableSep").style.display = "";
   const parts = jobs.map((j, i) =>
     `<button class="selected" data-idx="${i}">${escapeHtml(j.name || j.resourceId || j.id)}</button>`
   ).join("");
