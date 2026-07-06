@@ -37,10 +37,21 @@
   .total-card .usd { color: #22a6b3; font-weight: 400; font-size: 11px; }
   .total-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .job-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .job-selector button { font-size: 12px; padding: 4px 12px; border: 1px solid #d4c5a9; border-radius: 20px; background: #faf8f4; color: #8a7a5a; cursor: pointer; white-space: nowrap; transition: all .15s; }
-  .job-selector button:hover { background: #f0e8d8; border-color: #b8a88a; }
-  .job-selector button.selected { background: #d4c5a9; border-color: #b8a88a; color: #fff; font-weight: 700; }
+  .job-selector button { font-size: 12px; padding: 4px 12px; border: 1px solid #bbb; border-radius: 20px; background: #fff; color: #666; cursor: pointer; white-space: nowrap; transition: all .15s; }
+  .job-selector button:hover { background: #e8f5e9; border-color: #81c784; color: #388e3c; }
+  .job-selector button.selected { background: #81c784; border-color: #66bb6a; color: #fff; font-weight: 700; }
   .page-sep { width: 100%; border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+  .analysis-extra { margin-top: 4px; }
+  .chart-controls { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; font-size: 12px; }
+  .chart-controls select { font-size: 12px; padding: 2px 6px; }
+  .chart-wrap { overflow-x: auto; }
+  .chart-wrap svg { display: block; }
+  .chart-dot { cursor: pointer; }
+  .chart-dot:hover { stroke: #333; stroke-width: 2; }
+  .chart-tooltip { position: absolute; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 10; }
+  .chart-axis text { font-size: 10px; fill: #666; }
+  .chart-axis-label { font-size: 11px; fill: #333; text-anchor: middle; }
+  .chart-title { font-size: 13px; fill: var(--accent); text-anchor: middle; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -68,6 +79,30 @@
       </table>
     </div>
     <div id="totalModeSection" class="total-mode-section" style="display:none"></div>
+  </div>
+
+  <div id="analysisExtra" class="analysis-extra" style="display:none">
+    <hr class="page-sep">
+
+    <div class="chart-controls">
+      <label>档位：</label>
+      <select id="tierSelector"></select>
+    </div>
+
+    <div id="scatterWrap" class="chart-wrap">
+      <svg id="scatterChart" width="100%" height="400"></svg>
+    </div>
+
+    <hr class="page-sep">
+
+    <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">弹力系数</h3>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 8px">相邻档位成交量比值（>100% 排名升高量反大，&lt;100% 正常衰减）</p>
+    <div class="table-wrap">
+      <table id="elasticityTable" style="width:auto;min-width:auto">
+        <thead id="elasticityHead"></thead>
+        <tbody id="elasticityBody"></tbody>
+      </table>
+    </div>
   </div>
 </main>
 
@@ -137,6 +172,7 @@ async function loadAnalysis(market) {
   document.getElementById("jobSelector").style.display = "none";
   document.getElementById("jobSelector").innerHTML = "";
   document.getElementById("tableSep").style.display = "none";
+  document.getElementById("analysisExtra").style.display = "none";
 
   try {
     const resp = await fetch("/api/analysis?market=" + encodeURIComponent(market));
@@ -171,6 +207,7 @@ function renderAnalysis(data) {
   selectedJobIds = allRankJobs.map(j => j.id);
   renderJobSelector(allRankJobs, ranges);
   renderTable(allRankJobs, ranges);
+  renderAnalysisExtra(allRankJobs, ranges);
 }
 
 function renderJobSelector(jobs, ranges) {
@@ -299,6 +336,157 @@ function renderTable(jobs, ranges) {
   bodyParts.push('</tr>');
 
   document.getElementById("tableBody").innerHTML = bodyParts.join("");
+}
+
+function renderAnalysisExtra(jobs, ranges) {
+  const visible = jobs.filter(j => selectedJobIds.includes(j.id));
+  if (!visible.length) return;
+  const el = document.getElementById("analysisExtra");
+  el.style.display = "";
+
+  // Populate tier selector
+  const sel = document.getElementById("tierSelector");
+  sel.innerHTML = ranges.map((r, i) => `<option value="${i}">${escapeHtml(r.label)}</option>`).join("");
+  sel.onchange = () => drawScatterChart(visible, ranges);
+  drawScatterChart(visible, ranges);
+  renderElasticityTable(visible, ranges);
+}
+
+function drawScatterChart(jobs, ranges) {
+  const idx = parseInt(document.getElementById("tierSelector").value);
+  const r = ranges[idx];
+  if (!r) return;
+  const label = r.label;
+
+  // Build data points: { job, x: per-person reward USD, y: tier volume }
+  const points = [];
+  for (const j of jobs) {
+    if (!j.ranges || !j.ranges[idx]) continue;
+    const pp = tierPerPerson(j.rewardTiers, label);
+    if (pp == null) continue;
+    const x = pp * (j.rewardPriceUsd ?? 1);
+    const y = j.ranges[idx].total;
+    points.push({ job: j, x, y });
+  }
+  if (!points.length) return;
+
+  // Scales
+  const pad = 0.05;
+  const xMin = Math.min(...points.map(p => p.x));
+  const xMax = Math.max(...points.map(p => p.x));
+  const yMin = 0;
+  const yMax = Math.max(...points.map(p => p.y));
+  const xRange = xMax - xMin || 1;
+  const yRange = yMax - yMin || 1;
+
+  const W = 600, H = 400, ML = 60, MR = 20, MT = 20, MB = 50;
+  const PW = W - ML - MR;
+  const PH = H - MT - MB;
+
+  function sx(v) { return ML + ((v - xMin) / xRange) * PW; }
+  function sy(v) { return MT + PH - ((v - yMin) / yRange) * PH; }
+
+  let svg = `<g class="chart-axis">`;
+
+  // Y axis line
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  // Y ticks
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = yMin + (yRange * i / yTicks);
+    const y = sy(v);
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${fmtVolume(v)}</text>`;
+  }
+  // X axis line
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  // X ticks
+  const xTicks = 6;
+  for (let i = 0; i <= xTicks; i++) {
+    const v = xMin + (xRange * i / xTicks);
+    const x = sx(v);
+    svg += `<line x1="${x}" y1="${MT + PH}" x2="${x}" y2="${MT + PH + 4}" stroke="#ccc"/>`;
+    svg += `<text x="${x}" y="${MT + PH + 16}" text-anchor="middle">${fmtVolume(v)}</text>`;
+  }
+  svg += `<text class="chart-axis-label" x="${ML + PW / 2}" y="${H - 6}">人均奖励 (USD)</text>`;
+  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">成交量</text>`;
+  svg += `</g>`;
+
+  // Data points
+  for (const p of points) {
+    const cx = sx(p.x), cy = sy(p.y);
+    const name = escapeHtml(p.job.name || p.job.resourceId || p.job.id);
+    const xStr = p.x.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:4});
+    const yStr = fmtVolume(p.y);
+    svg += `<circle class="chart-dot" cx="${cx}" cy="${cy}" r="5" fill="#e67e22" opacity=".85"
+      onmouseenter="showTooltip(event,'${name}\\n奖励: $${xStr}\\n成交: ${yStr}')"
+      onmouseleave="hideTooltip()"/>`;
+  }
+
+  document.getElementById("scatterChart").innerHTML = svg;
+}
+
+// Tooltip for scatter chart
+let _tooltip = null;
+function showTooltip(evt, html) {
+  if (!_tooltip) {
+    _tooltip = document.createElement("div");
+    _tooltip.className = "chart-tooltip";
+    document.getElementById("scatterWrap").appendChild(_tooltip);
+  }
+  _tooltip.style.display = "";
+  _tooltip.innerHTML = html.replace(/\n/g, "<br>");
+
+  // Use clientX/Y or fallback
+  const cx = evt.clientX || evt.pageX || 0;
+  const cy = evt.clientY || evt.pageY || 0;
+  const rect = document.getElementById("scatterWrap").getBoundingClientRect();
+  _tooltip.style.left = (cx - rect.left + 12) + "px";
+  _tooltip.style.top = (cy - rect.top - 10) + "px";
+}
+function hideTooltip() {
+  if (_tooltip) _tooltip.style.display = "none";
+}
+
+function renderElasticityTable(jobs, ranges) {
+  const pairs = [];
+  for (let i = 0; i < ranges.length - 1; i++) {
+    pairs.push({ from: ranges[i].label, to: ranges[i + 1].label, fromIdx: i, toIdx: i + 1 });
+  }
+  if (!pairs.length) { document.getElementById("elasticityTable").style.display = "none"; return; }
+
+  // Header
+  let headHtml = '<tr><th>任务</th>';
+  for (const p of pairs) {
+    headHtml += `<th>${escapeHtml(p.from)} → ${escapeHtml(p.to)}</th>`;
+  }
+  headHtml += '</tr>';
+  document.getElementById("elasticityHead").innerHTML = headHtml;
+
+  // Body
+  const bodyParts = [];
+  for (const j of jobs) {
+    const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
+    bodyParts.push(`<tr><td>${escapeHtml(name)}</td>`);
+    for (const p of pairs) {
+      const vFrom = (j.ranges && j.ranges[p.fromIdx]) ? j.ranges[p.fromIdx].total : 0;
+      const vTo = (j.ranges && j.ranges[p.toIdx]) ? j.ranges[p.toIdx].total : 0;
+      let ratio = "", cls = "";
+      if (vFrom > 0 && vTo > 0) {
+        const r = vTo / vFrom;
+        ratio = (r * 100).toFixed(1) + "%";
+        cls = r >= 1 ? "color:#27ae60;font-weight:700" : "color:#c0392b";
+      } else if (vTo > 0 && vFrom === 0) {
+        ratio = "∞";
+        cls = "color:#27ae60;font-weight:700";
+      } else {
+        ratio = "—";
+      }
+      bodyParts.push(`<td class="num" style="${cls}">${ratio}</td>`);
+    }
+    bodyParts.push('</tr>');
+  }
+  document.getElementById("elasticityBody").innerHTML = bodyParts.join("");
 }
 
 document.getElementById("btnSpot").addEventListener("click", () => {
