@@ -223,9 +223,10 @@ function renderAnalysis(data) {
     return;
   }
 
-  // Job selector
+  // Job selector — exclude active (未到期) jobs by default
   _cachedRanges = ranges;
-  selectedJobIds = allRankJobs.map(j => j.id);
+  const endedJobs = allRankJobs.filter(j => !j.rewardPriceIsLive);
+  selectedJobIds = (endedJobs.length ? endedJobs : allRankJobs).map(j => j.id);
   renderJobSelector(allRankJobs, ranges);
   renderTable(allRankJobs, ranges);
   renderAnalysisExtra(allRankJobs, ranges);
@@ -236,7 +237,7 @@ function renderJobSelector(jobs, ranges) {
   sel.style.display = "flex";
   document.getElementById("tableSep").style.display = "";
   const parts = jobs.map((j, i) =>
-    `<button class="selected" data-idx="${i}">${escapeHtml(j.name || j.resourceId || j.id)}</button>`
+    `<button class="${selectedJobIds.includes(j.id) ? 'selected' : ''}" data-idx="${i}">${escapeHtml(j.name || j.resourceId || j.id)}</button>`
   ).join("");
   sel.innerHTML = parts;
   sel.querySelectorAll("button").forEach(btn => {
