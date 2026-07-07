@@ -46,6 +46,9 @@
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
   .search-clear { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 13px; color: var(--muted); line-height: 1; display: none; vertical-align: middle; }
   .search-clear:hover { color: var(--ink); }
+  .df-btn { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; }
+  .df-btn:hover { background: #f5f0e8; }
+  .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
   .compare-btn:hover { background: #f5f0e8; }
@@ -94,7 +97,13 @@
     <hr class="sep" id="snapSep" style="margin:6px 0 14px 0" />
     <div class="preview-body">
       <div class="stats-panel">
-        <h3>基础统计</h3>
+        <h3 id="statsTitle" style="display:flex;align-items:center;gap:8px;padding:6px 16px">
+          <span>基础统计</span>
+          <span id="deltaFmtToggle" style="font-size:11px;font-weight:400;margin-left:auto">
+            <button class="df-btn active" data-fmt="pct">%</button>
+            <button class="df-btn" data-fmt="abs">绝对值</button>
+          </span>
+        </h3>
         <table class="stats-table">
           <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
           <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
@@ -183,7 +192,13 @@
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
+function fmtDeltaAbs(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${fmtVolume(Math.abs(v))}</span>` : ""; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+let _deltaShowAbs = false;
+let _statsCache = null;
+let _totalVolCache = 0;
+let _totalDelCache = 0;
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -340,18 +355,35 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
         const q1 = count ? grades[Math.min(Math.floor(count * 0.25), grades.length - 1)] : 0;
         const last = items.length ? items[items.length - 1]._g : 0;
         const sumDelta = items.reduce((s, r) => s + r._dg, 0);
+        let avgDelta = null, medDelta = null, q1Delta = null, lastDelta = null;
         let avgDeltaPct = null, medDeltaPct = null, q1DeltaPct = null, lastDeltaPct = null;
         if (prevStats) {
           const prev = prevStats.find(s => s.label === label);
           if (prev) {
-            avgDeltaPct = prev.avg ? ((avg - prev.avg) / prev.avg * 100) : null;
-            medDeltaPct = prev.med ? ((med - prev.med) / prev.med * 100) : null;
-            q1DeltaPct = prev.q1 ? ((q1 - prev.q1) / prev.q1 * 100) : null;
-            lastDeltaPct = prev.last ? ((last - prev.last) / prev.last * 100) : null;
+            avgDelta = avg - prev.avg;
+            medDelta = med - prev.med;
+            q1Delta = q1 - prev.q1;
+            lastDelta = last - prev.last;
+            avgDeltaPct = prev.avg ? (avgDelta / prev.avg * 100) : null;
+            medDeltaPct = prev.med ? (medDelta / prev.med * 100) : null;
+            q1DeltaPct = prev.q1 ? (q1Delta / prev.q1 * 100) : null;
+            lastDeltaPct = prev.last ? (lastDelta / prev.last * 100) : null;
           }
         }
-        return { label, count, total, avg, med, q1, last, sumDelta, avgDeltaPct, medDeltaPct, q1DeltaPct, lastDeltaPct };
+        return { label, count, total, avg, med, q1, last, sumDelta, avgDelta, medDelta, q1Delta, lastDelta, avgDeltaPct, medDeltaPct, q1DeltaPct, lastDeltaPct };
       });
+    }
+
+    function renderStatsTable() {
+      if (!_statsCache) return;
+      const stats = _statsCache;
+      const fmtD = (delta, pct) => _deltaShowAbs ? fmtDeltaAbs(delta) : fmtDeltaPct(pct);
+      document.getElementById("statsBody").innerHTML = stats.map(s => {
+        const pct = _totalVolCache ? (s.total / _totalVolCache * 100).toFixed(1) + "%" : "—";
+        const dr = _totalDelCache ? (s.sumDelta / _totalDelCache * 100).toFixed(1) + "%" : "—";
+        return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmtD(s.avgDelta, s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmtD(s.medDelta, s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmtD(s.q1Delta, s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmtD(s.lastDelta, s.lastDeltaPct)}</td></tr>`;
+      }).join("") + `
+        <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? fmtVolume(_totalDelCache) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
     }
 
     function fmtVolume(v) {
@@ -387,15 +419,15 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
     const totalCount = allRows.length;
     const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
     const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
-    document.getElementById("statsBody").innerHTML = stats.map(s => {
-      const pct = totalVolume ? (s.total / totalVolume * 100).toFixed(1) + "%" : "—";
-      const dr = totalDelta ? (s.sumDelta / totalDelta * 100).toFixed(1) + "%" : "—";
-      return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmtDeltaPct(s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmtDeltaPct(s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmtDeltaPct(s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmtDeltaPct(s.lastDeltaPct)}</td></tr>`;
-    }).join("") + `
-      <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+    // Cache for toggle re-render
+    _statsCache = stats;
+    _totalVolCache = totalVolume;
+    _totalDelCache = totalDelta;
+    _deltaShowAbs = false;
+    renderStatsTable();
 
     // show delta snapshot time in stats panel title
-    const statsTitle = document.querySelector(".stats-panel h3");
+    const statsTitle = document.getElementById("statsTitle");
     if (statsTitle && prevTs) {
       statsTitle.textContent = "基础统计 — 增量对比 " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
     } else if (statsTitle) {
@@ -741,6 +773,16 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
     document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
     if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
+
+    // --- Delta format toggle ---
+    document.getElementById("deltaFmtToggle").addEventListener("click", evt => {
+      const btn = evt.target.closest(".df-btn");
+      if (!btn || btn.classList.contains("active")) return;
+      document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      _deltaShowAbs = btn.dataset.fmt === "abs";
+      renderStatsTable();
+    });
 
     // --- Collapsible panels ---
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
