@@ -251,7 +251,8 @@ let _totalDelCache = 0;
       }
       if (cd) {
         const el = document.createElement("span");
-        el.style.cssText = "margin-left:8px;font-size:12px;font-weight:700;color:#e67e22";
+        const urgent = diff <= 864e5;
+        el.style.cssText = `margin-left:8px;font-size:12px;font-weight:700;color:${urgent ? "#d0312d" : "#e67e22"}`;
         el.textContent = cd;
         document.getElementById("actTime").after(el);
       }
