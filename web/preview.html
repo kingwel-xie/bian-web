@@ -19,7 +19,10 @@
   .delta-toggle .df-btn:hover { background: #f5f0e8; }
   .delta-toggle .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .collapse-indicator { font-size: 11px; font-weight: 400; margin-left: auto; cursor: pointer; user-select: none; }
-  .stats-panel.collapsed > :not(.stats-header), .reward-panel.collapsed > :not(h3) { display: none !important; }
+  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; }
+  .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
+  #statsPanel.collapsed > :not(.stats-header) { display: none !important; }
+  .reward-panel.collapsed > :not(h3), #deltaAnalysisPanel.collapsed > :not(h3), #teamStatsPanel.collapsed > :not(h3) { display: none !important; }
   .stats-table th, .stats-table td { font-size: 13px; }
   .stats-table th { font-weight: 700; position: static; background: #eee7d9; color: var(--accent); text-transform: uppercase; }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -96,7 +99,7 @@
     <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
     <hr class="sep" id="snapSep" style="margin:6px 0 14px 0" />
     <div class="preview-body">
-      <div class="stats-panel">
+      <div id="statsPanel" class="stats-panel">
         <div class="stats-header">
           <h3 id="statsTitle">基础统计</h3>
           <span id="deltaFmtToggle" class="delta-toggle">
@@ -784,21 +787,16 @@ let _totalDelCache = 0;
     }
 
     // --- Collapsible panels ---
-    document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
-      const header = panel.classList.contains("stats-panel") ? panel.querySelector(".stats-header") : panel.querySelector("h3");
+    document.querySelectorAll("#statsPanel, #rewardPanel, #deltaAnalysisPanel, #teamStatsPanel").forEach((panel) => {
+      const header = panel.querySelector(".stats-header") || panel.querySelector("h3");
       if (!header) return;
       const key = "collapse_" + panel.id;
-      const indicator = panel.querySelector(".collapse-indicator");
       if (localStorage.getItem(key) === "1") {
         panel.classList.add("collapsed");
-        if (indicator) indicator.textContent = indicator.textContent.replace("▾", "▸");
       }
       header.addEventListener("click", () => {
         panel.classList.toggle("collapsed");
         localStorage.setItem(key, panel.classList.contains("collapsed") ? "1" : "");
-        if (indicator) indicator.textContent = panel.classList.contains("collapsed")
-          ? indicator.textContent.replace("▾", "▸")
-          : indicator.textContent.replace("▸", "▾");
       });
     });
   } catch (err) {
