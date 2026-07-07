@@ -238,10 +238,13 @@ let _totalDelCache = 0;
     document.title = heading + " — 排行榜预览";
     document.getElementById("title").textContent = heading;
     const actS = preview.activityStart, actE = preview.activityEnd;
-    document.getElementById("actTime").textContent = actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    const actTimeEl = document.getElementById("actTime");
+    const now = Date.now();
+    actTimeEl.textContent = actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    let endDt = null;
     if (actE) {
-      const end = new Date(actE.replace(" ", "T") + "+08:00");
-      const diff = end - Date.now();
+      endDt = new Date(actE.replace(" ", "T") + "+08:00");
+      const diff = endDt - now;
       let cd = "";
       if (diff > 0) {
         const d = Math.floor(diff / 864e5);
@@ -254,13 +257,13 @@ let _totalDelCache = 0;
         const urgent = diff <= 864e5;
         el.style.cssText = `margin-left:8px;font-size:12px;font-weight:700;color:${urgent ? "#fff" : "#e67e22"};border:1px solid ${urgent ? "#d0312d" : "#e67e22"};border-radius:3px;padding:0 4px${urgent ? ";background:#d0312d" : ""}`;
         el.textContent = cd;
-        document.getElementById("actTime").after(el);
+        actTimeEl.after(el);
       }
     }
-    const expired = actE && new Date(actE + " +08:00") <= new Date(Date.now() - 86400000);
+    const expired = endDt && endDt <= new Date(now - 86400000);
     if (expired) {
       document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span> <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;
-      document.getElementById("actTime").style.color = "#999";
+      actTimeEl.style.color = "#999";
       document.getElementById("meta").style.opacity = "0.5";
     }
     const eligibleVolume = preview.meta?.eligibleTradingVolume;
@@ -286,15 +289,17 @@ let _totalDelCache = 0;
     const snaps = preview.snapshots || [];
     const snapBar = document.getElementById("snapshotBar");
     if (snaps.length > 1) {
+      const revSnaps = snaps.toReversed();
       const selected = snapshotParam || snaps[snaps.length - 1].timestamp;
+      const selIdx = snaps.findIndex(s => s.timestamp === selected);
       const defaultCompare = snaps.length > 1 ? snaps[snaps.length - 2].timestamp : "";
-      const compareVal = compareParam || (snaps.findIndex(s => s.timestamp === selected) > 0 ? snaps[snaps.findIndex(s => s.timestamp === selected) - 1].timestamp : defaultCompare);
+      const compareVal = compareParam || (selIdx > 0 ? snaps[selIdx - 1].timestamp : defaultCompare);
       snapBar.style.display = "flex";
       snapBar.innerHTML = `
         <div class="snapshot-section">
           <label for="snapshotSelect">快照版本</label>
           <select id="snapshotSelect">
-            ${snaps.toReversed().map(s => `
+            ${revSnaps.map(s => `
               <option value="${escapeHtml(s.timestamp)}" ${s.timestamp === selected ? "selected" : ""}>
                 ${escapeHtml(fmtSnapshotTs(s.timestamp))} (${s.rows ?? "?"} 行)
               </option>
@@ -305,7 +310,7 @@ let _totalDelCache = 0;
         <div class="compare-section">
           <label style="font-size:12px;color:var(--muted);white-space:nowrap">对比快照</label>
           <div class="compare-group">
-            ${snaps.toReversed().filter(s => s.timestamp !== selected).map(s => `
+            ${revSnaps.filter(s => s.timestamp !== selected).map(s => `
               <label class="compare-btn">
                 <input type="radio" name="compare" value="${escapeHtml(s.timestamp)}" ${s.timestamp === compareVal ? "checked" : ""}>
                 <span>${escapeHtml(fmtSnapshotTs(s.timestamp))}</span>
