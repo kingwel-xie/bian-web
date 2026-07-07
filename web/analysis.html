@@ -89,7 +89,7 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">成交量 / 人均奖励</h3>
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">人均奖励 / 成交量</h3>
         <div id="chartGroupToggle" class="btn-group" style="margin-left:auto">
           <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
           <button class="chart-group-btn" data-mode="job">按任务分组</button>
@@ -382,7 +382,7 @@ function renderEfficiencyChart(jobs, ranges) {
         if (pp == null) continue;
         const ppUsd = pp * (j.rewardPriceUsd ?? 1);
         if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].total / ppUsd, tierLabel: label });
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: ppUsd / j.ranges[ri].total, tierLabel: label });
       }
       if (bars.length) groups.push({ label, bars, keyIdx: -1 });
     }
@@ -398,7 +398,7 @@ function renderEfficiencyChart(jobs, ranges) {
         if (pp == null) continue;
         const ppUsd = pp * (j.rewardPriceUsd ?? 1);
         if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].total / ppUsd, tierLabel: label });
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: ppUsd / j.ranges[ri].total, tierLabel: label });
       }
       if (bars.length) {
         const name = j.name || j.resourceId || j.id;
@@ -435,7 +435,7 @@ function renderEfficiencyChart(jobs, ranges) {
     svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${fmtVolume(v)}</text>`;
   }
-  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">成交量 / 人均奖励($)</text>`;
+  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">人均奖励($) / 成交量</text>`;
 
   // X axis
   svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
@@ -461,7 +461,7 @@ function renderEfficiencyChart(jobs, ranges) {
         color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
       }
       svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${color}" opacity=".85"
-        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n成交量/人均: ${effStr}/\\$')"
+        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n人均/成交量: ${effStr}')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
     }
