@@ -326,6 +326,7 @@ function renderJobs(jobs) {
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
+    const statusZh = { completed: "已完成", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
     const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
     const url = normalizeTaskUrl(payload.url);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
@@ -361,7 +362,7 @@ function renderJobs(jobs) {
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
           <p>${escapeHtml(url || "无 URL")}</p>
-          <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
+          <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
