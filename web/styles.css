@@ -376,8 +376,11 @@ button:disabled {
   font-size: 12px;
   font-weight: 700;
   color: #e67e22;
+  border: 1px solid #e67e22;
+  border-radius: 3px;
+  padding: 0 4px;
 }
-.job-countdown.urgent { color: #d0312d; border: 1px solid #d0312d; border-radius: 3px; padding: 0 4px; }
+.job-countdown.urgent { color: #d0312d; border-color: #d0312d; }
 .job.expired .job-countdown { display: none; }
 
 .job p,
