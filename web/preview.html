@@ -12,11 +12,15 @@
   .preview-meta { color: var(--muted); font-size: 12px; }
   .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
   .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
-  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 6px 16px; font-size: 12px; text-transform: uppercase; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.03em; }
-  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; }
+  .stats-panel h3, .reward-panel h3 { margin: 0; font-size: 12px; text-transform: uppercase; color: var(--accent); cursor: pointer; user-select: none; letter-spacing: 0.03em; }
+  .stats-header { display: flex; align-items: center; gap: 8px; padding: 6px 16px; background: #eee7d9; cursor: pointer; user-select: none; }
+  .delta-toggle { font-size: 11px; margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .delta-toggle .df-btn { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; }
+  .delta-toggle .df-btn:hover { background: #f5f0e8; }
+  .delta-toggle .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
+  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; margin-left: 4px; }
   .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
-  .stats-panel.collapsed > :not(h3), .reward-panel.collapsed > :not(h3) { display: none !important; }
-  .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .stats-panel.collapsed > :not(.stats-header), .reward-panel.collapsed > :not(h3) { display: none !important; }
   .stats-table th, .stats-table td { font-size: 13px; }
   .stats-table th { font-weight: 700; position: static; background: #eee7d9; color: var(--accent); text-transform: uppercase; }
   .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -46,9 +50,6 @@
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
   .search-clear { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 13px; color: var(--muted); line-height: 1; display: none; vertical-align: middle; }
   .search-clear:hover { color: var(--ink); }
-  .df-btn { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; }
-  .df-btn:hover { background: #f5f0e8; }
-  .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
   .compare-btn:hover { background: #f5f0e8; }
@@ -97,13 +98,13 @@
     <hr class="sep" id="snapSep" style="margin:6px 0 14px 0" />
     <div class="preview-body">
       <div class="stats-panel">
-        <h3 id="statsTitle" style="display:flex;align-items:center;gap:8px;padding:6px 16px">
-          <span>基础统计</span>
-          <span id="deltaFmtToggle" style="font-size:11px;font-weight:400;margin-left:auto">
+        <div class="stats-header">
+          <h3 id="statsTitle">基础统计</h3>
+          <span id="deltaFmtToggle" class="delta-toggle">
             <button class="df-btn active" data-fmt="pct">%</button>
             <button class="df-btn" data-fmt="abs">绝对值</button>
           </span>
-        </h3>
+        </div>
         <table class="stats-table">
           <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
           <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
@@ -790,11 +791,11 @@ let _totalDelCache = 0;
 
     // --- Collapsible panels ---
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
-      const h3 = panel.querySelector("h3");
-      if (!h3) return;
+      const header = panel.classList.contains("stats-panel") ? panel.querySelector(".stats-header") : panel.querySelector("h3");
+      if (!header) return;
       const key = "collapse_" + panel.id;
       if (localStorage.getItem(key) === "1") panel.classList.add("collapsed");
-      h3.addEventListener("click", () => {
+      header.addEventListener("click", () => {
         panel.classList.toggle("collapsed");
         localStorage.setItem(key, panel.classList.contains("collapsed") ? "1" : "");
       });
