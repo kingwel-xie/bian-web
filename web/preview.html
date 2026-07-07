@@ -394,13 +394,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
     }).join("") + `
       <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(totalVolume)}</td><td class="num">100%</td><td class="num">${totalDelta != null ? fmtVolume(totalDelta) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
 
-    // show delta snapshot time in stats panel title
-    const statsTitle = document.querySelector(".stats-panel h3");
-    if (statsTitle && prevTs) {
-      statsTitle.textContent = "基础统计 — 增量对比 " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
-    } else if (statsTitle) {
-      statsTitle.textContent = "基础统计";
-    }
+    // stats title stays "基础统计" (no suffix)
 
     let deltaSort = false;
     let volumeSort = false;
