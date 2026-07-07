@@ -326,7 +326,7 @@ function renderJobs(jobs) {
     const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
     const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
     const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
-    const statusZh = { completed: "已完成", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
+    const statusZh = { completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
     const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
     const url = normalizeTaskUrl(payload.url);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
