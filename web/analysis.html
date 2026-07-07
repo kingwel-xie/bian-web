@@ -89,7 +89,7 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励所需<span id="chartStatLabel">人均</span>成交量</h3>
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励所需<span id="chartStatLabel">均值</span>成交量</h3>
         <div id="chartStatToggle" class="btn-group">
           <button class="chart-group-btn active" data-stat="avg">均值</button>
           <button class="chart-group-btn" data-stat="med">中位数</button>
@@ -110,7 +110,7 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">分档<span id="ratioStatLabel">人均</span>成交占比</h3>
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">分档<span id="ratioStatLabel">均值</span>成交占比</h3>
         <div id="ratioGroupToggle" class="btn-group" style="margin-left:auto">
           <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
           <button class="chart-group-btn" data-mode="job">按任务分组</button>
@@ -196,7 +196,7 @@ let _chartGroupBy = "tier"; // "tier" | "job"
 let _ratioGroupBy = "tier"; // "tier" | "job"
 let _chartStat = "avg"; // "avg" | "med" | "q1" | "last"
 
-const STAT_LABELS = { avg: "人均", med: "中位数", q1: "Q1", last: "末位" };
+const STAT_LABELS = { avg: "均值", med: "中位数", q1: "Q1", last: "末位" };
 
 async function loadAnalysis(market) {
   document.getElementById("loading").style.display = "";
@@ -490,7 +490,7 @@ function renderEfficiencyChart(jobs, ranges) {
         color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
       }
       svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${color}" opacity=".85"
-        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n${STAT_LABELS[_chartStat]}每 $1 需成交: ${effStr}')"
+        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n每 $1 需成交: ${effStr}')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
     }
