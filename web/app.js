@@ -633,6 +633,20 @@ async function boot() {
       console.warn("loadJobs poll error:", error);
     });
   }, 5000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+    } else if (!state.pollTimer) {
+      loadJobs(state.page).catch(err => console.warn("poll resume error:", err));
+      state.pollTimer = setInterval(() => {
+        loadJobs(state.page).catch((error) => {
+          console.warn("loadJobs poll error:", error);
+        });
+      }, 5000);
+    }
+  });
 }
 
 boot().catch((error) => {
