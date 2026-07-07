@@ -421,7 +421,7 @@ let _totalDelCache = 0;
     const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
     const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
     _statsCache = stats; _totalVolCache = totalVolume; _totalDelCache = totalDelta;
-    _deltaShowAbs = (preview.market === "um");
+    _deltaShowAbs = ((preview.market || "").toLowerCase() === "um");
     // Sync button active state
     document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => {
       b.classList.toggle("active", (b.dataset.fmt === "abs") === _deltaShowAbs);
