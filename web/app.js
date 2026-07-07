@@ -316,7 +316,9 @@ function lastLine(text) {
 function renderJobs(jobs) {
   const { page, totalPages, total } = state;
   $("#jobCount").textContent = `${total}`;
-  $("#jobList").innerHTML = jobs.map((job) => {
+  const jl = $("#jobList");
+  const now = Date.now();
+  jl.innerHTML = jobs.map((job) => {
     const payload = job.payload || {};
     const progress = job.progress || {};
     const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
@@ -331,15 +333,15 @@ function renderJobs(jobs) {
     const displayName = rid ? `${jobName}  [${rid}]` : jobName;
     const activityEnd = payload.activityEnd;
     const activityStart = payload.activityStart;
-    const isExpired = activityEnd && new Date(activityEnd + " +08:00") <= new Date(Date.now() - 86400000);
+    const endDate = activityEnd ? new Date(activityEnd.replace(" ", "T") + "+08:00") : null;
+    const isExpired = endDate && endDate <= new Date(now - 86400000);
     const expiredClass = isExpired ? " expired" : "";
     const snapshotTs = job.latestSnapshot;
     const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
     // countdown
     let countdownText = "", countdownCls = "job-countdown";
-    if (activityEnd) {
-      const end = new Date(activityEnd.replace(" ", "T") + "+08:00");
-      const diff = end - Date.now();
+    if (endDate) {
+      const diff = endDate - now;
       if (diff > 0) {
         if (diff <= 864e5) countdownCls += " urgent";
         const d = Math.floor(diff / 864e5);
@@ -382,44 +384,6 @@ function renderJobs(jobs) {
       </article>
     `;
   }).join("") || `<div class="empty box">没有任务。</div>`;
-
-  $("#jobList").querySelectorAll("[data-preview]").forEach((button) => {
-    button.addEventListener("click", () => {
-      window.open(`/preview.html?job=${button.dataset.preview}`, "_blank");
-    });
-  });
-  $("#jobList").querySelectorAll("[data-rerun]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const job = jobs.find((item) => item.id === button.dataset.rerun);
-      if (!job) return;
-      const p = job.payload || {};
-      await startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top);
-    });
-  });
-  $("#jobList").querySelectorAll("[data-kill]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!confirm("确认终止此任务？")) return;
-      try {
-        await api(`/api/jobs/${button.dataset.kill}/kill`, { method: "POST" });
-      } catch (error) {
-        alert(`终止失败：${error.message}`);
-      }
-    });
-  });
-  $("#jobList").querySelectorAll("[data-rename]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const job = jobs.find((item) => item.id === button.dataset.rename);
-      if (!job) return;
-      openEditModal(job);
-    });
-  });
-  $("#jobList").querySelectorAll("[data-delete]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (!confirm("确认删除此任务？")) return;
-      await api(`/api/jobs/${button.dataset.delete}`, { method: "DELETE" });
-      await loadJobs(state.page);
-    });
-  });
 
   renderPagination();
 }
@@ -627,6 +591,31 @@ function bind() {
       state.filterSearch = e.target.value.trim();
       state.page = 1;
       loadJobs(state.page);
+    }
+  });
+
+  // Event delegation for job list actions
+  $("#jobList").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-preview],[data-rerun],[data-kill],[data-rename],[data-delete]");
+    if (!btn) return;
+    const id = btn.dataset.preview || btn.dataset.rerun || btn.dataset.kill || btn.dataset.rename || btn.dataset.delete;
+    if (btn.dataset.preview) {
+      window.open(`/preview.html?job=${id}`, "_blank");
+    } else if (btn.dataset.rerun) {
+      const job = state._jobs.find(j => j.id === id);
+      if (!job) return;
+      const p = job.payload || {};
+      startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top);
+    } else if (btn.dataset.kill) {
+      if (!confirm("确认终止此任务？")) return;
+      api(`/api/jobs/${id}/kill`, { method: "POST" }).catch(err => alert(`终止失败：${err.message}`));
+    } else if (btn.dataset.rename) {
+      const job = state._jobs.find(j => j.id === id);
+      if (!job) return;
+      openEditModal(job);
+    } else if (btn.dataset.delete) {
+      if (!confirm("确认删除此任务？")) return;
+      api(`/api/jobs/${id}`, { method: "DELETE" }).then(() => loadJobs(state.page)).catch(err => alert(`删除失败：${err.message}`));
     }
   });
 }
