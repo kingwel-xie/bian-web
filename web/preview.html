@@ -427,11 +427,7 @@ let _totalDelCache = 0;
     _deltaShowAbs = false;
     renderStatsTable();
 
-    // show delta snapshot time in stats header collapse indicator
-    const collapser = document.querySelector(".collapse-indicator");
-    if (collapser && prevTs) {
-      collapser.textContent = "▾ " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
-    }
+    // no delta snapshot time in header
 
     let deltaSort = false;
     let volumeSort = false;
