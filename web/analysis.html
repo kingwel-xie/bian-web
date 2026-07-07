@@ -109,6 +109,21 @@
     <hr class="page-sep">
 
     <div class="analysis-panel">
+      <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">分档<span id="ratioStatLabel">人均</span>成交占比</h3>
+        <div id="ratioGroupToggle" class="btn-group" style="margin-left:auto">
+          <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
+          <button class="chart-group-btn" data-mode="job">按任务分组</button>
+        </div>
+      </div>
+      <div id="ratioWrap" class="chart-wrap">
+        <svg id="ratioChart" height="400"></svg>
+      </div>
+    </div>
+
+    <hr class="page-sep">
+
+    <div class="analysis-panel">
       <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">弹力系数</h3>
       <div class="table-wrap">
         <table id="elasticityTable" style="width:auto;min-width:auto">
@@ -178,6 +193,7 @@ let selectedJobIds = null;
 let allRankJobs = [];
 let _cachedRanges = [];
 let _chartGroupBy = "tier"; // "tier" | "job"
+let _ratioGroupBy = "tier"; // "tier" | "job"
 let _chartStat = "avg"; // "avg" | "med" | "q1" | "last"
 
 const STAT_LABELS = { avg: "人均", med: "中位数", q1: "Q1", last: "末位" };
@@ -259,6 +275,7 @@ function renderJobSelector(jobs, ranges) {
       }
       renderTable(allRankJobs, ranges);
       renderEfficiencyChart(allRankJobs, ranges);
+      renderRatioChart(allRankJobs, ranges);
     });
   });
 }
@@ -366,6 +383,7 @@ function renderAnalysisExtra(jobs, ranges) {
   if (!visible.length) return;
   document.getElementById("analysisExtra").style.display = "";
   renderEfficiencyChart(visible, ranges);
+  renderRatioChart(visible, ranges);
   renderElasticityTable(visible, ranges);
 }
 
@@ -514,6 +532,145 @@ function renderEfficiencyChart(jobs, ranges) {
   chartEl.innerHTML = svg;
 }
 
+function renderRatioChart(jobs, ranges) {
+  const visible = jobs.filter(j => selectedJobIds.includes(j.id));
+  if (!visible.length) { document.getElementById("ratioChart").innerHTML = ""; return; }
+  document.getElementById("ratioStatLabel").textContent = STAT_LABELS[_chartStat];
+
+  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
+  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+  const groupBy = _ratioGroupBy;
+
+  // Compute per-job total of the chosen stat
+  const jobTotal = {};
+  for (const j of visible) {
+    let s = 0;
+    for (let ri = 0; ri < ranges.length; ri++) {
+      if (j.ranges && j.ranges[ri]) s += (j.ranges[ri][_chartStat] || 0);
+    }
+    jobTotal[j.id] = s || 1;
+  }
+
+  const groups = [];
+  if (groupBy === "tier") {
+    for (let ri = 0; ri < ranges.length; ri++) {
+      const label = ranges[ri].label;
+      const bars = [];
+      for (let ji = 0; ji < visible.length; ji++) {
+        const j = visible[ji];
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const v = j.ranges[ri][_chartStat];
+        if (v == null || v <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, pct: v / jobTotal[j.id] * 100, tierLabel: label });
+      }
+      if (bars.length) groups.push({ label, bars, keyIdx: -1 });
+    }
+  } else {
+    for (let ji = 0; ji < visible.length; ji++) {
+      const j = visible[ji];
+      const bars = [];
+      for (let ri = 0; ri < ranges.length; ri++) {
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const v = j.ranges[ri][_chartStat];
+        if (v == null || v <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, pct: v / jobTotal[j.id] * 100, tierLabel: ranges[ri].label });
+      }
+      if (bars.length) {
+        const name = j.name || j.resourceId || j.id;
+        groups.push({ label: name, bars, keyIdx: ji });
+      }
+    }
+  }
+  if (!groups.length) { document.getElementById("ratioChart").innerHTML = ""; return; }
+
+  const allPct = groups.flatMap(g => g.bars.map(b => b.pct));
+  const maxPct = Math.min(100, Math.max(...allPct) || 1);
+  const numBars = Math.max(...groups.map(g => g.bars.length));
+
+  const W = 60 + groups.length * (numBars * 20 + 24);
+  const H = 400, ML = 60, MR = 20, MT = 40, MB = 60;
+  const PW = W - ML - MR;
+  const PH = H - MT - MB;
+  const groupW = PW / groups.length;
+  const barW = Math.min(16, groupW / numBars - 2);
+
+  function sy(v) { return MT + PH - (v / maxPct) * PH; }
+  function fmtLabel(s) { return s.length > 10 ? escapeHtml(s.slice(0, 9)) + "⋯" : escapeHtml(s); }
+
+  let svg = `<g class="chart-axis">`;
+
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = (maxPct * i / yTicks);
+    const y = sy(v);
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${v.toFixed(1)}%</text>`;
+  }
+  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">成交占比 (%)</text>`;
+
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const gx = ML + gi * groupW + groupW / 2;
+    svg += `<text class="bar-group-label" x="${gx}" y="${MT + PH + 18}">${fmtLabel(g.label)}</text>`;
+
+    const startX = gx - (g.bars.length * barW + (g.bars.length - 1) * 2) / 2;
+    for (let bi = 0; bi < g.bars.length; bi++) {
+      const b = g.bars[bi];
+      const bx = startX + bi * (barW + 2);
+      const bh = (b.pct / maxPct) * PH;
+      const by = sy(b.pct);
+      const name = escapeHtml(b.job.name || b.job.resourceId || b.job.id);
+      let color;
+      if (groupBy === "tier") {
+        color = JOB_COLORS[b.jobIdx % JOB_COLORS.length];
+      } else {
+        color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
+      }
+      svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${color}" opacity=".85"
+        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n占比: ${b.pct.toFixed(1)}%')"
+        onmousemove="moveBarTip(event)"
+        onmouseleave="hideBarTip()"/>`;
+    }
+  }
+
+  // Legend
+  let legendW = 0;
+  const LEGEND_PAD = 10;
+  let legendEntries;
+  if (groupBy === "tier") {
+    legendEntries = visible.map((j, ji) => ({ label: escapeHtml(j.name || j.resourceId || j.id), color: JOB_COLORS[ji % JOB_COLORS.length] }));
+  } else {
+    const used = new Set();
+    const entries = [];
+    for (const g of groups) {
+      for (const b of g.bars) {
+        if (!used.has(b.tierIdx)) {
+          used.add(b.tierIdx);
+          entries.push({ label: escapeHtml(b.tierLabel), color: TIER_COLORS[b.tierIdx % TIER_COLORS.length] });
+        }
+      }
+    }
+    legendEntries = entries;
+  }
+  const maxNameLen = Math.max(...legendEntries.map(e => e.label.length)) || 1;
+  legendW = maxNameLen * 7 + 26 + LEGEND_PAD;
+  const Lx = ML + PW + 10;
+  for (let li = 0; li < legendEntries.length; li++) {
+    const e = legendEntries[li];
+    const yy = MT + 10 + li * 18;
+    svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+  }
+  const W2 = ML + PW + 10 + legendW + MR;
+
+  const chartEl = document.getElementById("ratioChart");
+  chartEl.setAttribute("width", W2);
+  chartEl.innerHTML = svg;
+}
+
 // Bar chart tooltip
 let _barTip = null;
 function showBarTip(evt, html) {
@@ -604,6 +761,16 @@ document.getElementById("chartGroupToggle").addEventListener("click", evt => {
   renderEfficiencyChart(allRankJobs, _cachedRanges);
 });
 
+// Ratio chart group toggle
+document.getElementById("ratioGroupToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#ratioGroupToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _ratioGroupBy = btn.dataset.mode;
+  renderRatioChart(allRankJobs, _cachedRanges);
+});
+
 // Chart stat toggle
 document.getElementById("chartStatToggle").addEventListener("click", evt => {
   const btn = evt.target.closest(".chart-group-btn");
@@ -612,7 +779,9 @@ document.getElementById("chartStatToggle").addEventListener("click", evt => {
   btn.classList.add("active");
   _chartStat = btn.dataset.stat;
   document.getElementById("chartStatLabel").textContent = STAT_LABELS[_chartStat];
+  document.getElementById("ratioStatLabel").textContent = STAT_LABELS[_chartStat];
   renderEfficiencyChart(allRankJobs, _cachedRanges);
+  renderRatioChart(allRankJobs, _cachedRanges);
 });
 </script>
 </body>
