@@ -101,7 +101,7 @@
           基础统计
           <span id="deltaFmtToggle" style="font-size:11px;font-weight:400">
             <span style="color:var(--muted);margin-right:4px">环比增量显示</span>
-            <button class="df-btn active" data-fmt="pct">%</button>
+            <button class="df-btn" data-fmt="pct">%</button>
             <button class="df-btn" data-fmt="abs">绝对值</button>
           </span>
         </h3>
@@ -421,7 +421,11 @@ let _totalDelCache = 0;
     const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
     const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
     _statsCache = stats; _totalVolCache = totalVolume; _totalDelCache = totalDelta;
-    _deltaShowAbs = false;
+    _deltaShowAbs = (preview.market === "um");
+    // Sync button active state
+    document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => {
+      b.classList.toggle("active", (b.dataset.fmt === "abs") === _deltaShowAbs);
+    });
     renderStatsTable();
 
     // stats title stays "基础统计" (no suffix)
