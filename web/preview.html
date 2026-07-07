@@ -14,12 +14,11 @@
   .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
   .stats-panel h3, .reward-panel h3 { margin: 0; font-size: 12px; text-transform: uppercase; color: var(--accent); cursor: pointer; user-select: none; letter-spacing: 0.03em; }
   .stats-header { display: flex; align-items: center; gap: 8px; padding: 6px 16px; background: #eee7d9; cursor: pointer; user-select: none; }
-  .delta-toggle { font-size: 11px; margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .delta-toggle { font-size: 11px; display: flex; align-items: center; gap: 4px; }
   .delta-toggle .df-btn { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; }
   .delta-toggle .df-btn:hover { background: #f5f0e8; }
   .delta-toggle .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
-  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; margin-left: 4px; }
-  .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
+  .collapse-indicator { font-size: 11px; font-weight: 400; margin-left: auto; cursor: pointer; user-select: none; }
   .stats-panel.collapsed > :not(.stats-header), .reward-panel.collapsed > :not(h3) { display: none !important; }
   .stats-table th, .stats-table td { font-size: 13px; }
   .stats-table th { font-weight: 700; position: static; background: #eee7d9; color: var(--accent); text-transform: uppercase; }
@@ -104,6 +103,7 @@
             <button class="df-btn active" data-fmt="pct">%</button>
             <button class="df-btn" data-fmt="abs">绝对值</button>
           </span>
+          <span class="collapse-indicator">▾ 收起</span>
         </div>
         <table class="stats-table">
           <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
@@ -427,12 +427,10 @@ let _totalDelCache = 0;
     _deltaShowAbs = false;
     renderStatsTable();
 
-    // show delta snapshot time in stats panel title
-    const statsTitle = document.getElementById("statsTitle");
-    if (statsTitle && prevTs) {
-      statsTitle.textContent = "基础统计 — 增量对比 " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
-    } else if (statsTitle) {
-      statsTitle.textContent = "基础统计";
+    // show delta snapshot time in stats header collapse indicator
+    const collapser = document.querySelector(".collapse-indicator");
+    if (collapser && prevTs) {
+      collapser.textContent = "▾ " + fmtSnapshotTs(prevTs) + " → " + fmtSnapshotTs(curTs);
     }
 
     let deltaSort = false;
@@ -794,10 +792,17 @@ let _totalDelCache = 0;
       const header = panel.classList.contains("stats-panel") ? panel.querySelector(".stats-header") : panel.querySelector("h3");
       if (!header) return;
       const key = "collapse_" + panel.id;
-      if (localStorage.getItem(key) === "1") panel.classList.add("collapsed");
+      const indicator = panel.querySelector(".collapse-indicator");
+      if (localStorage.getItem(key) === "1") {
+        panel.classList.add("collapsed");
+        if (indicator) indicator.textContent = indicator.textContent.replace("▾", "▸");
+      }
       header.addEventListener("click", () => {
         panel.classList.toggle("collapsed");
         localStorage.setItem(key, panel.classList.contains("collapsed") ? "1" : "");
+        if (indicator) indicator.textContent = panel.classList.contains("collapsed")
+          ? indicator.textContent.replace("▾", "▸")
+          : indicator.textContent.replace("▸", "▾");
       });
     });
   } catch (err) {
