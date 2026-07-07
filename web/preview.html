@@ -239,6 +239,23 @@ let _totalDelCache = 0;
     document.getElementById("title").textContent = heading;
     const actS = preview.activityStart, actE = preview.activityEnd;
     document.getElementById("actTime").textContent = actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    if (actE) {
+      const end = new Date(actE.replace(" ", "T") + "+08:00");
+      const diff = end - Date.now();
+      let cd = "";
+      if (diff > 0) {
+        const d = Math.floor(diff / 864e5);
+        const h = Math.floor((diff % 864e5) / 36e5);
+        const m = Math.floor((diff % 36e5) / 6e4);
+        cd = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
+      }
+      if (cd) {
+        const el = document.createElement("span");
+        el.style.cssText = "margin-left:8px;font-size:12px;font-weight:700;color:#e67e22";
+        el.textContent = cd;
+        document.getElementById("actTime").after(el);
+      }
+    }
     const expired = actE && new Date(actE + " +08:00") <= new Date(Date.now() - 86400000);
     if (expired) {
       document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span> <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;

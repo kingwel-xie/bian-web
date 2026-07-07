@@ -335,12 +335,27 @@ function renderJobs(jobs) {
     const expiredClass = isExpired ? " expired" : "";
     const snapshotTs = job.latestSnapshot;
     const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
+    // countdown
+    let countdownText = "";
+    if (activityEnd) {
+      const end = new Date(activityEnd.replace(" ", "T") + "+08:00");
+      const diff = end - Date.now();
+      if (diff > 0) {
+        const d = Math.floor(diff / 864e5);
+        const h = Math.floor((diff % 864e5) / 36e5);
+        const m = Math.floor((diff % 36e5) / 6e4);
+        countdownText = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
+      } else if (diff > -864e5) {
+        countdownText = "已结束";
+      }
+    }
     return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
             <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
+            ${countdownText ? `<span class="job-countdown">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
           <p>${escapeHtml(url || "无 URL")}</p>
           <small>${escapeHtml(job.status)} · ${escapeHtml(fmtTime(job.createdAt))}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
