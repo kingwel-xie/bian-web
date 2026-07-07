@@ -89,7 +89,13 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励所需人均成交量</h3>
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励所需<span id="chartStatLabel">人均</span>成交量</h3>
+        <div id="chartStatToggle" class="btn-group">
+          <button class="chart-group-btn active" data-stat="avg">均值</button>
+          <button class="chart-group-btn" data-stat="med">中位数</button>
+          <button class="chart-group-btn" data-stat="q1">Q1</button>
+          <button class="chart-group-btn" data-stat="last">末位</button>
+        </div>
         <div id="chartGroupToggle" class="btn-group" style="margin-left:auto">
           <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
           <button class="chart-group-btn" data-mode="job">按任务分组</button>
@@ -172,6 +178,9 @@ let selectedJobIds = null;
 let allRankJobs = [];
 let _cachedRanges = [];
 let _chartGroupBy = "tier"; // "tier" | "job"
+let _chartStat = "avg"; // "avg" | "med" | "q1" | "last"
+
+const STAT_LABELS = { avg: "人均", med: "中位数", q1: "Q1", last: "末位" };
 
 async function loadAnalysis(market) {
   document.getElementById("loading").style.display = "";
@@ -362,6 +371,7 @@ function renderAnalysisExtra(jobs, ranges) {
 function renderEfficiencyChart(jobs, ranges) {
   const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   if (!visible.length) { document.getElementById("efficiencyChart").innerHTML = ""; return; }
+  document.getElementById("chartStatLabel").textContent = STAT_LABELS[_chartStat];
 
   const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
   const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
@@ -382,7 +392,7 @@ function renderEfficiencyChart(jobs, ranges) {
         if (pp == null) continue;
         const ppUsd = pp * (j.rewardPriceUsd ?? 1);
         if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].avg / ppUsd, tierLabel: label });
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri][_chartStat] / ppUsd, tierLabel: label });
       }
       if (bars.length) groups.push({ label, bars, keyIdx: -1 });
     }
@@ -398,7 +408,7 @@ function renderEfficiencyChart(jobs, ranges) {
         if (pp == null) continue;
         const ppUsd = pp * (j.rewardPriceUsd ?? 1);
         if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri].avg / ppUsd, tierLabel: label });
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri][_chartStat] / ppUsd, tierLabel: label });
       }
       if (bars.length) {
         const name = j.name || j.resourceId || j.id;
@@ -435,7 +445,7 @@ function renderEfficiencyChart(jobs, ranges) {
     svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${fmtVolume(v)}</text>`;
   }
-  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">每 $1 奖励所需人均成交量</text>`;
+  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">每 $1 奖励所需${STAT_LABELS[_chartStat]}成交量</text>`;
 
   // X axis
   svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
@@ -461,7 +471,7 @@ function renderEfficiencyChart(jobs, ranges) {
         color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
       }
       svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${color}" opacity=".85"
-        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n每 $1 奖励需成交: ${effStr}')"
+        onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n${STAT_LABELS[_chartStat]}每 $1 需成交: ${effStr}')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
     }
@@ -571,17 +581,7 @@ document.getElementById("btnSpot").addEventListener("click", () => {
   document.querySelectorAll(".market-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("btnSpot").classList.add("active");
   currentMarket = "spot";
-loadAnalysis("spot");
-
-// Chart group toggle
-document.getElementById("chartGroupToggle").addEventListener("click", evt => {
-  const btn = evt.target.closest(".chart-group-btn");
-  if (!btn || btn.classList.contains("active")) return;
-  document.querySelectorAll(".chart-group-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  _chartGroupBy = btn.dataset.mode;
-  renderEfficiencyChart(allRankJobs, _cachedRanges);
-});
+  loadAnalysis("spot");
 });
 
 document.getElementById("btnUm").addEventListener("click", () => {
@@ -597,9 +597,20 @@ loadAnalysis("spot");
 document.getElementById("chartGroupToggle").addEventListener("click", evt => {
   const btn = evt.target.closest(".chart-group-btn");
   if (!btn || btn.classList.contains("active")) return;
-  document.querySelectorAll(".chart-group-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll("#chartGroupToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   _chartGroupBy = btn.dataset.mode;
+  renderEfficiencyChart(allRankJobs, _cachedRanges);
+});
+
+// Chart stat toggle
+document.getElementById("chartStatToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#chartStatToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _chartStat = btn.dataset.stat;
+  document.getElementById("chartStatLabel").textContent = STAT_LABELS[_chartStat];
   renderEfficiencyChart(allRankJobs, _cachedRanges);
 });
 </script>
