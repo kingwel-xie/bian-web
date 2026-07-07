@@ -775,14 +775,18 @@ let _totalDelCache = 0;
     if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
 
     // --- Delta format toggle ---
-    document.getElementById("deltaFmtToggle").addEventListener("click", evt => {
-      const btn = evt.target.closest(".df-btn");
-      if (!btn || btn.classList.contains("active")) return;
-      document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      _deltaShowAbs = btn.dataset.fmt === "abs";
-      renderStatsTable();
-    });
+    const dfToggle = document.getElementById("deltaFmtToggle");
+    if (dfToggle) {
+      dfToggle.addEventListener("click", evt => {
+        evt.stopPropagation();
+        const btn = evt.target.closest(".df-btn");
+        if (!btn || btn.classList.contains("active")) return;
+        document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        _deltaShowAbs = btn.dataset.fmt === "abs";
+        renderStatsTable();
+      });
+    }
 
     // --- Collapsible panels ---
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
