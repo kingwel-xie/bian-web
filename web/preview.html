@@ -252,7 +252,7 @@ let _totalDelCache = 0;
       if (cd) {
         const el = document.createElement("span");
         const urgent = diff <= 864e5;
-        el.style.cssText = `margin-left:8px;font-size:12px;font-weight:700;color:${urgent ? "#d0312d" : "#e67e22"}`;
+        el.style.cssText = `margin-left:8px;font-size:12px;font-weight:700;color:${urgent ? "#d0312d" : "#e67e22"}${urgent ? ";border:1px solid #d0312d;border-radius:3px;padding:0 4px" : ""}`;
         el.textContent = cd;
         document.getElementById("actTime").after(el);
       }
