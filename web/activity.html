@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>币安最新活动</title>
+<link rel="stylesheet" href="/css888/styles.css?v=20260708" />
+<style>
+  .act-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .act-head h2 { margin: 0; font-size: 18px; }
+  .act-head .act-actions { display: flex; align-items: center; gap: 8px; }
+  .act-head input { border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font-size: 13px; background: var(--panel); width: 240px; }
+  .act-head input:focus { outline: none; border-color: var(--accent-2); }
+  .act-refresh { font-size: 12px; padding: 5px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--accent); cursor: pointer; font-weight: 700; white-space: nowrap; }
+  .act-refresh:hover { background: #f5f0e8; }
+  .act-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+  .act-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
+  .act-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .act-card .act-title { font-size: 13px; font-weight: 700; color: var(--accent); line-height: 1.5; }
+  .act-card .act-meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .act-card .act-link { font-size: 11px; color: var(--accent-2); text-decoration: none; border: 1px solid var(--accent-2); border-radius: 4px; padding: 3px 10px; font-weight: 700; white-space: nowrap; align-self: flex-start; }
+  .act-card .act-link:hover { background: var(--accent-2); color: #fff; }
+  .act-empty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13px; }
+  .act-error { color: #b34a4a; text-align: center; padding: 24px; font-size: 13px; }
+  .act-loading { color: var(--muted); text-align: center; padding: 24px; font-size: 13px; }
+  .act-count { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="act-head">
+    <h2>币安最新活动</h2>
+    <div class="act-actions">
+      <input id="searchInput" type="text" placeholder="搜索活动标题…" />
+      <button id="refreshBtn" class="act-refresh">🔄 刷新</button>
+    </div>
+  </div>
+  <div class="act-count" id="count">加载中...</div>
+  <div id="grid" class="act-grid"></div>
+</main>
+
+<script>
+(async () => {
+  const grid = document.getElementById("grid");
+  const count = document.getElementById("count");
+  const searchInput = document.getElementById("searchInput");
+  const refreshBtn = document.getElementById("refreshBtn");
+
+  let articles = [];
+
+  function fmtDate(ts) {
+    const d = new Date(ts);
+    return d.toLocaleString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" });
+  }
+
+  function render() {
+    const q = searchInput.value.trim().toLowerCase();
+    const filtered = q ? articles.filter(a => a.title.toLowerCase().includes(q)) : articles;
+    if (!filtered.length) {
+      grid.innerHTML = `<div class="act-empty">${q ? "没有匹配的活动。" : "暂无活动。"}</div>`;
+      count.textContent = `共 ${articles.length} 条${q ? `，筛选 ${filtered.length} 条` : ""}`;
+      return;
+    }
+    grid.innerHTML = filtered.map(a => `
+      <div class="act-card">
+        <div class="act-title">${escapeHtml(a.title)}</div>
+        <div class="act-meta">
+          <span>${fmtDate(a.releaseDate)}</span>
+          <a class="act-link" href="https://www.binance.com/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">查看详情</a>
+        </div>
+      </div>
+    `).join("");
+    count.textContent = `共 ${articles.length} 条${q ? `，筛选 ${filtered.length} 条` : ""}`;
+  }
+
+  function escapeHtml(v) {
+    return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async function load(refresh) {
+    grid.innerHTML = '<div class="act-loading">加载中...</div>';
+    refreshBtn.disabled = true;
+    try {
+      const url = "/api/activities" + (refresh ? "?t=" + Date.now() : "");
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.error || "HTTP " + resp.status);
+      articles = data.articles || [];
+      render();
+    } catch (err) {
+      grid.innerHTML = `<div class="act-error">加载失败：${escapeHtml(err.message)}</div>`;
+      count.textContent = "";
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  searchInput.addEventListener("input", render);
+  refreshBtn.addEventListener("click", () => load(true));
+
+  await load();
+})();
+</script>
+</body>
+</html>

@@ -30,6 +30,8 @@ STATE_DIR = DATA_ROOT / ".workflow"
 JOBS_FILE = STATE_DIR / "jobs.json"
 SCHEDULES_FILE = STATE_DIR / "schedules.json"
 DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
+ACTIVITIES_CACHE_FILE = STATE_DIR / "activities_cache.json"
+ACTIVITIES_CACHE_TTL = 600
 TEAMS_FILE = STATE_DIR / "teams.json"
 KNOWN_SYMBOLS = {
     "bill": "BILLUSDT",
@@ -1442,6 +1444,12 @@ def analysis_html() -> Response:
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
+@app.get("/activity.html")
+def activity_html() -> Response:
+    response = send_from_directory(app.static_folder, "activity.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
 
 @app.get("/api/overview")
 def api_overview() -> Response:
@@ -1586,6 +1594,35 @@ def api_activity_projection(name: str) -> Response:
         return jsonify(build_live_projection(name))
     except ScriptError as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+ACTIVITIES_BINANCE_URL = (
+    "https://www.binance.com/bapi/apex/v1/public/apex/cms/article/list/query"
+)
+
+@app.get("/api/activities")
+def api_activities() -> Response:
+    import requests as req
+    # check cache
+    cache = read_json(ACTIVITIES_CACHE_FILE, {})
+    if cache and time() - cache.get("fetchedAt", 0) < ACTIVITIES_CACHE_TTL:
+        return jsonify(cache["data"])
+    try:
+        resp = req.get(
+            ACTIVITIES_BINANCE_URL,
+            params={"type": 1, "pageNo": 1, "pageSize": 50, "catalogId": 93},
+            timeout=15,
+        )
+        payload = resp.json()
+    except Exception as exc:
+        if cache:
+            return jsonify(cache["data"])
+        return jsonify({"error": str(exc)}), 502
+    articles = (payload.get("data", {}).get("catalogs") or [{}])[0].get("articles", [])
+    articles.sort(key=lambda a: a.get("releaseDate", 0), reverse=True)
+    result = {"articles": articles, "total": len(articles)}
+    write_json(ACTIVITIES_CACHE_FILE, {"fetchedAt": time(), "data": result})
+    return jsonify(result)
 
 
 @app.get("/api/binance/kline/<symbol>")
