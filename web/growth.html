@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>已完成任务增长对比</title>
+<link rel="stylesheet" href="/css888/styles.css?v=20260705" />
+<style>
+  .page-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .market-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); padding: 0 16px; cursor: pointer; font-weight: 700; font-size: 13px; user-select: none; }
+  .market-btn:hover { background: #f5f0e8; }
+  .market-btn.active { background: #e1f3f6; color: var(--accent-2); border-color: var(--accent-2); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 5px 8px; text-align: left; white-space: nowrap; font-size: 12px; }
+  th { position: sticky; top: 0; z-index: 2; background: #eee7d9; color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; user-select: none; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: #f5f0e8; }
+  .job-name { font-weight: 700; font-size: 12px; }
+  .growth-pos { color: var(--good); font-weight: 700; }
+  .growth-neg { color: var(--bad); font-weight: 700; }
+  .growth-zero { color: var(--muted); }
+  .summary { margin: 8px 0; font-size: 13px; color: var(--muted); }
+  .foot-row td { background: #eee7d9; font-weight: 700; border-top: 2px solid var(--line-strong); }
+  .foot-row:hover td { background: #ddd5c5; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; }
+  .job-row td:first-child { padding-left: 12px; }
+  .job-row .job-label { font-size: 13px; font-weight: 700; }
+  .tier-label { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="page-head">
+    <h2>已完成任务分档成交量增长对比</h2>
+    <div>
+      <button class="market-btn active" data-market="spot">SPOT</button>
+      <button class="market-btn" data-market="um">UM</button>
+    </div>
+  </div>
+  <hr class="sep" />
+  <div id="summary" class="summary">加载中...</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="headerRow"></tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"]/g, function(m) { return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]; });
+}
+
+const marketBtns = document.querySelectorAll(".market-btn");
+let currentMarket = "spot";
+
+marketBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    marketBtns.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMarket = btn.dataset.market;
+    loadData();
+  });
+});
+
+async function loadData() {
+  document.getElementById("summary").textContent = "加载中...";
+  document.getElementById("tableBody").innerHTML = "";
+  document.getElementById("headerRow").innerHTML = "";
+  try {
+    const resp = await fetch("/api/jobs/completed-growth?market=" + encodeURIComponent(currentMarket));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    renderGrowth(data);
+  } catch (err) {
+    document.getElementById("summary").textContent = "加载失败: " + err.message;
+  }
+}
+
+function renderGrowth(data) {
+  const jobs = data.jobs || [];
+  const rangeLabels = data.rangeLabels || [];
+
+  if (!jobs.length) {
+    document.getElementById("summary").textContent = "没有符合条件的已完成任务。";
+    return;
+  }
+
+  document.getElementById("summary").textContent = "共 " + jobs.length + " 个任务。" + (currentMarket === "spot" ? "对比 T-2h 与 T 分档占比增长。" : "对比 T-1 与 T 分档 grade 增长。");
+
+  // Header
+  const headerRow = document.getElementById("headerRow");
+  let headerHtml = "<th style='width:100px'>任务</th><th style='width:60px'>分档</th>";
+  for (const rl of rangeLabels) {
+    headerHtml += `<th class="num" colspan="3">${escapeHtml(rl)}</th>`;
+  }
+  headerRow.innerHTML = headerHtml;
+
+  // Remove stale sub-header rows
+  const existingSub = headerRow.parentNode.querySelector(".sub-header");
+  if (existingSub) existingSub.remove();
+
+  // Sub-header
+  const isSpot = currentMarket === "spot";
+  let prevLabel = isSpot ? "T-2h%" : "T-1均值";
+  let curLabel = isSpot ? "T%" : "T均值";
+  let subHtml = "<th></th><th></th>";
+  for (const _ of rangeLabels) {
+    subHtml += `<th class="num" style="font-weight:400">${prevLabel}</th><th class="num" style="font-weight:400">${curLabel}</th><th class="num" style="font-weight:400">增长</th>`;
+  }
+  const subRow = document.createElement("tr");
+  subRow.className = "sub-header";
+  subRow.innerHTML = subHtml;
+  headerRow.parentNode.insertBefore(subRow, headerRow.nextSibling);
+
+  // Body
+  const tbody = document.getElementById("tableBody");
+  let html = "";
+
+  for (const job of jobs) {
+    const tiers = job.tiers || [];
+    html += `<tr class="job-row"><td class="job-label">${escapeHtml(job.name)}</td><td></td>`;
+    for (const t of tiers) {
+      const prevVal = isSpot ? t.prevPct : t.prevAvg;
+      const curVal = isSpot ? t.curPct : t.curAvg;
+      const growthVal = isSpot ? t.pctGrowth : t.avgGrowth;
+      const cls = growthVal > 0 ? "growth-pos" : growthVal < 0 ? "growth-neg" : "growth-zero";
+      const sign = growthVal > 0 ? "+" : "";
+      const fmt = isSpot ? v => v.toFixed(2) : v => Number(v).toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2});
+      html += `<td class="num">${fmt(prevVal)}</td><td class="num">${fmt(curVal)}</td><td class="num ${cls}">${sign}${fmt(growthVal)}</td>`;
+    }
+    html += "</tr>";
+  }
+
+  // Footer row: average across jobs
+  html += '<tr class="foot-row"><td colspan="2" style="font-size:12px">平均增长</td>';
+  for (let ti = 0; ti < rangeLabels.length; ti++) {
+    let sumGrowth = 0, count = 0;
+    for (const job of jobs) {
+      const t = job.tiers[ti];
+      if (t) { sumGrowth += isSpot ? t.pctGrowth : t.avgGrowth; count++; }
+    }
+    const avg = count > 0 ? sumGrowth / count : 0;
+    const cls = avg > 0 ? "growth-pos" : avg < 0 ? "growth-neg" : "growth-zero";
+    const sign = avg > 0 ? "+" : "";
+    html += `<td class="num">—</td><td class="num">—</td><td class="num ${cls}">${sign}${avg.toFixed(2)}</td>`;
+  }
+  html += "</tr>";
+
+  tbody.innerHTML = html;
+}
+
+loadData();
+</script>
+</body>
+</html>

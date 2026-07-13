@@ -137,8 +137,8 @@
       <div class="stats-panel" id="calcToolPanel" style="margin-top:6px;display:none">
         <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">计算工具</h3>
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-left:16px">
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">总成交量
-            <input id="calcTotalVol" type="text" inputmode="numeric" style="width:140px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="1000000" />
+          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">总成交量 (M)
+            <input id="calcTotalVol" type="text" inputmode="decimal" style="width:140px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="1.5" />
           </label>
           <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">分档
             <select id="calcTier" style="width:100px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none"></select>
@@ -623,7 +623,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
     const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
     _statsCache = stats; _totalVolCache = totalVolume; _totalDelCache = totalDelta;
-    _deltaShowAbs = ((preview.market || "").toLowerCase() === "um");
+    _deltaShowAbs = ((preview.market || "").toLowerCase() === "um" || (preview.market || "").toLowerCase() === "saving");
     // Sync button active state
     document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => {
       b.classList.toggle("active", (b.dataset.fmt === "abs") === _deltaShowAbs);
@@ -1265,6 +1265,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       _deltaShowAbs = btn.dataset.fmt === "abs";
+      renderStatsTable();
     });
 
     renderStatsTable();
@@ -1279,16 +1280,16 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
         `<option value="${i}">${escapeHtml(r[0])}</option>`
       ).join("");
       calcToolPanel.style.display = "";
-      calcTotalVolEl.value = Number(_totalVolCache).toLocaleString("en-US");
+      calcTotalVolEl.value = (_totalVolCache / 1_000_000).toFixed(4).replace(/\.?0+$/, "");
       calcTotalVolEl.addEventListener("blur", () => {
         const v = calcTotalVolEl.value.trim();
-        if (v) calcTotalVolEl.value = v.replace(/,/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        if (v) calcTotalVolEl.value = v.replace(/,/g, "");
       });
       const foundTier = Array.from(calcTierEl.options).find(o => o.textContent === "51~200");
       if (foundTier) foundTier.selected = true;
       document.getElementById("calcPct").value = "17";
       document.getElementById("calcBtn").addEventListener("click", () => {
-        const totalVol = parseFloat(calcTotalVolEl.value.replace(/,/g, ""));
+        const totalVol = parseFloat(calcTotalVolEl.value.replace(/,/g, "")) * 1_000_000;
         const tierIdx = parseInt(calcTierEl.value);
         const pct = parseFloat(document.getElementById("calcPct").value);
         if (!totalVol || totalVol <= 0) { showToast("请输入总成交量"); return; }

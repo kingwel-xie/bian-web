@@ -1575,6 +1575,13 @@ def activity_html() -> Response:
     return response
 
 
+@app.get("/growth.html")
+def growth_html() -> Response:
+    response = send_from_directory(app.static_folder, "growth.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 @app.get("/api/overview")
 def api_overview() -> Response:
     return jsonify({"dataRoot": str(DATA_ROOT), "activities": discover_activities()})
@@ -2128,6 +2135,168 @@ def api_analysis() -> Response:
         "maxRank": max_rank,
         "ranges": [{"label": f"{r[0]}~{r[1]}", "min": r[0], "max": r[1]} for r in ranges],
         "jobs": results,
+    })
+
+
+@app.get("/api/jobs/completed-growth")
+def api_completed_growth() -> Response:
+    market = (request.args.get("market") or "").strip().lower()
+    if market not in ("spot", "um"):
+        return jsonify({"error": "market must be spot or um"}), 400
+
+    all_jobs = load_jobs()
+    candidates = [
+        j for j in all_jobs
+        if j.get("status") == "completed"
+        and (j.get("payload") or {}).get("market") == market
+    ]
+
+    entries: list[dict[str, Any]] = []
+    max_rank = 0
+
+    for job in candidates:
+        payload = job.get("payload", {})
+        snapshots = job.get("snapshots") or []
+        if len(snapshots) < 2:
+            continue
+
+        sorted_ss = sorted(snapshots, key=lambda s: s.get("timestamp", ""))
+
+        if market == "spot":
+            # SPOT: use activityEnd to find T and T-2h snapshots
+            activity_end_str = (payload.get("activityEnd") or "").strip()
+            if not activity_end_str:
+                continue
+            try:
+                end_dt = datetime.strptime(activity_end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+            except ValueError:
+                continue
+
+            t_minus_2h = end_dt - timedelta(hours=2)
+
+            def _snap_dt(s):
+                try:
+                    return datetime.strptime(s.get("timestamp", ""), "%Y-%m-%dT%H%M%S").replace(tzinfo=BJ)
+                except (ValueError, TypeError):
+                    return None
+
+            closest_end: dict | None = None
+            closest_m2: dict | None = None
+            dist_end: float | None = None
+            dist_m2: float | None = None
+
+            for s in snapshots:
+                dt = _snap_dt(s)
+                if dt is None:
+                    continue
+                de = abs((dt - end_dt).total_seconds())
+                dm = abs((dt - t_minus_2h).total_seconds())
+                if dist_end is None or de < dist_end:
+                    dist_end = de
+                    closest_end = s
+                if dist_m2 is None or dm < dist_m2:
+                    dist_m2 = dm
+                    closest_m2 = s
+
+            if not closest_end or not closest_m2 or closest_end is closest_m2:
+                continue
+            if (dist_end is None or dist_end > 1800) or (dist_m2 is None or dist_m2 > 1800):
+                continue
+
+            cur_ss = closest_end
+            prev_ss = closest_m2
+        else:
+            # UM: compare last two daily snapshots (T vs T-1)
+            cur_ss = sorted_ss[-1]
+            prev_ss = sorted_ss[-2]
+
+        prev_path = Path(str(prev_ss.get("json", "")))
+        cur_path = Path(str(cur_ss.get("json", "")))
+        if not prev_path.exists() or not cur_path.exists():
+            continue
+
+        prev_data = read_json(prev_path, {})
+        cur_data = read_json(cur_path, {})
+        prev_rows = prev_data.get("rows") if isinstance(prev_data, dict) else []
+        cur_rows = cur_data.get("rows") if isinstance(cur_data, dict) else []
+        if not isinstance(prev_rows, list) or not isinstance(cur_rows, list):
+            continue
+
+        limit = payload.get("top") or 1000
+        prev_limited = prev_rows[:limit]
+        cur_limited = cur_rows[:limit]
+        if not prev_limited or not cur_limited:
+            continue
+
+        reward_mode = payload.get("rewardMode") or "rank"
+        for r in cur_limited:
+            if reward_mode != "rank":
+                continue
+            seq = int(r.get("sequence") or 0)
+            if seq > max_rank:
+                max_rank = seq
+
+        entries.append({
+            "job": job,
+            "prevRows": prev_limited,
+            "curRows": cur_limited,
+            "prevTs": prev_ss.get("timestamp"),
+            "curTs": cur_ss.get("timestamp"),
+        })
+
+    ranges = _extend_ranges(max_rank)
+
+    output: list[dict[str, Any]] = []
+    for entry in entries:
+        job = entry["job"]
+        prev_rows = entry["prevRows"]
+        cur_rows = entry["curRows"]
+
+        prev_total = sum(float(r.get("grade", 0)) for r in prev_rows)
+        cur_total = sum(float(r.get("grade", 0)) for r in cur_rows)
+
+        tiers: list[dict[str, Any]] = []
+        for rmin, rmax in ranges:
+            prev_items = [float(r.get("grade", 0)) for r in prev_rows if rmin <= int(r.get("sequence") or 0) <= rmax]
+            cur_items = [float(r.get("grade", 0)) for r in cur_rows if rmin <= int(r.get("sequence") or 0) <= rmax]
+            prev_s = sum(prev_items)
+            cur_s = sum(cur_items)
+            prev_n = len(prev_items)
+            cur_n = len(cur_items)
+            prev_avg = round(prev_s / prev_n, 2) if prev_n else 0
+            cur_avg = round(cur_s / cur_n, 2) if cur_n else 0
+            avg_growth = round(cur_avg - prev_avg, 2)
+            prev_pct = round(prev_s / prev_total * 100, 2) if prev_total else 0
+            cur_pct = round(cur_s / cur_total * 100, 2) if cur_total else 0
+            pct_growth = round(cur_pct - prev_pct, 2)
+            tiers.append({
+                "label": f"{rmin}~{rmax}",
+                "prevPct": prev_pct,
+                "curPct": cur_pct,
+                "pctGrowth": pct_growth,
+                "prevAvg": prev_avg,
+                "curAvg": cur_avg,
+                "avgGrowth": avg_growth,
+                "prevTotal": round(prev_s, 2),
+                "curTotal": round(cur_s, 2),
+            })
+
+        output.append({
+            "id": job.get("id"),
+            "name": job.get("name"),
+            "market": market,
+            "totalPrev": round(prev_total, 2),
+            "totalCur": round(cur_total, 2),
+            "prevTs": entry["prevTs"],
+            "curTs": entry["curTs"],
+            "tiers": tiers,
+        })
+
+    output.sort(key=lambda j: j["name"] or "")
+
+    return jsonify({
+        "jobs": output,
+        "rangeLabels": [f"{r[0]}~{r[1]}" for r in ranges],
     })
 
 
