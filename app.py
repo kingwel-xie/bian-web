@@ -32,6 +32,7 @@ SCHEDULES_FILE = STATE_DIR / "schedules.json"
 DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
 ACTIVITIES_CACHE_FILE = STATE_DIR / "activities_cache.json"
 ACTIVITIES_CACHE_TTL = 600
+ACTIVITIES_DB_FILE = STATE_DIR / "activities_db.json"
 TEAMS_FILE = STATE_DIR / "teams.json"
 KNOWN_SYMBOLS = {
     "bill": "BILLUSDT",
@@ -760,11 +761,17 @@ def workflow_command(payload: dict[str, Any]) -> list[str]:
 
 def scrape_command(payload: dict[str, Any]) -> list[str]:
     normalized = normalize_scrape_payload(payload)
+    url = (normalized.get("url") or "").strip()
+    if not url:
+        rid = normalized.get("resourceId", "")
+        market = normalized.get("market", "um")
+        path = {"um": "futures-activity", "spot": "spot-activity", "saving": "saving-activity"}.get(market, "futures-activity")
+        url = f"https://www.binance.com/zh-CN/{path}/leaderboard?resourceId={rid}"
     command = [
         sys.executable,
         str(APP_DIR / "auto_leaderboard.py"),
         "--activity",
-        f"{normalized['name']}={normalized['url']}",
+        f"{normalized['name']}={url}",
         "--top",
         str(normalized["top"]),
         "--page-size",
@@ -1373,6 +1380,123 @@ def save_teams_db(db: dict[str, Any]) -> None:
     write_json(TEAMS_FILE, db)
 
 
+ACTIVITY_KEYWORDS_FILE = STATE_DIR / "activity_keywords.json"
+_keywords_cache: dict[str, Any] | None = None
+_keywords_cache_at: float = 0
+_KEYWORDS_CACHE_TTL = 300
+
+def _get_keywords() -> dict[str, Any]:
+    global _keywords_cache, _keywords_cache_at
+    now = time.time()
+    if _keywords_cache is None or now - _keywords_cache_at > _KEYWORDS_CACHE_TTL:
+        _keywords_cache = read_json(ACTIVITY_KEYWORDS_FILE, {})
+        _keywords_cache_at = now
+    return _keywords_cache
+
+
+def _extract_activity_tags(title: str) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {"types": [], "tokens": []}
+    seen: set[str] = set()
+    kw = _get_keywords()
+    token_set = set(kw.get("tokens", []))
+    type_keywords = kw.get("typeKeywords", [])
+    for m in re.finditer(r"[（(]([A-Z][A-Z0-9]{1,10})[）)]", title):
+        t = m.group(1)
+        if t in token_set and t not in seen:
+            result["tokens"].append(t)
+            seen.add(t)
+    for m in re.finditer(r"(?<![A-Za-z])[A-Z]{2,10}(?![A-Za-z])", title):
+        t = m.group(0)
+        if t in token_set and t not in seen:
+            result["tokens"].append(t)
+            seen.add(t)
+    for tkw in type_keywords:
+        if tkw in title and tkw not in seen:
+            result["types"].append(tkw)
+            seen.add(tkw)
+    return result
+
+
+def sync_activities() -> dict[str, Any]:
+    """Fetch latest activities from Binance API, compare with stored DB,
+    detect new/removed items, keep only latest 50, and save."""
+    import json as _j
+    import urllib.request
+    url = ACTIVITIES_BINANCE_URL + "?type=1&pageNo=1&pageSize=50&catalogId=93"
+    req = urllib.request.Request(url)
+    req.add_header("accept-language", "zh-CN")
+    req.add_header("lang", "zh-CN")
+    req.add_header("referer", "https://www.binance.com/zh-CN/messages/v2/group/announcement")
+    req.add_header("bnc-time-zone", "Asia/Shanghai")
+    req.add_header("user-agent", "Mozilla/5.0")
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read().decode("utf-8")
+    data = _j.loads(raw)
+    cats = data.get("data", {}).get("catalogs") or [{}]
+    fresh = cats[0].get("articles", [])
+    fresh.sort(key=lambda a: a.get("releaseDate", 0), reverse=True)
+    fresh = fresh[:50]
+    for a in fresh:
+        a["tags"] = _extract_activity_tags(a.get("title", ""))
+    fresh_ids = {a["id"] for a in fresh}
+
+    db = read_json(ACTIVITIES_DB_FILE, {"articles": [], "history": []})
+    old = db.get("articles", [])
+    old_ids = {a["id"] for a in old}
+    now_ts = time.time()
+    history = db.get("history", [])
+
+    new_ids = fresh_ids - old_ids
+    removed_ids = old_ids - fresh_ids
+
+    for a in fresh:
+        if a["id"] in new_ids:
+            a["firstSeenAt"] = now_ts
+        else:
+            existing = next((o for o in old if o["id"] == a["id"]), None)
+            a["firstSeenAt"] = existing.get("firstSeenAt", now_ts) if existing else now_ts
+
+    for a in old:
+        if a["id"] in removed_ids:
+            history.append({"type": "removed", "article": a, "detectedAt": now_ts})
+    for a in fresh:
+        if a["id"] in new_ids:
+            history.append({"type": "new", "article": a, "detectedAt": now_ts})
+
+    if len(history) > 100:
+        history = history[-100:]
+
+    db = {"syncedAt": now_ts, "articles": fresh, "history": history}
+
+    try:
+        ACTIVITIES_CACHE_FILE.write_text(
+            _j.dumps({"fetchedAt": now_ts, "data": {"articles": fresh, "total": len(fresh)}}, ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError:
+        pass
+    write_json(ACTIVITIES_DB_FILE, db)
+    return db
+
+
+def _sync_interval() -> int:
+    h = datetime.now(BJ).hour
+    return 3600 if 8 <= h < 20 else 14400
+
+
+def sync_activities_loop() -> None:
+    time.sleep(5)
+    try:
+        sync_activities()
+    except Exception as exc:
+        print(f"initial activities sync error: {exc}", file=sys.stderr)
+    while True:
+        time.sleep(_sync_interval())
+        try:
+            sync_activities()
+        except Exception as exc:
+            print(f"activities sync error: {exc}", file=sys.stderr)
+
+
 def scheduler_loop() -> None:
     while True:
         try:
@@ -1602,27 +1726,27 @@ ACTIVITIES_BINANCE_URL = (
 
 @app.get("/api/activities")
 def api_activities() -> Response:
-    import requests as req
-    # check cache
-    cache = read_json(ACTIVITIES_CACHE_FILE, {})
-    if cache and time() - cache.get("fetchedAt", 0) < ACTIVITIES_CACHE_TTL:
-        return jsonify(cache["data"])
-    try:
-        resp = req.get(
-            ACTIVITIES_BINANCE_URL,
-            params={"type": 1, "pageNo": 1, "pageSize": 50, "catalogId": 93},
-            timeout=15,
-        )
-        payload = resp.json()
-    except Exception as exc:
-        if cache:
-            return jsonify(cache["data"])
-        return jsonify({"error": str(exc)}), 502
-    articles = (payload.get("data", {}).get("catalogs") or [{}])[0].get("articles", [])
-    articles.sort(key=lambda a: a.get("releaseDate", 0), reverse=True)
-    result = {"articles": articles, "total": len(articles)}
-    write_json(ACTIVITIES_CACHE_FILE, {"fetchedAt": time(), "data": result})
-    return jsonify(result)
+    """Return activities from background-synced DB. Pass ?refresh=1 to force immediate sync."""
+    if request.args.get("refresh"):
+        try:
+            sync_activities()
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+    db = read_json(ACTIVITIES_DB_FILE, {})
+    articles = db.get("articles", [])
+    return jsonify({"articles": articles, "total": len(articles), "syncedAt": db.get("syncedAt")})
+
+
+@app.get("/api/activities/changes")
+def api_activities_changes() -> Response:
+    """Return activity changes (new/removed) since a given timestamp."""
+    since = request.args.get("since")
+    since_ts = float(since) if since else 0
+    db = read_json(ACTIVITIES_DB_FILE, {})
+    history = db.get("history", [])
+    recent = [h for h in history if h.get("detectedAt", 0) > since_ts]
+    has_new = any(h.get("type") == "new" for h in recent)
+    return jsonify({"changes": recent, "hasNew": has_new})
 
 
 @app.get("/api/binance/kline/<symbol>")
@@ -2380,6 +2504,90 @@ def api_job_preview(job_id: str) -> Response:
         return jsonify({"error": str(exc)}), 500
 
 
+@app.get("/api/jobs/<job_id>/trend")
+def api_job_trend(job_id: str) -> Response:
+    """Return per-tier statistics across all snapshots for a job."""
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    payload = job.get("payload") or {}
+    snapshots = job.get("snapshots") or []
+    if not snapshots:
+        return jsonify({"error": "没有快照"}), 400
+    sorted_snaps = sorted(snapshots, key=lambda s: s.get("timestamp", ""))
+    # Build ranges (same logic as preview endpoint)
+    r_mode = payload.get("rewardMode") or "rank"
+    r_tiers = payload.get("rewardTiers") or []
+    r_eligible = int(payload.get("eligibleUsers") or 0)
+    if r_mode == "rank" and r_tiers:
+        sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
+        ranges: list[tuple[str, int, int]] = []
+        cursor = 1
+        for t in sorted_tiers:
+            rmin = t.get("rankMin", 0)
+            rmax = t.get("rankMax", 0)
+            if rmin > cursor:
+                ranges.append((f"{cursor}~{rmin-1}", cursor, rmin - 1))
+            ranges.append((f"{rmin}~{rmax}", rmin, rmax))
+            cursor = rmax + 1
+    elif r_mode == "total" and r_eligible > 0:
+        ranges = [(f"1~{r_eligible}", 1, r_eligible)]
+    else:
+        ranges = [("1~5", 1, 5), ("6~20", 6, 20), ("21~50", 21, 50), ("51~200", 51, 200), ("201~1000", 201, 1000)]
+    top = payload.get("top") or 1000
+    result_snapshots = []
+    prev_grade_map: dict[int, float] = {}
+    for snap in sorted_snaps:
+        json_path_str = snap.get("json")
+        if not json_path_str:
+            continue
+        json_path = Path(str(json_path_str))
+        if not json_path.exists():
+            continue
+        data = read_json(json_path, {})
+        rows = data.get("rows") if isinstance(data, dict) else []
+        if not isinstance(rows, list):
+            continue
+        limited = rows[:top]
+        if not limited:
+            continue
+        cur_map: dict[int, float] = {}
+        for r in limited:
+            seq = int(r.get("sequence") or 0)
+            cur_map[seq] = float(r.get("grade", 0) or 0)
+        range_out = []
+        for label, rmin, rmax in ranges:
+            items = [r for r in limited if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
+            n = len(items)
+            if n == 0:
+                range_out.append({"label": label, "total": 0, "avg": 0, "med": 0, "q1": 0, "last": 0, "pct": 0, "sumDelta": 0, "dratio": 0})
+                continue
+            total = sum(float(r.get("grade", 0) or 0) for r in items)
+            grades = sorted(float(r.get("grade", 0) or 0) for r in items)
+            avg = total / n
+            med = grades[n // 2] if n % 2 else (grades[n // 2 - 1] + grades[n // 2]) / 2
+            q1_index = int(n * 0.25)
+            q1 = grades[min(q1_index, n - 1)]
+            last = float(items[-1].get("grade", 0) or 0)
+            sumDelta = 0.0
+            for r in items:
+                seq = int(r.get("sequence") or 0)
+                cur_grade = float(r.get("grade", 0) or 0)
+                prev_grade = prev_grade_map.get(seq)
+                if prev_grade is not None:
+                    sumDelta += cur_grade - prev_grade
+            range_out.append({"label": label, "total": total, "avg": avg, "med": med, "q1": q1, "last": last, "sumDelta": sumDelta})
+        total_vol = sum(rs["total"] for rs in range_out)
+        total_delta = sum(rs["sumDelta"] for rs in range_out)
+        for rs in range_out:
+            rs["pct"] = round(rs["total"] / total_vol * 100, 1) if total_vol else 0
+            rs["dratio"] = round(rs["sumDelta"] / total_delta * 100, 1) if total_delta else 0
+        result_snapshots.append({"timestamp": snap["timestamp"], "rows": len(limited), "totalVol": total_vol, "ranges": range_out})
+        prev_grade_map = cur_map
+    return jsonify({"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]})
+
+
 @app.get("/api/jobs/<job_id>/team-analysis")
 def api_team_analysis(job_id: str) -> Response:
     jobs = load_jobs()
@@ -2852,6 +3060,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
 def main() -> None:
     ensure_state()
     threading.Thread(target=scheduler_loop, daemon=True).start()
+    threading.Thread(target=sync_activities_loop, daemon=True).start()
     host = os.environ.get("WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("WEB_PORT", "48234"))
     app.run(host=host, port=port, debug=False, threaded=True)

@@ -33,7 +33,7 @@ select {
 }
 
 .shell {
-  width: min(1880px, calc(100vw - 12px));
+  width: min(1880px, calc(100vw - 48px));
   margin: 0 auto;
   padding: 14px 0 28px;
 }
@@ -390,6 +390,11 @@ button:disabled {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+
+.job-urls { display: flex; gap: 6px; margin-top: 5px; }
+.job-urls .job-link { font-size: 11px; color: var(--accent-2); text-decoration: none; border: 1px solid var(--accent-2); border-radius: 4px; padding: 2px 10px; font-weight: 600; }
+.job-urls .job-link:hover { background: var(--accent-2); color: #fff; }
+.job-urls .muted { font-size: 11px; color: var(--muted); }
 
 .job details.stderr {
   grid-column: 1 / -1;
@@ -849,13 +854,13 @@ td:nth-child(2) {
 .form-row .form-grow { flex: 1; }
 .form-divider { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
 .modal-form label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
-.tier-row { display: flex; align-items: center; gap: 6px; font-size: 14px; margin-top: 10px; }
+.tier-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 10px; }
 .tier-row:first-child { margin-top: 6px; }
-.tier-row .tier-label { display: inline-block; width: 56px; text-align: right; color: var(--muted); font-size: 13px; }
+.tier-row .tier-label { display: inline-block; width: 56px; text-align: right; color: var(--muted); font-size: 11px; }
 .tier-row .tier-min,
 .tier-row .tier-max { width: 72px; padding: 8px 10px !important; text-align: center; height: auto; }
-.tier-row .tier-sep { color: var(--muted); font-size: 14px; }
-.tier-row .tier-arrow { color: var(--muted); font-size: 13px; margin: 0 4px 0 8px; }
+.tier-row .tier-sep { color: var(--muted); font-size: 12px; }
+.tier-row .tier-arrow { color: var(--muted); font-size: 11px; margin: 0 4px 0 8px; }
 .tier-row .tier-amt { width: 100px; padding: 8px 10px !important; text-align: right; height: auto; }
 .tier-header { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 14px; margin-bottom: 6px; }
 .tier-header span:first-child { width: 56px; text-align: right; }
@@ -870,20 +875,20 @@ td:nth-child(2) {
 .modal-tab {
   min-height: 34px; padding: 0 18px; border: 1px solid var(--line);
   border-radius: 6px 6px 0 0; background: transparent; color: var(--muted);
-  font-size: 13px; font-weight: 700; cursor: pointer;
+  font-size: 11px; font-weight: 700; cursor: pointer;
 }
 .modal-tab.active {
   background: #fffdf8; color: var(--ink); border-bottom-color: #fffdf8;
 }
 .modal-form input, .modal-form select {
   height: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
-  font-size: 14px; background: #fffdf8; color: var(--ink); outline: none;
+  font-size: 12px; background: #fffdf8; color: var(--ink); outline: none;
 }
 .modal-form input:focus, .modal-form select:focus { border-color: var(--accent-2); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 .modal-actions button {
   padding: 7px 18px; border: 1px solid var(--line); border-radius: 6px;
-  background: #eee7d9; color: var(--ink); font-weight: 700; font-size: 13px; cursor: pointer;
+  background: #eee7d9; color: var(--ink); font-weight: 700; font-size: 11px; cursor: pointer;
 }
 .modal-actions button:hover { background: #e1f3f6; }
 .modal-actions button#editSaveBtn { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }

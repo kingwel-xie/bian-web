@@ -81,17 +81,28 @@
   .df-btn:hover { background: #f5f0e8; }
   .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .modal-overlay { position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
-  .modal-box { background:#fffdf8; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,.25); min-width:480px; max-width:600px; max-height:80vh; display:flex; flex-direction:column; }
-  .modal-header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:#eee7d9; border-radius:8px 8px 0 0; }
+  .modal-box { background:#fffdf8; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,.25); min-width:360px; max-width:520px; max-height:75vh; display:flex; flex-direction:column; }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; background:#eee7d9; border-radius:8px 8px 0 0; }
   .modal-header h3 { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; color:var(--accent); }
-  .modal-close { background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:0 4px; }
+  .modal-close { background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:0 4px; line-height:1; }
   .modal-close:hover { color:#333; }
-  .modal-body { padding:12px 16px; overflow-y:auto; }
-  .snap-item { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(46,42,36,0.08); }
+  .modal-body { padding:6px 14px; overflow-y:auto; flex:1; }
+  .modal-footer { padding:8px 14px; border-top:1px solid rgba(46,42,36,0.08); display:flex; justify-content:flex-end; }
+  .modal-footer .modal-close-btn { font-size:12px; padding:5px 18px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; font-weight:700; }
+  .modal-footer .modal-close-btn:hover { background:#f5f0e8; }
+  .snap-item { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(46,42,36,0.08); }
   .snap-item:last-child { border-bottom:none; }
-  .snap-item .snap-info { font-size:13px; }
-  .snap-item .snap-delete { color:#b34a4a; cursor:pointer; font-size:11px; border:1px solid #e0c8b0; border-radius:6px; padding:3px 10px; background:none; font-weight:700; }
-  .snap-item .snap-delete:hover { background:#fef0ef; }
+  .snap-item .snap-info { font-size:12px; }
+  .snap-item .snap-delete { color:#b34a4a; cursor:pointer; font-size:10px; border:1px solid #e0c8b0; border-radius:4px; padding:6px 14px; background:none; font-weight:700; line-height:1.2; min-height:0; }
+  .trend-body { padding:10px 16px 14px; }
+  .trend-tier-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .trend-tier-btn { font-size:12px; padding:3px 12px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--muted); cursor:pointer; font-weight:700; }
+  .trend-tier-btn:hover { background:#f5f0e8; }
+  .trend-tier-btn.active { background:#81c784; color:#fff; border-color:#81c784; }
+  .trend-chart-wrap { width:100%; overflow-x:auto; }
+  .trend-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--muted); }
+  .trend-legend .tl-item { display:inline-flex; align-items:center; gap:4px; }
+  .trend-legend .tl-dot { width:10px; height:10px; border-radius:2px; display:inline-block; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -122,6 +133,21 @@
           <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
+      </div>
+      <div class="stats-panel" id="trendPanel">
+        <h3 style="display:flex;align-items:center;gap:8px">趋势图
+          <span id="trendModeToggle" style="font-size:11px;font-weight:400">
+            <button class="df-btn active" data-mode="volume">成交量</button>
+            <button class="df-btn" data-mode="pct">占比</button>
+          </span>
+        </h3>
+        <div class="trend-body">
+          <div class="trend-tier-bar" id="trendTierBar"></div>
+          <div class="trend-chart-wrap">
+            <svg id="trendSvg" viewBox="0 0 800 320" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;overflow:visible"></svg>
+          </div>
+          <div class="trend-legend" id="trendLegend"></div>
+        </div>
       </div>
     </div>
     <div id="rewardPanel" class="reward-panel" style="display:none">
@@ -203,6 +229,13 @@
   </div>
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg, ms) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  el.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(46,42,36,.92);color:#fff;font-size:13px;padding:8px 20px;border-radius:6px;white-space:nowrap;line-height:1.4";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms || 3000);
+}
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
@@ -211,6 +244,10 @@ let _deltaShowAbs = false;
 let _statsCache = null;
 let _totalVolCache = 0;
 let _totalDelCache = 0;
+let _trendData = null;
+let _trendTierIdx = -1;
+let _trendMode = "volume";
+const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9","#f39c12","#16a085","#e67e22","#7f8c8d"];
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -291,7 +328,9 @@ let _totalDelCache = 0;
       <span style="opacity:0.5;font-size:13px">${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum}</span>
     `;
 
+    const _hasRid = !!preview.resourceId;
     document.getElementById("downloadLinks").innerHTML = [
+      _hasRid ? `<a href="#" id="scrapeBtn">🔄 抓取</a>` : "",
       `<a href="team.html?job=${encodeURIComponent(jobId)}">📊 团队检测</a>`,
       preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
       preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
@@ -309,13 +348,14 @@ let _totalDelCache = 0;
       a.textContent = "📸 管理快照";
       document.getElementById("downloadLinks").appendChild(a);
     }
+    let _showSnapBar = false;
     if (snaps.length > 1) {
       const revSnaps = snaps.toReversed();
       const selected = snapshotParam || snaps[snaps.length - 1].timestamp;
       const selIdx = snaps.findIndex(s => s.timestamp === selected);
       const defaultCompare = snaps.length > 1 ? snaps[snaps.length - 2].timestamp : "";
       const compareVal = compareParam || (selIdx > 0 ? snaps[selIdx - 1].timestamp : defaultCompare);
-      snapBar.style.display = "flex";
+      _showSnapBar = true;
       snapBar.innerHTML = `
         <div class="snapshot-section">
           <label for="snapshotSelect">快照版本</label>
@@ -358,6 +398,82 @@ let _totalDelCache = 0;
       });
     }
 
+    if (_showSnapBar) {
+      snapBar.style.display = "flex";
+    }
+
+    // --- Scrape button handler ---
+    if (_hasRid) {
+      const scrapeBtn = document.getElementById("scrapeBtn");
+      let _scraping = false;
+      const _initialSnapCount = (preview.snapshots || []).length;
+      scrapeBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        if (_scraping) return;
+        _scraping = true;
+        scrapeBtn.textContent = "🔄 抓取中...";
+        scrapeBtn.style.opacity = "0.6";
+        try {
+          const resp = await fetch("/api/scrape/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resourceId: preview.resourceId,
+              market: preview.market,
+              symbol: preview.symbol,
+              url: preview.url,
+            }),
+          });
+          if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${resp.status}`);
+          }
+          const jobData = await resp.json();
+          const scrapeJobId = jobData?.job?.id;
+          if (!scrapeJobId) throw new Error("后端未返回 job id");
+          scrapeBtn.textContent = "⏳ 等待抓取结果...";
+
+          const poll = async (startTime) => {
+            if (Date.now() - startTime > 120000) {
+              scrapeBtn.textContent = "🔄 抓取";
+              scrapeBtn.style.opacity = "";
+              _scraping = false;
+              showToast("抓取超时，请前往主页查看。", 4000);
+              return;
+            }
+            try {
+              const ctrl = new AbortController();
+              const tid = setTimeout(() => ctrl.abort(), 10000);
+              const r2 = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/preview", { signal: ctrl.signal });
+              clearTimeout(tid);
+              if (r2.ok) {
+                const data = await r2.json();
+                const newCount = (data.snapshots || []).length;
+                if (newCount > _initialSnapCount) {
+                  location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
+                  return;
+                }
+                scrapeBtn.textContent = "🔄 抓取";
+                scrapeBtn.style.opacity = "";
+                _scraping = false;
+                showToast("数据无变化", 3000);
+                return;
+              }
+              setTimeout(() => poll(startTime), 3000);
+            } catch {
+              setTimeout(() => poll(startTime), 3000);
+            }
+          };
+          poll(Date.now());
+        } catch (err) {
+          scrapeBtn.textContent = "🔄 抓取";
+          scrapeBtn.style.opacity = "";
+          _scraping = false;
+          showToast("抓取失败: " + err.message, 5000);
+        }
+      });
+    }
+
     // snapshot manager modal
     if (snaps.length) {
       document.getElementById("manageSnapBtn").addEventListener("click", (e) => {
@@ -384,10 +500,12 @@ let _totalDelCache = 0;
           });
         });
       });
-      document.getElementById("snapModalClose").addEventListener("click", () => {
+      document.getElementById("snapModalClose").addEventListener("click", closeSnapModal);
+      document.getElementById("snapModalCloseBtn").addEventListener("click", closeSnapModal);
+      function closeSnapModal() {
         document.getElementById("snapshotModal").style.display = "none";
         if (_snapDirty) location.reload();
-      });
+      }
       document.getElementById("snapshotModal").addEventListener("click", (e) => {
         if (e.target === e.currentTarget) {
           e.target.style.display = "none";
@@ -838,7 +956,280 @@ let _totalDelCache = 0;
     document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
     if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
 
+    // --- Trend chart ---
+    const _activityEnd = preview.activityEnd;
+    let _trendEndTime = null;
+    async function loadTrend() {
+      try {
+        const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/trend");
+        if (!resp.ok) return;
+        _trendData = await resp.json();
+        if (_activityEnd) {
+          _trendEndTime = new Date(_activityEnd.replace(" ", "T") + ":00+08:00");
+          if (!isNaN(_trendEndTime)) {
+            _trendData.snapshots = _trendData.snapshots.filter(s => {
+              const st = new Date(s.timestamp.replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1T$2:$3:$4+08:00"));
+              return !isNaN(st) && st <= _trendEndTime;
+            });
+          }
+        }
+        initTrendChart();
+      } catch (_) {}
+    }
+    function initTrendChart() {
+      if (!_trendData || !_trendData.snapshots || _trendData.snapshots.length < 2) {
+        document.getElementById("trendPanel").style.display = "none";
+        return;
+      }
+      const labels = _trendData.rangeLabels || [];
+      if (!labels.length) return;
+      if (_trendTierIdx < 0) {
+        _trendTierIdx = labels.findIndex(l => l.startsWith("51"));
+        if (_trendTierIdx < 0) _trendTierIdx = 0;
+      }
+      const bar = document.getElementById("trendTierBar");
+      bar.innerHTML = labels.map((l, i) =>
+        `<button class="trend-tier-btn${i === _trendTierIdx ? " active" : ""}" data-idx="${i}">${escapeHtml(l)}</button>`
+      ).join("");
+      bar.addEventListener("click", evt => {
+        const btn = evt.target.closest(".trend-tier-btn");
+        if (!btn) return;
+        bar.querySelectorAll(".trend-tier-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        _trendTierIdx = parseInt(btn.dataset.idx, 10);
+        renderTrendChart();
+      });
+      document.getElementById("trendModeToggle").addEventListener("click", evt => {
+        evt.stopPropagation();
+        const btn = evt.target.closest(".df-btn");
+        if (!btn || btn.classList.contains("active")) return;
+        document.querySelectorAll("#trendModeToggle .df-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        _trendMode = btn.dataset.mode;
+        renderTrendChart();
+      });
+      renderTrendChart();
+    }
+    function renderTrendChart() {
+      const svg = document.getElementById("trendSvg");
+      if (!_trendData || !_trendData.snapshots || _trendData.snapshots.length < 2) { svg.innerHTML = ""; return; }
+      const snaps = _trendData.snapshots;
+      const labels = _trendData.rangeLabels || [];
+      const timestamps = snaps.map(s => s.timestamp);
+      const W = 800, H = 320, PL = 65, PR = 55, PT = 25, PB = 40;
+      const CW = W - PL - PR, CH = H - PT - PB;
+
+      function fmtCountdown(ms) {
+        if (ms <= 0) return "0";
+        let h = Math.floor(ms / 3600000);
+        const m = Math.floor(ms / 60000) % 60;
+        if (m > 0 && m < 10) h = Math.max(1, h);
+        const d = Math.floor(h / 24), rh = h % 24;
+        if (d > 0) return `-${d}d${rh}h`;
+        return `-${h}h`;
+      }
+
+      // Shared: compute left-Y (total volume) range across all snapshots
+      let tMin = Infinity, tMax = -Infinity;
+      for (const s of snaps) {
+        const v = s.totalVol;
+        if (v != null && Number.isFinite(v)) { if (v < tMin) tMin = v; if (v > tMax) tMax = v; }
+      }
+      if (tMin === Infinity) { svg.innerHTML = ""; return; }
+      const tSpan = tMax - tMin || 1, tPad = tSpan * 0.1;
+      tMin -= tPad; tMax += tPad;
+      const tRange = tMax - tMin || 1;
+
+      if (_trendMode === "pct") {
+        // --- Pct mode: selected tier's pct line, right axis 0-100 ---
+        const tierLabel = labels[_trendTierIdx] || labels[0];
+        const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel)).filter(Boolean);
+        if (points.length < 2) { svg.innerHTML = ""; return; }
+        const pctMax = 100, pctMin = 0, pctRange = 100;
+        function xPos(i) { return PL + i / (snaps.length - 1) * CW; }
+        function yLPos(v) { return PT + CH - (v - tMin) / tRange * CH; }
+        function yPctPos(v) { return PT + CH - (v - pctMin) / pctRange * CH; }
+
+        let html = "";
+        for (let gi = 0; gi <= 4; gi++) {
+          const yy = PT + gi / 4 * CH;
+          html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="#e0ddd5" stroke-width="1"/>`;
+          const lv = tMax - gi / 4 * tRange;
+          html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="#999">${fmtShort(lv)}</text>`;
+          const pv = pctMax - gi / 4 * pctRange;
+          html += `<text x="${W - PR + 6}" y="${yy + 4}" text-anchor="start" font-size="10" fill="#999">${pv.toFixed(1)}%</text>`;
+        }
+        for (let i = 0; i < points.length; i++) {
+          const xx = xPos(i);
+          let label;
+          if (_trendEndTime) {
+            const st = new Date(timestamps[i].replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1T$2:$3:$4+08:00"));
+            label = !isNaN(st) ? fmtCountdown(_trendEndTime - st) : timestamps[i];
+          } else {
+            label = fmtSnapshotTs(timestamps[i]).slice(5, 16);
+          }
+          html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
+        }
+
+        // total volume reference (gray dashed)
+        const tvPts = snaps.map((s, i) => {
+          const v = s.totalVol;
+          return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yLPos(v)}` : null;
+        }).filter(Boolean);
+        if (tvPts.length >= 2) {
+          html += `<polyline points="${tvPts.join(" ")}" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="3,3"/>`;
+        }
+
+        // selected tier's pct line
+        const color = _pctPalette[_trendTierIdx % _pctPalette.length];
+        const pts = points.map((p, i) => {
+          const v = p.pct;
+          return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yPctPos(v)}` : null;
+        }).filter(Boolean);
+        if (pts.length >= 2) {
+          html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
+          for (let i = 0; i < points.length; i++) {
+            const v = points[i].pct;
+            if (v == null || !Number.isFinite(v)) continue;
+            const cx = xPos(i), cy = yPctPos(v);
+            html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${color}" stroke="#fff" stroke-width="2"
+              onmouseenter="showTrendTip(event,'${escapeHtml(tierLabel)}: ${v}%')"
+              onmouseleave="hideTrendTip()"/>`;
+          }
+        }
+        svg.innerHTML = html;
+
+        document.getElementById("trendLegend").innerHTML =
+          '<span class="tl-item"><span class="tl-dot" style="background:#ccc;border-radius:0;height:2px"></span>总成交量(ref)</span>' +
+          `<span class="tl-item"><span class="tl-dot" style="background:${color}"></span>${escapeHtml(tierLabel)} 占比</span>`;
+        return;
+      }
+
+      // --- Volume mode: total volume + tier stats ---
+      function xPos(i) { return PL + i / (snaps.length - 1) * CW; }
+      function yLPos(v) { return PT + CH - (v - tMin) / tRange * CH; }
+
+      let html = "";
+      for (let gi = 0; gi <= 4; gi++) {
+        const yy = PT + gi / 4 * CH;
+        html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="#e0ddd5" stroke-width="1"/>`;
+        const lv = tMax - gi / 4 * tRange;
+        html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="#999">${fmtShort(lv)}</text>`;
+      }
+      for (let i = 0; i < snaps.length; i++) {
+        const xx = xPos(i);
+        let label;
+        if (_trendEndTime) {
+          const st = new Date(timestamps[i].replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1T$2:$3:$4+08:00"));
+          label = !isNaN(st) ? fmtCountdown(_trendEndTime - st) : timestamps[i];
+        } else {
+          label = fmtSnapshotTs(timestamps[i]).slice(5, 16);
+        }
+        html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === snaps.length - 1 ? 'end' : 'middle'}" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
+      }
+
+      // total volume line (left axis)
+      const tPts = snaps.map((s, i) => {
+        const v = s.totalVol;
+        if (v == null || !Number.isFinite(v)) return null;
+        return `${xPos(i)},${yLPos(v)}`;
+      }).filter(Boolean);
+      if (tPts.length >= 2) {
+        html += `<polyline points="${tPts.join(" ")}" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
+        for (let i = 0; i < snaps.length; i++) {
+          const v = snaps[i].totalVol;
+          if (v == null || !Number.isFinite(v)) continue;
+          const cx = xPos(i), cy = yLPos(v);
+          html += `<circle cx="${cx}" cy="${cy}" r="6" fill="#4a90d9" stroke="#fff" stroke-width="2"
+            onmouseenter="showTrendTip(event,'总成交量: ${fmtShort(v)}')"
+            onmouseleave="hideTrendTip()"/>`;
+        }
+      }
+
+      // selected tier's stats (right axis)
+      const tierLabel = labels[_trendTierIdx] || labels[0];
+      const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel)).filter(Boolean);
+      if (points.length >= 2) {
+        const rightStats = [
+          { key: "avg", label: "均价", color: "#c0392b" },
+          { key: "med", label: "中位数", color: "#8e44ad" },
+          { key: "q1", label: "Q1", color: "#e67e22" },
+          { key: "last", label: "末位", color: "#7f8c8d" },
+        ];
+        let rMin = Infinity, rMax = -Infinity;
+        for (const st of rightStats) {
+          for (const p of points) {
+            const v = p[st.key];
+            if (v != null && Number.isFinite(v)) { if (v < rMin) rMin = v; if (v > rMax) rMax = v; }
+          }
+        }
+        if (rMin !== Infinity) {
+          const rSpan = rMax - rMin || 1, rPad2 = rSpan * 0.1;
+          rMin -= rPad2; rMax += rPad2;
+          const rRange = rMax - rMin || 1;
+          function yRPos(v) { return PT + CH - (v - rMin) / rRange * CH; }
+          for (let gi = 0; gi <= 4; gi++) {
+            const rv = rMax - gi / 4 * rRange;
+            html += `<text x="${W - PR + 6}" y="${PT + gi / 4 * CH + 4}" text-anchor="start" font-size="10" fill="#999">${fmtShort(rv)}</text>`;
+          }
+          for (const st of rightStats) {
+            const pts = points.map((p, i) => {
+              const v = p[st.key];
+              return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yRPos(v)}` : null;
+            }).filter(Boolean);
+            if (pts.length < 2) continue;
+            html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${st.color}" stroke-width="2" stroke-linejoin="round" opacity=".85" stroke-dasharray="4,3"/>`;
+            for (let i = 0; i < points.length; i++) {
+              const v = points[i][st.key];
+              if (v == null || !Number.isFinite(v)) continue;
+              const cx = xPos(i), cy = yRPos(v);
+              html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${st.color}" stroke="#fff" stroke-width="2"
+                onmouseenter="showTrendTip(event,'${escapeHtml(st.label)}(${escapeHtml(tierLabel)}): ${fmtShort(v)}')"
+                onmouseleave="hideTrendTip()"/>`;
+            }
+          }
+        }
+      }
+
+      svg.innerHTML = html;
+
+      document.getElementById("trendLegend").innerHTML =
+        '<span class="tl-item"><span class="tl-dot" style="background:#4a90d9"></span>总成交量</span>' +
+        (points.length >= 2 ? [
+          { key: "avg", label: "均价", color: "#c0392b" },
+          { key: "med", label: "中位数", color: "#8e44ad" },
+          { key: "q1", label: "Q1", color: "#e67e22" },
+          { key: "last", label: "末位", color: "#7f8c8d" },
+        ].map(st =>
+          `<span class="tl-item"><span class="tl-dot" style="border-top:2px dashed ${st.color};background:transparent"></span>${st.label}</span>`
+        ).join("") : "");
+    }
+    function fmtShort(v) {
+      if (!Number.isFinite(v)) return "—";
+      const abs = Math.abs(v);
+      if (abs >= 1e9) return (v / 1e9).toFixed(2) + "B";
+      if (abs >= 1e6) return (v / 1e6).toFixed(2) + "M";
+      if (abs >= 1e3) return (v / 1e3).toFixed(2) + "K";
+      if (abs >= 1) return v.toFixed(2);
+      return v.toFixed(4);
+    }
+    let _trendTipEl = null;
+    window.showTrendTip = function(evt, text) {
+      if (!_trendTipEl) {
+        _trendTipEl = document.createElement("div");
+        _trendTipEl.style.cssText = "position:fixed;background:rgba(46,42,36,.92);color:#fff;font-size:12px;padding:5px 12px;border-radius:4px;pointer-events:none;z-index:9999;white-space:nowrap;line-height:1.4";
+        document.body.appendChild(_trendTipEl);
+      }
+      _trendTipEl.textContent = text;
+      _trendTipEl.style.left = evt.clientX + 12 + "px";
+      _trendTipEl.style.top = evt.clientY - 20 + "px";
+      _trendTipEl.style.display = "";
+    };
+    window.hideTrendTip = function() { if (_trendTipEl) _trendTipEl.style.display = "none"; };
+    loadTrend();
+
     // --- Collapsible panels ---
+    localStorage.setItem("collapse_trendPanel", "1");
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
       const h3 = panel.querySelector("h3");
       if (!h3) return;
@@ -873,6 +1264,9 @@ let _totalDelCache = 0;
       <button id="snapModalClose" type="button" class="modal-close">✕</button>
     </div>
     <div class="modal-body" id="snapModalBody"></div>
+    <div class="modal-footer">
+      <button id="snapModalCloseBtn" type="button" class="modal-close-btn">关闭</button>
+    </div>
   </div>
 </div>
 

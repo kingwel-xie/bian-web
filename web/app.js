@@ -1,3 +1,9 @@
+function addCommas(n) {
+  const s = String(n).trim();
+  const parts = s.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+}
 const state = {
   currentUrl: null,
   discoveredMarket: null,
@@ -228,10 +234,10 @@ function openEditModal(job) {
     const amtEl = document.getElementById("editTier" + i + "Amt");
     if (minEl) minEl.value = t.rankMin != null ? t.rankMin : "";
     if (maxEl) maxEl.value = t.rankMax != null ? t.rankMax : "";
-    if (amtEl) amtEl.value = t.amount || "0";
+    if (amtEl) amtEl.value = addCommas(t.amount || "0");
   }
-  document.getElementById("editTotalReward").value = p.totalReward || "";
-  document.getElementById("editEligibleUsers").value = p.eligibleUsers != null ? p.eligibleUsers : "";
+  document.getElementById("editTotalReward").value = addCommas(p.totalReward || "");
+  document.getElementById("editEligibleUsers").value = p.eligibleUsers != null ? addCommas(String(p.eligibleUsers)) : "";
   const rid = p.resourceId || "";
   const displayName = escapeHtml(job.name || p.name || rid || "");
   const ridHtml = rid ? `<code>${escapeHtml(rid)}</code>` : "";
@@ -245,6 +251,11 @@ function openEditModal(job) {
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
+});
+
+// blur handlers to format comma-separated number inputs
+document.querySelectorAll("#editModal .tier-amt, #editTotalReward, #editEligibleUsers").forEach(el => {
+  el.addEventListener("blur", () => { const v = el.value.trim(); if (v) el.value = addCommas(v.replace(/,/g, "")); });
 });
 
 document.getElementById("editRewardMode").addEventListener("change", () => {
@@ -284,15 +295,15 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
       const amtEl = document.getElementById("editTier" + i + "Amt");
       const rmin = parseInt(minEl?.value);
       const rmax = parseInt(maxEl?.value);
-      const amt = amtEl?.value?.trim() || "0";
+      const amt = (amtEl?.value || "").replace(/,/g, "").trim() || "0";
       if (rmin >= 1 && rmax >= rmin) {
         rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
       }
     }
     if (rewardTiers.length) body.rewardTiers = rewardTiers;
   } else {
-    body.totalReward = document.getElementById("editTotalReward").value || undefined;
-    body.eligibleUsers = parseInt(document.getElementById("editEligibleUsers").value, 10) || undefined;
+    body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
+    body.eligibleUsers = parseInt((document.getElementById("editEligibleUsers").value || "").replace(/,/g, ""), 10) || undefined;
   }
   try {
     await api(`/api/jobs/${jobId}/params`, {
@@ -361,7 +372,7 @@ function renderJobs(jobs) {
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
-          <p>${escapeHtml(url || "无 URL")}</p>
+          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(url.replace("www.binance.com", "www.iruabmkakw.com"))}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
           <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>

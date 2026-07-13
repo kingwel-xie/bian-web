@@ -14,9 +14,9 @@
           <h1>纯抓榜任务台</h1>
           <p class="subtitle">粘贴 Binance 活动 URL 发现 resourceId，点击后抓取排行榜并在线预览。默认行数：UM 400 / SPOT 1000 / SAVING 1500。</p>
           <p style="margin:10px 0 0;font-size:13px;display:flex;gap:14px;flex-wrap:wrap">
-            <a href="teams.html" style="color:var(--accent-2)">🏆 团队管理</a>
-            <a href="analysis.html" style="color:var(--accent-2)">📊 任务分析</a>
-            <a href="activity.html" style="color:var(--accent-2)">📰 最新活动</a>
+            <a href="teams.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">🏆 团队管理</a>
+            <a href="analysis.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">📊 任务分析</a>
+            <a href="activity.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">📰 最新活动</a>
           </p>
         </div>
       </header>
@@ -117,18 +117,18 @@
             <hr class="form-divider">
             <div id="rewardRankFields">
               <div class="tier-header"><span>档位</span><span>下限</span><span>~</span><span>上限</span><span> </span><span>奖励数量</span></div>
-              <div class="tier-row"><span class="tier-label">第一档</span><input class="tier-min" id="editTier0Min" type="number" min="1" value="6" /><span class="tier-sep">~</span><input class="tier-max" id="editTier0Max" type="number" min="1" value="20" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier0Amt" type="number" min="0" step="1" placeholder="0" /></div>
-              <div class="tier-row"><span class="tier-label">第二档</span><input class="tier-min" id="editTier1Min" type="number" min="1" value="21" /><span class="tier-sep">~</span><input class="tier-max" id="editTier1Max" type="number" min="1" value="50" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier1Amt" type="number" min="0" step="1" placeholder="0" /></div>
-              <div class="tier-row"><span class="tier-label">第三档</span><input class="tier-min" id="editTier2Min" type="number" min="1" value="51" /><span class="tier-sep">~</span><input class="tier-max" id="editTier2Max" type="number" min="1" value="200" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier2Amt" type="number" min="0" step="1" placeholder="0" /></div>
-              <div class="tier-row"><span class="tier-label">第四档</span><input class="tier-min" id="editTier3Min" type="number" min="1" value="201" /><span class="tier-sep">~</span><input class="tier-max" id="editTier3Max" type="number" min="1" value="1000" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier3Amt" type="number" min="0" step="1" placeholder="0" /></div>
+              <div class="tier-row"><span class="tier-label">第一档</span><input class="tier-min" id="editTier0Min" type="number" min="1" value="6" /><span class="tier-sep">~</span><input class="tier-max" id="editTier0Max" type="number" min="1" value="20" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier0Amt" type="text" inputmode="numeric" placeholder="0" /></div>
+              <div class="tier-row"><span class="tier-label">第二档</span><input class="tier-min" id="editTier1Min" type="number" min="1" value="21" /><span class="tier-sep">~</span><input class="tier-max" id="editTier1Max" type="number" min="1" value="50" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier1Amt" type="text" inputmode="numeric" placeholder="0" /></div>
+              <div class="tier-row"><span class="tier-label">第三档</span><input class="tier-min" id="editTier2Min" type="number" min="1" value="51" /><span class="tier-sep">~</span><input class="tier-max" id="editTier2Max" type="number" min="1" value="200" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier2Amt" type="text" inputmode="numeric" placeholder="0" /></div>
+              <div class="tier-row"><span class="tier-label">第四档</span><input class="tier-min" id="editTier3Min" type="number" min="1" value="201" /><span class="tier-sep">~</span><input class="tier-max" id="editTier3Max" type="number" min="1" value="1000" /><span class="tier-arrow">奖励</span><input class="tier-amt" id="editTier3Amt" type="text" inputmode="numeric" placeholder="0" /></div>
             </div>
             <div id="rewardTotalFields" style="display:none">
               <div class="form-row">
                 <label>总奖池
-                  <input id="editTotalReward" type="number" min="0" step="1" placeholder="10000" />
+                  <input id="editTotalReward" type="text" inputmode="numeric" placeholder="10,000" />
                 </label>
                 <label>有效用户数
-                  <input id="editEligibleUsers" type="number" min="1" step="1" placeholder="200" />
+                  <input id="editEligibleUsers" type="text" inputmode="numeric" placeholder="200" />
                 </label>
                 <label></label>
               </div>
