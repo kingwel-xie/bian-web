@@ -298,6 +298,7 @@ function renderJobSelector(jobs, ranges) {
       renderTable(allRankJobs, ranges);
       renderEfficiencyChart(allRankJobs, ranges);
       renderRatioChart(allRankJobs, ranges);
+      renderDistributionChart(allRankJobs, ranges);
     });
   });
 }
@@ -517,6 +518,14 @@ function renderEfficiencyChart(jobs, ranges) {
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
     }
+    // group average line
+    if (g.bars.length >= 2) {
+      const avgVal = g.bars.reduce((s, b) => s + b.eff, 0) / g.bars.length;
+      const ay = sy(avgVal);
+      const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${fmtVolume(avgVal)}</text>`;
+    }
   }
 
   // Legend (vertical, right side)
@@ -658,6 +667,14 @@ function renderRatioChart(jobs, ranges) {
         onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n占比: ${b.pct.toFixed(1)}%')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
+    }
+    // group average line
+    if (g.bars.length >= 2) {
+      const avgVal = g.bars.reduce((s, b) => s + b.pct, 0) / g.bars.length;
+      const ay = sy(avgVal);
+      const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
@@ -853,6 +870,14 @@ function renderDistributionChart(jobs, ranges) {
         onmouseenter="showBarTip(event,'${name}\\n${escapeHtml(b.tierLabel)}\\n${DIST_STAT_LABELS[_distStat]}/均值: ${b.pct.toFixed(1)}%')"
         onmousemove="moveBarTip(event)"
         onmouseleave="hideBarTip()"/>`;
+    }
+    // group average line
+    if (g.bars.length >= 2) {
+      const avgVal = g.bars.reduce((s, b) => s + b.pct, 0) / g.bars.length;
+      const ay = sy(avgVal);
+      const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
