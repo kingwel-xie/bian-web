@@ -109,15 +109,36 @@
     <hr class="page-sep">
 
     <div class="analysis-panel">
-      <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">分档成交占比</h3>
-        <div id="ratioGroupToggle" class="btn-group" style="margin-left:auto">
-          <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
-          <button class="chart-group-btn" data-mode="job">按任务分组</button>
+      <div id="ratioSection">
+        <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+          <h3 style="margin:0;font-size:13px;color:var(--accent)">分档成交占比</h3>
+          <div id="ratioGroupToggle" class="btn-group" style="margin-left:auto">
+            <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
+            <button class="chart-group-btn" data-mode="job">按任务分组</button>
+          </div>
+        </div>
+        <div id="ratioWrap" class="chart-wrap">
+          <svg id="ratioChart" height="400"></svg>
         </div>
       </div>
-      <div id="ratioWrap" class="chart-wrap">
-        <svg id="ratioChart" height="400"></svg>
+      <div id="dailyGradeSection" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+          <h3 style="margin:0;font-size:13px;color:var(--accent)">日均分数</h3>
+          <span style="font-size:11px;color:var(--muted)">活动天数 = (结束 - 开始) 天数</span>
+          <div id="dailyGradeStatToggle" class="btn-group">
+            <button class="chart-group-btn active" data-stat="avg">均值</button>
+            <button class="chart-group-btn" data-stat="med">中位数</button>
+            <button class="chart-group-btn" data-stat="q1">Q1</button>
+            <button class="chart-group-btn" data-stat="last">末位</button>
+          </div>
+          <div id="dailyGradeGroupToggle" class="btn-group" style="margin-left:auto">
+            <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
+            <button class="chart-group-btn" data-mode="job">按任务分组</button>
+          </div>
+        </div>
+        <div id="dailyGradeWrap" class="chart-wrap">
+          <svg id="dailyGradeChart" height="400"></svg>
+        </div>
       </div>
     </div>
 
@@ -216,6 +237,7 @@ let _chartGroupBy = "tier"; // "tier" | "job"
 let _ratioGroupBy = "tier"; // "tier" | "job"
 let _distGroupBy = "tier"; // "tier" | "job"
 let _distStat = "med"; // "med" | "q1" | "last"
+let _dailyGradeStat = "avg"; // "avg" | "med" | "q1" | "last"
 let _chartStat = "avg"; // "avg" | "med" | "q1" | "last"
 
 const STAT_LABELS = { avg: "均值", med: "中位数", q1: "Q1", last: "末位" };
@@ -524,7 +546,7 @@ function renderEfficiencyChart(jobs, ranges) {
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
       svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${fmtVolume(avgVal)}</text>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${fmtVolume(avgVal)}</text>`;
     }
   }
 
@@ -565,6 +587,10 @@ function renderEfficiencyChart(jobs, ranges) {
 }
 
 function renderRatioChart(jobs, ranges) {
+  const isUm = currentMarket === "um";
+  document.getElementById("ratioSection").style.display = isUm ? "none" : "";
+  document.getElementById("dailyGradeSection").style.display = isUm ? "" : "none";
+  if (isUm) { renderDailyGradeChart(jobs, ranges); return; }
   const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   if (!visible.length) { document.getElementById("ratioChart").innerHTML = ""; return; }
 
@@ -583,11 +609,9 @@ function renderRatioChart(jobs, ranges) {
   }
 
   const groups = [];
-  const skipLabel = "1~5";
   if (groupBy === "tier") {
     for (let ri = 0; ri < ranges.length; ri++) {
       const label = ranges[ri].label;
-      if (label === skipLabel) continue;
       const bars = [];
       for (let ji = 0; ji < visible.length; ji++) {
         const j = visible[ji];
@@ -603,7 +627,6 @@ function renderRatioChart(jobs, ranges) {
       const j = visible[ji];
       const bars = [];
       for (let ri = 0; ri < ranges.length; ri++) {
-        if (ranges[ri].label === skipLabel) continue;
         if (!j.ranges || !j.ranges[ri]) continue;
         const v = j.ranges[ri].total;
         if (v == null || v <= 0) continue;
@@ -674,7 +697,7 @@ function renderRatioChart(jobs, ranges) {
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
       svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
@@ -736,6 +759,156 @@ function hideBarTip() {
   if (_barTip) _barTip.style.display = "none";
 }
 
+function renderDailyGradeChart(jobs, ranges) {
+  const visible = jobs.filter(j => selectedJobIds.includes(j.id));
+  if (!visible.length) { document.getElementById("dailyGradeChart").innerHTML = ""; return; }
+
+  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
+  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+
+  function parseDate(s) {
+    if (!s) return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (!m) return null;
+    return new Date(m[1], m[2] - 1, m[3], m[4] || 0, m[5] || 0);
+  }
+
+  function activityDays(job) {
+    const start = parseDate(job.activityStart);
+    if (!start) return 1;
+    if (job.activityEnd) {
+      const end = parseDate(job.activityEnd);
+      if (!end) return 1;
+      if (end.getTime() <= Date.now()) {
+        const days = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+        return Math.ceil(days);
+      }
+    }
+    const days = (Date.now() - start.getTime()) / (24 * 60 * 60 * 1000);
+    return Math.floor(days + 0.7);
+  }
+
+  const groupBy = _ratioGroupBy;
+  const groups = [];
+
+  if (groupBy === "tier") {
+    for (let ri = 0; ri < ranges.length; ri++) {
+      const label = ranges[ri].label;
+      const bars = [];
+      for (let ji = 0; ji < visible.length; ji++) {
+        const j = visible[ji];
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const days = activityDays(j);
+        const val = j.ranges[ri][_dailyGradeStat];
+        if (!val || val <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, value: val / days, tierLabel: label });
+      }
+      if (bars.length) groups.push({ label, bars, keyIdx: -1 });
+    }
+  } else {
+    for (let ji = 0; ji < visible.length; ji++) {
+      const j = visible[ji];
+      const name = j.name || j.resourceId || j.id;
+      const days = activityDays(j);
+      const bars = [];
+      for (let ri = 0; ri < ranges.length; ri++) {
+        if (!j.ranges || !j.ranges[ri]) continue;
+        const val = j.ranges[ri][_dailyGradeStat];
+        if (!val || val <= 0) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, value: val / days, tierLabel: ranges[ri].label });
+      }
+      if (bars.length) groups.push({ label: name, bars, keyIdx: ji });
+    }
+  }
+  if (!groups.length) { document.getElementById("dailyGradeChart").innerHTML = ""; return; }
+
+  const allVals = groups.flatMap(g => g.bars.map(b => b.value));
+  const maxVal = Math.max(...allVals) || 1;
+  const numBars = Math.max(...groups.map(g => g.bars.length));
+
+  const W = 60 + groups.length * (numBars * 20 + 24);
+  const H = 400, ML = 80, MR = 20, MT = 40, MB = 60;
+  const PW = W - ML - MR;
+  const PH = H - MT - MB;
+  const groupW = PW / groups.length;
+  const barW = Math.min(16, groupW / numBars - 2);
+
+  const tickCount = 5;
+  const tickStep = maxVal / tickCount;
+  const fmtVal = v => {
+    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+    return v.toFixed(1);
+  };
+
+  let svg = "";
+  for (let i = 0; i <= tickCount; i++) {
+    const val = i * tickStep;
+    const y = MT + PH - (val / maxVal) * PH;
+    svg += `<line x1="${ML}" y1="${y}" x2="${W - MR}" y2="${y}" stroke="#eee" stroke-width="1"/>`;
+    svg += `<text x="${ML - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${fmtVal(val)}</text>`;
+  }
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const gx = ML + gi * groupW + (groupW - g.bars.length * (barW + 2)) / 2;
+    for (let bi = 0; bi < g.bars.length; bi++) {
+      const b = g.bars[bi];
+      const bx = gx + bi * (barW + 2);
+      const bh = (b.value / maxVal) * PH;
+      const by = MT + PH - bh;
+      let color;
+      if (groupBy === "tier") {
+        color = JOB_COLORS[b.jobIdx % JOB_COLORS.length];
+      } else {
+        color = TIER_COLORS[b.tierIdx % TIER_COLORS.length];
+      }
+      svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${bh}" fill="${color}"
+        onmouseenter="showBarTip(event,'${escapeHtml(b.job.name || b.job.id)} ${escapeHtml(b.tierLabel)}: ${fmtVal(b.value)} (${fmtVal(b.value * b.value)})')"
+        onmouseleave="hideBarTip()"/>`;
+    }
+  }
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const cx = ML + gi * groupW + groupW / 2;
+    const label = g.label.length > 8 ? g.label.substring(0, 7) + "…" : g.label;
+    svg += `<text class="bar-group-label" x="${cx}" y="${H - MB + 18}">${escapeHtml(label)}</text>`;
+  }
+
+  let legendEntries;
+  if (groupBy === "tier") {
+    legendEntries = visible.map((j, ji) => ({ label: escapeHtml(j.name || j.resourceId || j.id), color: JOB_COLORS[ji % JOB_COLORS.length] }));
+  } else {
+    const used = new Set();
+    const entries = [];
+    for (const g of groups) {
+      for (const b of g.bars) {
+        if (!used.has(b.tierIdx)) {
+          used.add(b.tierIdx);
+          entries.push({ label: escapeHtml(b.tierLabel), color: TIER_COLORS[b.tierIdx % TIER_COLORS.length] });
+        }
+      }
+    }
+    legendEntries = entries;
+  }
+  const maxNameLen = Math.max(...legendEntries.map(e => e.label.length)) || 1;
+  const legendW = maxNameLen * 7 + 26;
+  const Lx = ML + PW + 10;
+  for (let li = 0; li < legendEntries.length; li++) {
+    const e = legendEntries[li];
+    const yy = MT + 10 + li * 18;
+    svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+  }
+  const W2 = ML + PW + 10 + legendW + MR;
+
+  const chartEl = document.getElementById("dailyGradeChart");
+  chartEl.setAttribute("width", Math.max(W2, 300));
+  chartEl.innerHTML = svg;
+}
+
 function renderElasticityTable(jobs, ranges) {
   const pairs = [];
   for (let i = 0; i < ranges.length - 1; i++) {
@@ -788,11 +961,9 @@ function renderDistributionChart(jobs, ranges) {
   const STAT_LABEL = { med: "中位数", q1: "Q1", last: "末位" };
 
   const groups = [];
-  const skipLabel = "1~5";
   if (groupBy === "tier") {
     for (let ri = 0; ri < ranges.length; ri++) {
       const label = ranges[ri].label;
-      if (label === skipLabel) continue;
       const bars = [];
       for (let ji = 0; ji < visible.length; ji++) {
         const j = visible[ji];
@@ -812,7 +983,6 @@ function renderDistributionChart(jobs, ranges) {
       const name = j.name || j.resourceId || j.id;
       const bars = [];
       for (let ri = 0; ri < ranges.length; ri++) {
-        if (ranges[ri].label === skipLabel) continue;
         if (!j.ranges || !j.ranges[ri]) continue;
         const r = j.ranges[ri];
         const avg = r.avg;
@@ -877,7 +1047,7 @@ function renderDistributionChart(jobs, ranges) {
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
       svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="9" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
@@ -950,6 +1120,26 @@ document.getElementById("ratioGroupToggle").addEventListener("click", evt => {
   btn.classList.add("active");
   _ratioGroupBy = btn.dataset.mode;
   renderRatioChart(allRankJobs, _cachedRanges);
+});
+
+// Daily grade chart stat toggle
+document.getElementById("dailyGradeStatToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#dailyGradeStatToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _dailyGradeStat = btn.dataset.stat;
+  renderDailyGradeChart(allRankJobs, _cachedRanges);
+});
+
+// Daily grade chart group toggle
+document.getElementById("dailyGradeGroupToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#dailyGradeGroupToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _ratioGroupBy = btn.dataset.mode;
+  renderDailyGradeChart(allRankJobs, _cachedRanges);
 });
 
 // Chart stat toggle

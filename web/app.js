@@ -1,3 +1,4 @@
+const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.iruabmkakw.com" };
 function addCommas(n) {
   const s = String(n).trim();
   const parts = s.split(".");
@@ -362,6 +363,7 @@ function renderJobs(jobs) {
         countdownText = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
       } else if (diff > -864e5) {
         countdownText = "已结束";
+        countdownCls += " ended";
       }
     }
     return `
@@ -372,7 +374,7 @@ function renderJobs(jobs) {
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
-          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(url.replace("www.binance.com", "www.iruabmkakw.com"))}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
+          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(url.replace(DOMAIN.OFFICIAL, DOMAIN.MIRROR))}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
           <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>

@@ -120,8 +120,8 @@
         <div class="act-meta">
           <span>${fmtDate(a.releaseDate)}</span>
           <div class="act-links">
-            <a class="act-link" href="https://www.binance.com/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">查看详情</a>
-            <a class="act-link" href="https://www.iruabmkakw.com/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">🇨🇳 国内</a>
+            <a class="act-link" href="https://${DOMAIN.OFFICIAL}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">查看详情</a>
+            <a class="act-link" href="https://${DOMAIN.MIRROR}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">🇨🇳 国内</a>
           </div>
         </div>
       </div>
@@ -138,6 +138,7 @@
   function tagFg(h) { return `hsla(${h}, 55%, 40%, 1)`; }
   function tagBorder(h) { return `hsla(${h}, 55%, 45%, 0.25)`; }
 
+  const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.iruabmkakw.com" };
   function escapeHtml(v) {
     return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
   }

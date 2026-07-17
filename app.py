@@ -2750,8 +2750,8 @@ def api_job_trend(job_id: str) -> Response:
         total_vol = sum(rs["total"] for rs in range_out)
         total_delta = sum(rs["sumDelta"] for rs in range_out)
         for rs in range_out:
-            rs["pct"] = round(rs["total"] / total_vol * 100, 1) if total_vol else 0
-            rs["dratio"] = round(rs["sumDelta"] / total_delta * 100, 1) if total_delta else 0
+            rs["pct"] = round(rs["total"] / total_vol * 100, 2) if total_vol else 0
+            rs["dratio"] = round(rs["sumDelta"] / total_delta * 100, 2) if total_delta else 0
         result_snapshots.append({"timestamp": snap["timestamp"], "rows": len(limited), "totalVol": total_vol, "ranges": range_out})
         prev_grade_map = cur_map
     return jsonify({"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]})
@@ -3221,6 +3221,142 @@ def api_job_delta_analysis(job_id: str) -> Response:
             except Exception as exc:
                 pair["error"] = str(exc)
         pairs.append(pair)
+
+    # hourly market / prediction rows
+    now_bj = datetime.now(BJ)
+    ratio = None
+    running_sum = None
+    # parse activity end time (used as boundary for both market and prediction rows)
+    act_end_dt = None
+    act_end_str = payload.get("activityEnd")
+    if act_end_str:
+        try:
+            act_end_clean = act_end_str.strip().replace("T", " ")
+            if act_end_clean.count(":") == 1:
+                act_end_clean += ":00"
+            act_end_dt = datetime.strptime(act_end_clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+        except Exception:
+            pass
+    end_boundary = min(now_bj, act_end_dt) if act_end_dt else now_bj
+    if snapshot_data and pairs:
+        last_snap = snapshot_data[-1]
+        last_time = last_snap["updatedAtBj"]
+        last_pair = pairs[-1]
+        ratio_raw = last_pair.get("leaderboardDeltaRatio")
+        if ratio_raw is not None:
+            try:
+                ratio = Decimal(str(ratio_raw))
+            except Exception:
+                ratio = None
+        running_sum = to_decimal(last_snap.get("sum"))
+        if running_sum is None:
+            cur_sum_str = last_pair.get("cur", {}).get("sum")
+            if cur_sum_str is not None:
+                running_sum = to_decimal(cur_sum_str)
+
+    # market rows (real klines from last snapshot to end_boundary)
+    if not no_connection and snapshot_data and pairs and end_boundary > last_time:
+        gap_start_ms = int(last_time.astimezone(timezone.utc).timestamp() * 1000)
+        gap_end_ms = int(end_boundary.astimezone(timezone.utc).timestamp() * 1000)
+        try:
+            resp_gap = requests.get(
+                klines_url,
+                params={
+                    "symbol": symbol,
+                    "interval": "1h",
+                    "startTime": gap_start_ms,
+                    "endTime": gap_end_ms,
+                    "limit": 1500,
+                },
+                proxies=request_proxies(proxy),
+                timeout=15,
+            )
+            payload_k = resp_gap.json()
+            if resp_gap.status_code == 200 and isinstance(payload_k, list):
+                for k in payload_k:
+                    if not isinstance(k, list) or len(k) < 8:
+                        continue
+                    open_ms = k[0]
+                    close_ms = k[6]
+                    base_v = to_decimal(k[5]) or Decimal("0")
+                    quote_v = to_decimal(k[7]) or Decimal("0")
+                    open_dt = datetime.fromtimestamp(open_ms / 1000, BJ)
+                    close_dt = datetime.fromtimestamp(close_ms / 1000, BJ)
+                    if open_dt >= end_boundary:
+                        continue
+                    is_partial = close_dt > end_boundary
+                    scale = Decimal("1")
+                    if is_partial:
+                        elapsed = max((end_boundary - open_dt).total_seconds(), 1)
+                        scale = Decimal("3600") / Decimal(str(elapsed))
+                    scaled_quote = quote_v * scale if quote_v else None
+                    scaled_base = base_v * scale if base_v else None
+                    est_delta = (scaled_quote * ratio if ratio is not None and scaled_quote else None)
+                    prev_sum = running_sum
+                    cur_sum = (prev_sum + est_delta if est_delta is not None and prev_sum is not None else None)
+                    if cur_sum is not None:
+                        running_sum = cur_sum
+                    pairs.append({
+                        "type": "market",
+                        "windowStart": open_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                        "windowEnd": close_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                        "marketBaseVolume": decimal_text(scaled_base) if scaled_base is not None else None,
+                        "marketQuoteVolume": decimal_text(scaled_quote) if scaled_quote is not None else None,
+                        "rawQuoteVolume": decimal_text(quote_v) if quote_v else None,
+                        "leaderboardDelta": decimal_text(est_delta) if est_delta is not None else None,
+                        "leaderboardDeltaRatio": None,
+                        "prevSum": decimal_text(prev_sum) if prev_sum is not None else None,
+                        "curSum": decimal_text(cur_sum) if cur_sum is not None else None,
+                        "klines": 1,
+                        "partialHour": is_partial,
+                        "error": None,
+                        "symbol": symbol,
+                    })
+        except Exception as exc:
+            pass  # silently skip on error
+
+    # prediction rows from now to activityEnd
+    if pairs and ratio is not None and act_end_dt and now_bj < act_end_dt <= now_bj + timedelta(hours=6):
+        # baseline volume from last row (market or snapshot)
+        last_row = pairs[-1]
+        base_vol = to_decimal(last_row.get("marketQuoteVolume"))
+        if base_vol is None:
+            base_vol = to_decimal(last_row.get("marketBaseVolume"))
+        pred_hour = now_bj.replace(minute=0, second=0, microsecond=0)
+        while pred_hour < act_end_dt:
+            hour_end = pred_hour + timedelta(hours=1)
+            partial = hour_end > act_end_dt
+            if partial and base_vol is not None:
+                portion = max((act_end_dt - pred_hour).total_seconds(), 1) / 3600
+                hour_vol = base_vol * Decimal(str(portion))
+            elif pred_hour < now_bj and base_vol is not None:
+                # current hour: use remaining time from now to hour_end/act_end
+                remain_end = hour_end if hour_end <= act_end_dt else act_end_dt
+                remain = max((remain_end - now_bj).total_seconds(), 1) / 3600
+                hour_vol = base_vol * Decimal(str(remain))
+            else:
+                hour_vol = base_vol
+            est_delta = (hour_vol * ratio if hour_vol is not None else None)
+            prev_sum = running_sum
+            cur_sum = (prev_sum + est_delta if est_delta is not None and prev_sum is not None else None)
+            if cur_sum is not None:
+                running_sum = cur_sum
+            pairs.append({
+                "type": "prediction",
+                "windowStart": pred_hour.strftime("%Y-%m-%d %H:%M:%S"),
+                "windowEnd": hour_end.strftime("%Y-%m-%d %H:%M:%S"),
+                "marketQuoteVolume": decimal_text(hour_vol) if hour_vol is not None else None,
+                "leaderboardDelta": decimal_text(est_delta) if est_delta is not None else None,
+                "leaderboardDeltaRatio": decimal_text(ratio) if ratio is not None else None,
+                "prevSum": decimal_text(prev_sum) if prev_sum is not None else None,
+                "curSum": decimal_text(cur_sum) if cur_sum is not None else None,
+                "partialHour": partial,
+                "predicted": True,
+                "klines": 0,
+                "error": None,
+                "symbol": symbol,
+            })
+            pred_hour = hour_end
 
     proxy_label = "无可用连接" if no_connection else ("直连" if proxy is None else str(proxy))
     return jsonify({"pairs": pairs, "symbol": symbol, "proxyStatus": proxy_label, "klinesUrl": klines_url})
