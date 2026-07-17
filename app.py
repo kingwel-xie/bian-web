@@ -2975,6 +2975,20 @@ def api_rename_team() -> Response:
     return jsonify({"db": db})
 
 
+@app.delete("/api/teams/team")
+def api_delete_team() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    del teams[team_idx]
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
 @app.delete("/api/teams/member")
 def api_delete_member() -> Response:
     db = load_teams_db()

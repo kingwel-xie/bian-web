@@ -33,6 +33,8 @@
   .del-btn:hover { color: var(--bad); }
   .merge-btn { border: 0; background: transparent; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; }
   .merge-btn:hover { background: var(--accent-2); color: #fff; }
+  .del-team-btn { border: 0; background: transparent; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 3px; line-height: 1; opacity: .4; }
+  .del-team-btn:hover { opacity: 1; background: #fde8e8; }
   .merge-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 999; }
   .merge-dialog { background: #fff; border-radius: 8px; padding: 16px; min-width: 320px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); }
   .merge-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: var(--accent); }
@@ -119,6 +121,7 @@ function loadDb() {
           <input class="team-name" value="${escapeHtml(team.name || "")}" data-ti="${ti}" />
            <span class="team-count">${members.length} 人</span>
            ${teams.length > 1 ? `<button class="merge-btn" data-ti="${ti}">合并</button>` : ""}
+           <button class="del-team-btn" data-ti="${ti}" title="删除团队">🗑</button>
         </div>
         <div class="member-wrap">
           <table class="member-table">
@@ -227,6 +230,23 @@ function loadDb() {
         if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
         return r.json();
       }).then(() => { loadDb(); }).catch(err => msg("错误: " + err.message, false));
+    });
+
+    // delete team
+    content.querySelectorAll(".del-team-btn").forEach(el => {
+      el.addEventListener("click", function() {
+        const ti = parseInt(this.dataset.ti);
+        const name = _teamsData[ti]?.name || `团队 ${ti + 1}`;
+        if (!confirm(`确定删除「${name}」吗？此操作不可恢复。`)) return;
+        fetch("/api/teams/team", {
+          method: "DELETE",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({teamIndex: ti}),
+        }).then(r => {
+          if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
+          return r.json();
+        }).then(() => { loadDb(); msg("团队已删除", true); }).catch(err => msg("错误: " + err.message, false));
+      });
     });
 
     // merge button
