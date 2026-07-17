@@ -32,6 +32,7 @@
   .team-members th:nth-child(3), .team-members td:nth-child(3) { width: 24%; }
   .team-members .num { text-align: right; }
   .team-empty { color: var(--muted); text-align: center; padding: 14px; font-size: 12px; }
+  .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
   .err { color: var(--bad); font-weight: 900; }
   .team-name-input { padding: 1px 5px !important; font-size: 11px !important; }
   @media (max-width: 640px) {
@@ -79,6 +80,7 @@ function fmtSnapshotTs(ts) {
 
 var lastTeams = null;
 var dbExists = false;
+var teamMap = {}; // nickname → team name from DB
 
 function populateSnapshotSelects(snapshots) {
   const sel1 = document.getElementById("paramSnap1");
@@ -124,9 +126,16 @@ function saveOneTeam(idx) {
   });
 }
 
-function checkDb() {
+function loadTeams() {
   fetch("/api/teams").then(r => r.json()).then(data => {
-    dbExists = data.db && data.db.teams && data.db.teams.length > 0;
+    const tlist = (data.db && data.db.teams) || [];
+    dbExists = tlist.length > 0;
+    teamMap = {};
+    for (const t of tlist) {
+      for (const m of (t.members || [])) {
+        if (m.nickname) teamMap[m.nickname] = t.name;
+      }
+    }
   }).catch(() => {});
 }
 
@@ -151,7 +160,7 @@ if (!jobId) {
     .catch(() => {});
 }
 
-checkDb();
+loadTeams();
 
 function runTeamAnalysis() {
   const btn = document.getElementById("teamBtn");
@@ -199,7 +208,7 @@ function runTeamAnalysis() {
             <tr><th>#</th><th>昵称</th><th>User ID</th>${snapHeaders}</tr>
             ${t.members.map((m, i) => `<tr>
               <td>${i + 1}</td>
-              <td>${escapeHtml(m.nickname)}</td>
+              <td>${escapeHtml(m.nickname)}${teamMap[m.nickname] ? `<sup class="team-tag">${escapeHtml(teamMap[m.nickname])}</sup>` : ""}</td>
               <td>${escapeHtml(m.userId)}</td>
               ${(m.history || []).map(h =>
                 `<td class="num">${h.rank}</td><td class="num">${fmtNumber(h.grade)}</td><td class="num">${h.delta != null ? fmtNumber(h.delta) : "—"}</td>`
