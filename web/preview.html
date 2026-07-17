@@ -667,6 +667,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     ).join("");
 
     // team stats
+    const teamSizes = (preview.teamSizes || {});
     const teamMap = {};
     for (const r of allRows) {
       const t = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
@@ -683,9 +684,10 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     if (teamEntries.length) {
       teamStatEl.style.display = "";
       teamBody.innerHTML = teamEntries.map(([name, st]) => {
+        const total = teamSizes[name] || st.count;
         const pct = totalVolume ? (st.totalGrade / totalVolume * 100).toFixed(1) + "%" : "—";
         const dpct = totalDelta ? (st.totalDelta / totalDelta * 100).toFixed(1) + "%" : "—";
-        return `<tr><td><b>${escapeHtml(name)}</b></td><td class="num">${st.count}</td><td class="num">${fmtVolume(st.totalGrade)}</td><td class="num">${pct}</td><td class="num">${dpct}</td></tr>`;
+        return `<tr><td><b>${escapeHtml(name)}</b></td><td class="num">${st.count}/${total}</td><td class="num">${fmtVolume(st.totalGrade)}</td><td class="num">${pct}</td><td class="num">${dpct}</td></tr>`;
       }).join("");
     }
 

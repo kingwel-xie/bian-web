@@ -2645,8 +2645,10 @@ def api_job_preview(job_id: str) -> Response:
         preview["prevStats"] = prev_stats
         team_db = load_teams_db()
         team_lookup: dict[str, str] = {}
+        team_sizes: dict[str, int] = {}
         for team in team_db.get("teams") or []:
             team_name = team.get("name", "")
+            team_sizes[team_name] = len(team.get("members") or [])
             for m in team.get("members") or []:
                 key = (m.get("nickname") or "").strip()
                 if key and key not in team_lookup:
@@ -2658,6 +2660,7 @@ def api_job_preview(job_id: str) -> Response:
             if team_name:
                 team_map[nick] = team_name
         preview["teamMap"] = team_map
+        preview["teamSizes"] = team_sizes
         p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
         p_activity_end = payload.get("activityEnd", "")
         preview["rewardPriceUsd"] = get_token_price(p_reward_token, p_activity_end)
