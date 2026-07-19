@@ -219,7 +219,7 @@ function loadCrossJobList() {
         return;
       }
       container.innerHTML = jobs.map(j =>
-        `<button class="job-btn" data-jid="${j.id}">${escapeHtml(j.name || j.id)}</button>`
+        `<button class="job-btn${j.id === jobId ? ' selected' : ''}" data-jid="${j.id}">${escapeHtml(j.name || j.id)}</button>`
       ).join("");
       container.querySelectorAll(".job-btn").forEach(btn => {
         btn.addEventListener("click", function() {
