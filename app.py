@@ -1005,11 +1005,22 @@ def detect_teams(
     seen: set[frozenset[int]] = set()
     for i in range(len(users)):
         team: set[int] = {i}
+        r_min = users[i]["rank"]
+        r_max = users[i]["rank"]
+        d_min = users[i]["delta"]
+        d_max = users[i]["delta"]
         for j in range(i + 1, len(users)):
-            if users[j]["rank"] - users[i]["rank"] > max_rank_gap:
+            u = users[j]
+            if u["rank"] - r_max > max_rank_gap:
                 break
-            if all(abs(users[j]["delta"] - users[k]["delta"]) <= delta_err for k in team):
+            r_ok = abs(u["rank"] - r_min) <= max_rank_gap or abs(u["rank"] - r_max) <= max_rank_gap
+            d_ok = abs(u["delta"] - d_min) <= delta_err or abs(u["delta"] - d_max) <= delta_err
+            if r_ok and d_ok:
                 team.add(j)
+                if u["rank"] < r_min: r_min = u["rank"]
+                if u["rank"] > r_max: r_max = u["rank"]
+                if u["delta"] < d_min: d_min = u["delta"]
+                if u["delta"] > d_max: d_max = u["delta"]
         if len(team) >= 2:
             fs = frozenset(team)
             if fs not in seen:
