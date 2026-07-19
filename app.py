@@ -2897,8 +2897,9 @@ def api_team_analysis_cross() -> Response:
     for nick, entries in user_jobs.items():
         user_entries[nick] = {e["jobId"]: e for e in entries}
 
-    # Greedy team formation (same approach as detect_teams)
-    # Sort users by average rank
+    # Greedy team formation with range-based connectivity
+    # Each team maintains per-job [min_rank, max_rank]; new member connects
+    # if within max_rank_gap of either boundary in each shared job.
     def avg_rank_of_user(nick):
         entries = user_entries[nick]
         vals = [e["rank"] for e in entries.values()]
@@ -2908,34 +2909,36 @@ def api_team_analysis_cross() -> Response:
     candidate_teams: list[list[str]] = []
 
     for i, nick_a in enumerate(sorted_users):
+        entries_a = user_entries[nick_a]
+        # Initialize team rank range per job
+        team_range: dict[str, dict[str, int]] = {}  # jobId → {min, max}
+        for jid, ea in entries_a.items():
+            team_range[jid] = {"min": ea["rank"], "max": ea["rank"]}
         team = {nick_a}
+
         for j in range(i + 1, len(sorted_users)):
             nick_b = sorted_users[j]
-            # Check if nick_b is compatible with ALL current team members
-            ok = True
             entries_b = user_entries[nick_b]
-            for member in team:
-                entries_m = user_entries[member]
-                shared = 0
-                for jid, eb in entries_b.items():
-                    em = entries_m.get(jid)
-                    if em is None:
-                        continue
-                    shared += 1
-                    if abs(em["rank"] - eb["rank"]) > max_rank_gap:
-                        ok = False
-                        break
-                if not ok:
-                    break
-                if shared < min_shared:
+            ok = True
+            shared = 0
+            for jid, eb in entries_b.items():
+                tr = team_range.get(jid)
+                if tr is None:
+                    continue
+                shared += 1
+                if not (abs(eb["rank"] - tr["min"]) <= max_rank_gap or abs(eb["rank"] - tr["max"]) <= max_rank_gap):
                     ok = False
                     break
-                # Also check rank gap against the team's avg rank for consistency
-                if abs(avg_rank_of_user(nick_b) - avg_rank_of_user(member)) > max_rank_gap * 2:
-                    ok = False
-                    break
-            if ok:
+            if ok and shared >= min_shared:
                 team.add(nick_b)
+                # Extend range
+                for jid, eb in entries_b.items():
+                    if jid in team_range:
+                        tr = team_range[jid]
+                        if eb["rank"] < tr["min"]:
+                            tr["min"] = eb["rank"]
+                        if eb["rank"] > tr["max"]:
+                            tr["max"] = eb["rank"]
         if len(team) >= 2:
             candidate_teams.append(list(team))
 
