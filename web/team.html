@@ -161,7 +161,7 @@ function loadTeams() {
     teamMap = {};
     for (const t of tlist) {
       for (const m of (t.members || [])) {
-        if (m.nickname) teamMap[m.nickname] = t.name;
+        if (m.nickname) teamMap[m.nickname.trim()] = t.name;
       }
     }
   }).catch(() => {});
@@ -208,11 +208,18 @@ function loadCrossJobList() {
   fetch("/api/jobs?per_page=500")
     .then(r => r.json())
     .then(data => {
+      const nowStr = new Date().toLocaleString("sv-SE", {timeZone: "Asia/Shanghai"}).replace("T", " ").slice(0, 19);
+      const nowMs = new Date(nowStr + "+08:00").getTime();
       const jobs = (data.jobs || []).filter(j => {
         if (j.status !== "completed") return false;
         if ((j.payload || {}).market !== "spot") return false;
         const endStr = (j.payload || {}).activityEnd || "";
-        return !!endStr; // skip jobs without activityEnd (unfinished)
+        if (!endStr) return false;
+        const clean = endStr.replace("T", " ").slice(0, 19);
+        if (clean.indexOf(":") === -1) return false;
+        const endMs = new Date(clean + "+08:00").getTime();
+        if (isNaN(endMs) || endMs >= nowMs) return false;
+        return true;
       });
       _allCompletedJobs = jobs;
       if (!jobs.length) {
