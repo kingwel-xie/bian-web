@@ -2829,7 +2829,7 @@ def api_team_analysis_cross() -> Response:
     market = (request.args.get("market") or "").strip().lower()
     job_ids_str = (request.args.get("job_ids") or "").strip()
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
-    grade_err = request.args.get("grade_err", 0.5, type=float)
+    grade_err = request.args.get("grade_err", 300, type=float)
     min_shared = request.args.get("min_shared_jobs", 2, type=int)
     top_n = request.args.get("top_n", 200, type=int)
     skip_top = request.args.get("skip_top", 50, type=int)
@@ -2947,9 +2947,7 @@ def api_team_analysis_cross() -> Response:
                     continue
                 shared += 1
                 r_ok = abs(eb["rank"] - tr["rMin"]) <= max_rank_gap or abs(eb["rank"] - tr["rMax"]) <= max_rank_gap
-                g_base = max(abs(tr["gMin"]), abs(tr["gMax"]), 1)
-                g_ok = (abs(eb["grade"] - tr["gMin"]) / g_base <= grade_err or
-                        abs(eb["grade"] - tr["gMax"]) / g_base <= grade_err)
+                g_ok = abs(eb["grade"] - tr["gMin"]) <= grade_err or abs(eb["grade"] - tr["gMax"]) <= grade_err
                 if not (r_ok and g_ok):
                     ok = False
                     break
