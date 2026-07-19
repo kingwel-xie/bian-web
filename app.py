@@ -2829,6 +2829,7 @@ def api_team_analysis_cross() -> Response:
     market = (request.args.get("market") or "").strip().lower()
     job_ids_str = (request.args.get("job_ids") or "").strip()
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
+    grade_err = request.args.get("grade_err", 0.5, type=float)
     min_shared = request.args.get("min_shared_jobs", 2, type=int)
     top_n = request.args.get("top_n", 200, type=int)
     skip_top = request.args.get("skip_top", 50, type=int)
@@ -2898,8 +2899,8 @@ def api_team_analysis_cross() -> Response:
         user_entries[nick] = {e["jobId"]: e for e in entries}
 
     # Greedy team formation with range-based connectivity
-    # Each team maintains per-job [min_rank, max_rank]; new member connects
-    # if within max_rank_gap of either boundary in each shared job.
+    # Each team maintains per-job [min_rank, max_rank] and [min_grade, max_grade];
+    # new member connects if within max_rank_gap and grade_err of either boundary.
     def avg_rank_of_user(nick):
         entries = user_entries[nick]
         vals = [e["rank"] for e in entries.values()]
@@ -2910,10 +2911,9 @@ def api_team_analysis_cross() -> Response:
 
     for i, nick_a in enumerate(sorted_users):
         entries_a = user_entries[nick_a]
-        # Initialize team rank range per job
-        team_range: dict[str, dict[str, int]] = {}  # jobId → {min, max}
+        team_range: dict[str, dict[str, int | float]] = {}
         for jid, ea in entries_a.items():
-            team_range[jid] = {"min": ea["rank"], "max": ea["rank"]}
+            team_range[jid] = {"rMin": ea["rank"], "rMax": ea["rank"], "gMin": ea["grade"], "gMax": ea["grade"]}
         team = {nick_a}
 
         for j in range(i + 1, len(sorted_users)):
@@ -2926,19 +2926,22 @@ def api_team_analysis_cross() -> Response:
                 if tr is None:
                     continue
                 shared += 1
-                if not (abs(eb["rank"] - tr["min"]) <= max_rank_gap or abs(eb["rank"] - tr["max"]) <= max_rank_gap):
+                r_ok = abs(eb["rank"] - tr["rMin"]) <= max_rank_gap or abs(eb["rank"] - tr["rMax"]) <= max_rank_gap
+                g_base = max(abs(tr["gMin"]), abs(tr["gMax"]), 1)
+                g_ok = (abs(eb["grade"] - tr["gMin"]) / g_base <= grade_err or
+                        abs(eb["grade"] - tr["gMax"]) / g_base <= grade_err)
+                if not (r_ok and g_ok):
                     ok = False
                     break
             if ok and shared >= min_shared:
                 team.add(nick_b)
-                # Extend range
                 for jid, eb in entries_b.items():
-                    if jid in team_range:
-                        tr = team_range[jid]
-                        if eb["rank"] < tr["min"]:
-                            tr["min"] = eb["rank"]
-                        if eb["rank"] > tr["max"]:
-                            tr["max"] = eb["rank"]
+                    tr = team_range.get(jid)
+                    if tr is not None:
+                        if eb["rank"] < tr["rMin"]: tr["rMin"] = eb["rank"]
+                        if eb["rank"] > tr["rMax"]: tr["rMax"] = eb["rank"]
+                        if eb["grade"] < tr["gMin"]: tr["gMin"] = eb["grade"]
+                        if eb["grade"] > tr["gMax"]: tr["gMax"] = eb["grade"]
         if len(team) >= 2:
             candidate_teams.append(list(team))
 
@@ -2976,6 +2979,7 @@ def api_team_analysis_cross() -> Response:
             "totalUsers": len(nicks),
             "totalJobs": len(candidates),
             "maxRankGap": max_rank_gap,
+            "gradeErr": grade_err,
             "minSharedJobs": min_shared,
             "topN": top_n,
             "skipTop": skip_top,

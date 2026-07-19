@@ -40,10 +40,10 @@
   .mode-tab.active { background: #eee7d9; color: var(--accent); }
   .mode-tab:not(:last-child) { border-right: 1px solid var(--line); }
   .mode-tab:hover { background: #e1f3f6; color: var(--accent-2); }
-  .job-list-panel { border: 1px solid var(--line); border-radius: 4px; padding: 4px; background: #fff; max-height: 160px; overflow-y: auto; font-size: 11px; }
-  .job-list-panel label { display: block; padding: 2px 4px; cursor: pointer; }
-  .job-list-panel label:hover { background: #f5f3ef; }
-  .job-list-panel input { margin-right: 4px; vertical-align: middle; }
+  .job-list-panel { border: 1px solid var(--line); border-radius: 4px; padding: 2px; background: #fff; max-height: 140px; overflow-y: auto; font-size: 11px; display: flex; flex-wrap: wrap; gap: 2px; align-items: flex-start; }
+  .job-btn { padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: #f9f7f4; cursor: pointer; font-size: 10px; line-height: 1.6; color: var(--ink); white-space: nowrap; }
+  .job-btn:hover { background: #e1f3f6; }
+  .job-btn.selected { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -77,12 +77,12 @@
   </div>
 
   <div id="crossPanel" class="params-panel" style="display:none">
-    <label>市场 <select id="crossMarket"><option value="">全部</option><option value="spot">SPOT</option><option value="um">U本位</option></select></label>
     <label>分析人数 <input type="number" id="crossTopN" value="200" min="50" /></label>
     <label>跳过前 <input type="number" id="crossSkipTop" value="50" min="0" /></label>
     <label>排名差距 <input type="number" id="crossMaxRankGap" value="20" min="1" /></label>
+    <label>grade容差 <input type="number" id="crossGradeErr" value="0.5" min="0.1" step="0.1" /></label>
     <label>最少共同任务 <input type="number" id="crossMinShared" value="2" min="1" /></label>
-    <label style="flex:1;min-width:200px">任务列表
+    <label style="flex:1;min-width:200px">SPOT已完成任务
       <div id="crossJobList" class="job-list-panel">加载中...</div>
     </label>
     <button id="crossBtn" type="button">🚀 跨任务检测</button>
@@ -200,62 +200,59 @@ document.querySelectorAll(".mode-tab").forEach(tab => {
   });
 });
 
-// Load all completed jobs for cross-job detection
+// Load all completed SPOT jobs for cross-job detection
 function loadCrossJobList() {
   const container = document.getElementById("crossJobList");
   container.innerHTML = "加载中...";
   fetch("/api/jobs?per_page=500")
     .then(r => r.json())
     .then(data => {
-      const jobs = (data.jobs || []).filter(j => j.status === "completed");
+      const jobs = (data.jobs || []).filter(j =>
+        j.status === "completed" && (j.payload || {}).market === "spot"
+      );
       _allCompletedJobs = jobs;
       if (!jobs.length) {
-        container.innerHTML = '<span style="color:var(--muted)">无已完成任务</span>';
+        container.innerHTML = '<span style="color:var(--muted)">无已完成 SPOT 任务</span>';
         return;
       }
-      container.innerHTML = jobs.map(j => {
-        const name = j.name || j.id;
-        const market = (j.payload || {}).market || "";
-        return `<label><input type="checkbox" class="cross-job-cb" value="${j.id}" data-market="${market}" checked /> ${escapeHtml(name)}</label>`;
-      }).join("");
+      container.innerHTML = jobs.map(j =>
+        `<button class="job-btn selected" data-jid="${j.id}">${escapeHtml(j.name || j.id)}</button>`
+      ).join("");
+      container.querySelectorAll(".job-btn").forEach(btn => {
+        btn.addEventListener("click", function() {
+          this.classList.toggle("selected");
+        });
+      });
     })
     .catch(() => { container.innerHTML = '<span style="color:var(--bad)">加载失败</span>'; });
 }
 loadCrossJobList();
-
-// Market filter for job list
-document.getElementById("crossMarket").addEventListener("change", function() {
-  const mkt = this.value;
-  document.querySelectorAll(".cross-job-cb").forEach(cb => {
-    if (!mkt) { cb.checked = true; return; }
-    cb.checked = cb.dataset.market === mkt;
-  });
-});
 
 function runCrossTeamAnalysis() {
   const btn = document.getElementById("crossBtn");
   btn.disabled = true;
   btn.textContent = "⏳ 分析中...";
 
-  const selected = Array.from(document.querySelectorAll(".cross-job-cb:checked")).map(cb => cb.value);
+  const selected = Array.from(document.querySelectorAll(".job-btn.selected")).map(btn => btn.dataset.jid);
   if (!selected.length) {
     btn.disabled = false; btn.textContent = "🚀 跨任务检测";
-    document.getElementById("teamSummary").textContent = "请选择至少一个任务";
+    document.getElementById("teamSummary").textContent = "请至少选择一个任务";
     document.getElementById("teamPanel").style.display = "";
     return;
   }
 
-  const market = document.getElementById("crossMarket").value;
   const topN = document.getElementById("crossTopN").value;
   const skipTop = document.getElementById("crossSkipTop").value;
   const maxRankGap = document.getElementById("crossMaxRankGap").value;
+  const gradeErr = document.getElementById("crossGradeErr").value;
   const minShared = document.getElementById("crossMinShared").value;
 
   const q = "?job_ids=" + encodeURIComponent(selected.join(","))
-    + "&market=" + encodeURIComponent(market)
+    + "&market=spot"
     + "&top_n=" + encodeURIComponent(topN)
     + "&skip_top=" + encodeURIComponent(skipTop)
     + "&max_rank_gap=" + encodeURIComponent(maxRankGap)
+    + "&grade_err=" + encodeURIComponent(gradeErr)
     + "&min_shared_jobs=" + encodeURIComponent(minShared);
 
   const teamPanel = document.getElementById("teamPanel");
