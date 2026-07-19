@@ -2842,7 +2842,7 @@ def api_team_analysis_cross() -> Response:
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
     grade_err = request.args.get("grade_err", 300, type=float)
     min_shared = request.args.get("min_shared_jobs", 2, type=int)
-    top_n = request.args.get("top_n", 200, type=int)
+    top_n = request.args.get("top_n", 950, type=int)
     skip_top = request.args.get("skip_top", 50, type=int)
 
     # only include jobs where the activity has ended (activityEnd is in the past)
