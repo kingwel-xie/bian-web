@@ -940,9 +940,10 @@ def ensure_scrape_xlsx(json_path: Path, sheet_name: str | None = None) -> Path |
 def detect_teams(
     snapshot_paths: list[Path],
     max_rank_gap: int = 3,
-    top_n: int = 500,
+    top_n: int = 950,
     delta_err: int = 1000,
     min_delta: int = 500,
+    skip_top: int = 50,
 ) -> list[dict[str, Any]]:
     if len(snapshot_paths) < 2:
         return []
@@ -974,7 +975,9 @@ def detect_teams(
         if not nick:
             continue
         rank = int(row["sequence"]) if row.get("sequence") is not None else 0
-        if rank > top_n:
+        if rank <= skip_top:
+            continue
+        if rank > skip_top + top_n:
             continue
         grade2 = float(to_decimal(row.get("grade")) or 0)
         g1 = grades1.get(nick)
@@ -2783,9 +2786,10 @@ def api_team_analysis(job_id: str) -> Response:
         return jsonify({"error": "快照不足（需要至少 2 个）"}), 400
 
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
-    top_n = request.args.get("top_n", 500, type=int)
+    top_n = request.args.get("top_n", 950, type=int)
     delta_err = request.args.get("delta_err", 1000, type=int)
     min_delta = request.args.get("min_delta", 500, type=int)
+    skip_top = request.args.get("skip_top", 50, type=int)
 
     ts1 = request.args.get("snapshot1")
     ts2 = request.args.get("snapshot2")
@@ -2818,6 +2822,7 @@ def api_team_analysis(job_id: str) -> Response:
             top_n=top_n,
             delta_err=delta_err,
             min_delta=min_delta,
+            skip_top=skip_top,
         )
         return jsonify({
             "teams": teams,
@@ -2826,6 +2831,7 @@ def api_team_analysis(job_id: str) -> Response:
                 "snapshot2": selected[1]["timestamp"],
                 "maxRankGap": max_rank_gap,
                 "topN": top_n,
+                "skipTop": skip_top,
                 "deltaErr": delta_err,
                 "minDelta": min_delta,
             },

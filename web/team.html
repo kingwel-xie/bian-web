@@ -69,8 +69,9 @@
   <div id="snapPanel" class="params-panel">
     <label>快照1（旧）<select id="paramSnap1"></select></label>
     <label>快照2（新）<select id="paramSnap2"></select></label>
+    <label>分析人数 <input type="number" id="paramTopN" value="950" min="50" /></label>
+    <label>跳过前 <input type="number" id="paramSkipTop" value="50" min="0" /></label>
     <label>排名差距 <input type="number" id="paramMaxRankGap" value="20" min="1" /></label>
-    <label>分析人数 <input type="number" id="paramTopN" value="500" min="50" /></label>
     <label>增量容差 <input type="number" id="paramDeltaErr" value="1000" min="0" step="100" /></label>
     <label>忽略小增量 <input type="number" id="paramMinDelta" value="500" min="0" step="100" /></label>
     <button id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 开始检测</button>
@@ -342,9 +343,10 @@ function runTeamAnalysis() {
   const snap2 = document.getElementById("paramSnap2").value;
   const maxRankGap = document.getElementById("paramMaxRankGap").value;
   const topN = document.getElementById("paramTopN").value;
+  const skipTop = document.getElementById("paramSkipTop").value;
   const deltaErr = document.getElementById("paramDeltaErr").value;
   const minDelta = document.getElementById("paramMinDelta").value;
-  const q = "?snapshot1=" + encodeURIComponent(snap1) + "&snapshot2=" + encodeURIComponent(snap2) + "&max_rank_gap=" + encodeURIComponent(maxRankGap) + "&top_n=" + encodeURIComponent(topN) + "&delta_err=" + encodeURIComponent(deltaErr) + "&min_delta=" + encodeURIComponent(minDelta);
+  const q = "?snapshot1=" + encodeURIComponent(snap1) + "&snapshot2=" + encodeURIComponent(snap2) + "&max_rank_gap=" + encodeURIComponent(maxRankGap) + "&top_n=" + encodeURIComponent(topN) + "&skip_top=" + encodeURIComponent(skipTop) + "&delta_err=" + encodeURIComponent(deltaErr) + "&min_delta=" + encodeURIComponent(minDelta);
 
   const teamPanel = document.getElementById("teamPanel");
   const teamBody = document.getElementById("teamBody");
