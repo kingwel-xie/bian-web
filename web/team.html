@@ -35,6 +35,15 @@
   .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
   .err { color: var(--bad); font-weight: 900; }
   .team-name-input { padding: 1px 5px !important; font-size: 11px !important; }
+  .mode-tabs { display: flex; gap: 0; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .mode-tab { flex: 1; padding: 6px 0; border: 0; background: #fffdf8; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; }
+  .mode-tab.active { background: #eee7d9; color: var(--accent); }
+  .mode-tab:not(:last-child) { border-right: 1px solid var(--line); }
+  .mode-tab:hover { background: #e1f3f6; color: var(--accent-2); }
+  .job-list-panel { border: 1px solid var(--line); border-radius: 4px; padding: 4px; background: #fff; max-height: 160px; overflow-y: auto; font-size: 11px; }
+  .job-list-panel label { display: block; padding: 2px 4px; cursor: pointer; }
+  .job-list-panel label:hover { background: #f5f3ef; }
+  .job-list-panel input { margin-right: 4px; vertical-align: middle; }
   @media (max-width: 640px) {
     body { padding: 6px; }
     .panel[style] { padding: 6px !important; }
@@ -52,7 +61,12 @@
   </div>
   <div id="meta" class="preview-meta">加载中...</div>
 
-  <div class="params-panel">
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="snap">📸 快照检测</button>
+    <button class="mode-tab" data-mode="cross">🔗 跨任务检测</button>
+  </div>
+
+  <div id="snapPanel" class="params-panel">
     <label>快照1（旧）<select id="paramSnap1"></select></label>
     <label>快照2（新）<select id="paramSnap2"></select></label>
     <label>排名差距 <input type="number" id="paramMaxRankGap" value="20" min="1" /></label>
@@ -60,6 +74,18 @@
     <label>增量容差 <input type="number" id="paramDeltaErr" value="1000" min="0" step="100" /></label>
     <label>忽略小增量 <input type="number" id="paramMinDelta" value="500" min="0" step="100" /></label>
     <button id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 开始检测</button>
+  </div>
+
+  <div id="crossPanel" class="params-panel" style="display:none">
+    <label>市场 <select id="crossMarket"><option value="">全部</option><option value="spot">SPOT</option><option value="um">U本位</option></select></label>
+    <label>分析人数 <input type="number" id="crossTopN" value="200" min="50" /></label>
+    <label>跳过前 <input type="number" id="crossSkipTop" value="50" min="0" /></label>
+    <label>排名差距 <input type="number" id="crossMaxRankGap" value="20" min="1" /></label>
+    <label>最少共同任务 <input type="number" id="crossMinShared" value="2" min="1" /></label>
+    <label style="flex:1;min-width:200px">任务列表
+      <div id="crossJobList" class="job-list-panel">加载中...</div>
+    </label>
+    <button id="crossBtn" type="button">🚀 跨任务检测</button>
   </div>
 
   <div id="teamPanel" class="team-panel" style="display:none">
@@ -81,6 +107,7 @@ function fmtSnapshotTs(ts) {
 var lastTeams = null;
 var dbExists = false;
 var teamMap = {}; // nickname → team name from DB
+var _allCompletedJobs = []; // cached for cross-job detection
 
 function populateSnapshotSelects(snapshots) {
   const sel1 = document.getElementById("paramSnap1");
@@ -161,6 +188,149 @@ if (!jobId) {
 }
 
 loadTeams();
+
+// Mode tabs
+document.querySelectorAll(".mode-tab").forEach(tab => {
+  tab.addEventListener("click", function() {
+    document.querySelectorAll(".mode-tab").forEach(t => t.classList.remove("active"));
+    this.classList.add("active");
+    const mode = this.dataset.mode;
+    document.getElementById("snapPanel").style.display = mode === "snap" ? "" : "none";
+    document.getElementById("crossPanel").style.display = mode === "cross" ? "" : "none";
+  });
+});
+
+// Load all completed jobs for cross-job detection
+function loadCrossJobList() {
+  const container = document.getElementById("crossJobList");
+  container.innerHTML = "加载中...";
+  fetch("/api/jobs?per_page=500")
+    .then(r => r.json())
+    .then(data => {
+      const jobs = (data.jobs || []).filter(j => j.status === "completed");
+      _allCompletedJobs = jobs;
+      if (!jobs.length) {
+        container.innerHTML = '<span style="color:var(--muted)">无已完成任务</span>';
+        return;
+      }
+      container.innerHTML = jobs.map(j => {
+        const name = j.name || j.id;
+        const market = (j.payload || {}).market || "";
+        return `<label><input type="checkbox" class="cross-job-cb" value="${j.id}" data-market="${market}" checked /> ${escapeHtml(name)}</label>`;
+      }).join("");
+    })
+    .catch(() => { container.innerHTML = '<span style="color:var(--bad)">加载失败</span>'; });
+}
+loadCrossJobList();
+
+// Market filter for job list
+document.getElementById("crossMarket").addEventListener("change", function() {
+  const mkt = this.value;
+  document.querySelectorAll(".cross-job-cb").forEach(cb => {
+    if (!mkt) { cb.checked = true; return; }
+    cb.checked = cb.dataset.market === mkt;
+  });
+});
+
+function runCrossTeamAnalysis() {
+  const btn = document.getElementById("crossBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 分析中...";
+
+  const selected = Array.from(document.querySelectorAll(".cross-job-cb:checked")).map(cb => cb.value);
+  if (!selected.length) {
+    btn.disabled = false; btn.textContent = "🚀 跨任务检测";
+    document.getElementById("teamSummary").textContent = "请选择至少一个任务";
+    document.getElementById("teamPanel").style.display = "";
+    return;
+  }
+
+  const market = document.getElementById("crossMarket").value;
+  const topN = document.getElementById("crossTopN").value;
+  const skipTop = document.getElementById("crossSkipTop").value;
+  const maxRankGap = document.getElementById("crossMaxRankGap").value;
+  const minShared = document.getElementById("crossMinShared").value;
+
+  const q = "?job_ids=" + encodeURIComponent(selected.join(","))
+    + "&market=" + encodeURIComponent(market)
+    + "&top_n=" + encodeURIComponent(topN)
+    + "&skip_top=" + encodeURIComponent(skipTop)
+    + "&max_rank_gap=" + encodeURIComponent(maxRankGap)
+    + "&min_shared_jobs=" + encodeURIComponent(minShared);
+
+  const teamPanel = document.getElementById("teamPanel");
+  const teamBody = document.getElementById("teamBody");
+  const teamSummary = document.getElementById("teamSummary");
+
+  fetch("/api/jobs/team-analysis-cross" + q)
+    .then(r => {
+      if (!r.ok) return r.text().then(t => { throw new Error("HTTP " + r.status + ": " + t.slice(0, 200)); });
+      return r.json();
+    })
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = "🚀 跨任务检测";
+      if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
+      const teams = data.teams || [];
+      lastTeams = teams;
+      teamSummary.textContent = (data.params ? "共 " + data.params.totalUsers + " 人参与分析，": "") + (teams.length ? "发现 " + teams.length + " 个团队" : "未检测到团队");
+
+      teamBody.innerHTML = teams.length ? teams.map((t, idx) => {
+        // collect all unique job names from members
+        const allJobs = [];
+        const seen = {};
+        for (const m of t.members) {
+          for (const j of (m.jobs || [])) {
+            if (!seen[j.jobId]) { seen[j.jobId] = true; allJobs.push(j); }
+          }
+        }
+        allJobs.sort((a, b) => a.jobName.localeCompare(b.jobName));
+        const jobHeaders = allJobs.map((j, ji) =>
+          `<th class="num">${escapeHtml(j.jobName)}<br><span style="font-weight:400">排名</span></th>` +
+          `<th class="num"><span style="font-weight:400">grade</span></th>`
+        ).join("");
+
+        return `<div class="team-card">
+          <div class="team-card-header">
+            <span>团队 #${t.id + 1} · <b>${t.size}</b> 人</span>
+            <span>平均排名 <b>${t.avgRank}</b></span>
+          </div>
+          <table class="team-members">
+            <tr><th>#</th><th>昵称</th><th>User ID</th>${jobHeaders}</tr>
+            ${t.members.map((m, i) => {
+              const jobMap = {};
+              for (const j of (m.jobs || [])) jobMap[j.jobId] = j;
+              return `<tr>
+                <td>${i + 1}</td>
+                <td>${escapeHtml(m.nickname)}${teamMap[m.nickname] ? `<sup class="team-tag">${escapeHtml(teamMap[m.nickname])}</sup>` : ""}</td>
+                <td>${escapeHtml(m.userId)}</td>
+                ${allJobs.map(j => {
+                  const jd = jobMap[j.jobId];
+                  return jd ? `<td class="num">${jd.rank}</td><td class="num">${fmtNumber(jd.grade)}</td>` : `<td class="num">—</td><td class="num">—</td>`;
+                }).join("")}
+              </tr>`;
+            }).join("")}
+          </table>
+          <div style="padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px">名称 <input id="teamName-${idx}" class="team-name-input" type="text" placeholder="团队 ${idx + 1}" style="border:1px solid var(--line);border-radius:4px;padding:4px 6px;font:inherit;font-size:12px;width:140px" /></label>
+            <button id="saveBtn-${idx}" class="team-add-btn" type="button" onclick="saveOneTeam(${idx})">+ 添加到数据库</button>
+            <span id="saveMsg-${idx}" style="font-size:12px"></span>
+          </div>
+        </div>`;
+      }).join("") : '<div class="team-empty">未检测到团队。</div>';
+
+      teamPanel.style.display = "";
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = "🚀 跨任务检测";
+      teamSummary.textContent = "请求失败";
+      teamBody.innerHTML = '<div class="team-empty">错误: ' + escapeHtml(err.message) + '</div>';
+      teamPanel.style.display = "";
+    });
+}
+
+document.getElementById("crossBtn").addEventListener("click", runCrossTeamAnalysis);
 
 function runTeamAnalysis() {
   const btn = document.getElementById("teamBtn");

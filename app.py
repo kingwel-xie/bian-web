@@ -2823,6 +2823,163 @@ def api_team_analysis(job_id: str) -> Response:
         return jsonify({"error": str(exc)}), 500
 
 
+@app.get("/api/jobs/team-analysis-cross")
+def api_team_analysis_cross() -> Response:
+    all_jobs = load_jobs()
+    market = (request.args.get("market") or "").strip().lower()
+    job_ids_str = (request.args.get("job_ids") or "").strip()
+    max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
+    min_shared = request.args.get("min_shared_jobs", 2, type=int)
+    top_n = request.args.get("top_n", 200, type=int)
+    skip_top = request.args.get("skip_top", 50, type=int)
+
+    candidates = [j for j in all_jobs if j.get("status") == "completed"]
+    if market:
+        candidates = [j for j in candidates if (j.get("payload") or {}).get("market") == market]
+    if job_ids_str:
+        wanted = set(job_ids_str.split(","))
+        candidates = [j for j in candidates if j.get("id") in wanted]
+    if not candidates:
+        return jsonify({"error": "没有符合条件的已完成任务"}), 400
+
+    # Build per-user rank data across jobs
+    user_jobs: dict[str, list[dict]] = {}  # nickname → [{jobId, jobName, rank, grade, userId}]
+    for job in candidates:
+        job_id = job.get("id", "")
+        payload = job.get("payload", {})
+        job_name = (payload.get("token") or payload.get("symbol") or job.get("name") or job_id)
+        snapshots = job.get("snapshots") or []
+        if not snapshots:
+            continue
+        sorted_ss = sorted(snapshots, key=lambda s: s.get("timestamp", ""))
+        last_ss = sorted_ss[-1]
+        ss_path = last_ss.get("json")
+        if not ss_path:
+            continue
+        path = Path(str(ss_path))
+        if not path.exists():
+            continue
+        data = read_json(path, {})
+        if not isinstance(data, dict):
+            continue
+        rows = data.get("rows")
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            nick = nickname_value(row)
+            if not nick:
+                continue
+            rank = row.get("sequence")
+            if not isinstance(rank, int):
+                continue
+            if rank <= skip_top:
+                continue
+            if rank > skip_top + top_n:
+                continue
+            grade = row.get("grade") or 0
+            uid = row.get("userId") or ""
+            if nick not in user_jobs:
+                user_jobs[nick] = []
+            user_jobs[nick].append({
+                "jobId": job_id,
+                "jobName": str(job_name),
+                "rank": rank,
+                "grade": float(grade),
+                "userId": str(uid),
+            })
+
+    nicks = list(user_jobs.keys())
+    if len(nicks) < 2:
+        return jsonify({"teams": [], "params": {"totalUsers": len(nicks)}})
+
+    # Precompute per-job entries for fast lookup
+    user_entries: dict[str, dict[str, dict]] = {}  # nickname → {jobId → entry}
+    for nick, entries in user_jobs.items():
+        user_entries[nick] = {e["jobId"]: e for e in entries}
+
+    # Greedy team formation (same approach as detect_teams)
+    # Sort users by average rank
+    def avg_rank_of_user(nick):
+        entries = user_entries[nick]
+        vals = [e["rank"] for e in entries.values()]
+        return sum(vals) / len(vals) if vals else 999999
+
+    sorted_users = sorted(nicks, key=avg_rank_of_user)
+    candidate_teams: list[list[str]] = []
+
+    for i, nick_a in enumerate(sorted_users):
+        team = {nick_a}
+        for j in range(i + 1, len(sorted_users)):
+            nick_b = sorted_users[j]
+            # Check if nick_b is compatible with ALL current team members
+            ok = True
+            entries_b = user_entries[nick_b]
+            for member in team:
+                entries_m = user_entries[member]
+                shared = 0
+                for jid, eb in entries_b.items():
+                    em = entries_m.get(jid)
+                    if em is None:
+                        continue
+                    shared += 1
+                    if abs(em["rank"] - eb["rank"]) > max_rank_gap:
+                        ok = False
+                        break
+                if not ok:
+                    break
+                if shared < min_shared:
+                    ok = False
+                    break
+                # Also check rank gap against the team's avg rank for consistency
+                if abs(avg_rank_of_user(nick_b) - avg_rank_of_user(member)) > max_rank_gap * 2:
+                    ok = False
+                    break
+            if ok:
+                team.add(nick_b)
+        if len(team) >= 2:
+            candidate_teams.append(list(team))
+
+    # Deduplicate — keep non-overlapping teams sorted by avg rank
+    used = set()
+    kept = []
+    candidate_teams.sort(key=lambda t: (avg_rank_of_user(t[0]), -len(t)))
+    for team in candidate_teams:
+        if any(n in used for n in team):
+            continue
+        used.update(team)
+        kept.append(team)
+
+    result = []
+    for tidx, members in enumerate(kept):
+        member_list = []
+        for n in members:
+            jobs_info = sorted(user_entries[n].values(), key=lambda x: x.get("jobName", ""))
+            member_list.append({
+                "nickname": n,
+                "userId": jobs_info[0]["userId"] if jobs_info else "",
+                "jobs": jobs_info,
+            })
+        avg_r = sum(avg_rank_of_user(n) for n in members) / len(members) if members else 0
+        result.append({
+            "id": tidx,
+            "size": len(members),
+            "avgRank": round(avg_r, 1),
+            "members": member_list,
+        })
+
+    return jsonify({
+        "teams": result,
+        "params": {
+            "totalUsers": len(nicks),
+            "totalJobs": len(candidates),
+            "maxRankGap": max_rank_gap,
+            "minSharedJobs": min_shared,
+            "topN": top_n,
+            "skipTop": skip_top,
+        },
+    })
+
+
 @app.get("/api/schedules")
 def api_schedules() -> Response:
     return jsonify({"schedules": load_schedules()})
