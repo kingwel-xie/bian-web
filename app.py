@@ -941,7 +941,7 @@ def detect_teams(
     snapshot_paths: list[Path],
     max_rank_gap: int = 3,
     top_n: int = 950,
-    delta_err: int = 1000,
+    delta_err: int = 300,
     min_delta: int = 500,
     skip_top: int = 50,
 ) -> list[dict[str, Any]]:
@@ -2787,7 +2787,7 @@ def api_team_analysis(job_id: str) -> Response:
 
     max_rank_gap = request.args.get("max_rank_gap", 20, type=int)
     top_n = request.args.get("top_n", 950, type=int)
-    delta_err = request.args.get("delta_err", 1000, type=int)
+    delta_err = request.args.get("delta_err", 300, type=int)
     min_delta = request.args.get("min_delta", 500, type=int)
     skip_top = request.args.get("skip_top", 50, type=int)
 
