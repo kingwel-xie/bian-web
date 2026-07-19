@@ -207,16 +207,19 @@ function loadCrossJobList() {
   fetch("/api/jobs?per_page=500")
     .then(r => r.json())
     .then(data => {
-      const jobs = (data.jobs || []).filter(j =>
-        j.status === "completed" && (j.payload || {}).market === "spot"
-      );
+      const jobs = (data.jobs || []).filter(j => {
+        if (j.status !== "completed") return false;
+        if ((j.payload || {}).market !== "spot") return false;
+        const endStr = (j.payload || {}).activityEnd || "";
+        return !!endStr; // skip jobs without activityEnd (unfinished)
+      });
       _allCompletedJobs = jobs;
       if (!jobs.length) {
         container.innerHTML = '<span style="color:var(--muted)">无已完成 SPOT 任务</span>';
         return;
       }
       container.innerHTML = jobs.map(j =>
-        `<button class="job-btn selected" data-jid="${j.id}">${escapeHtml(j.name || j.id)}</button>`
+        `<button class="job-btn" data-jid="${j.id}">${escapeHtml(j.name || j.id)}</button>`
       ).join("");
       container.querySelectorAll(".job-btn").forEach(btn => {
         btn.addEventListener("click", function() {

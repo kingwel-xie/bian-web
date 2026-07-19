@@ -2834,9 +2834,29 @@ def api_team_analysis_cross() -> Response:
     top_n = request.args.get("top_n", 200, type=int)
     skip_top = request.args.get("skip_top", 50, type=int)
 
-    candidates = [j for j in all_jobs if j.get("status") == "completed"]
-    if market:
-        candidates = [j for j in candidates if (j.get("payload") or {}).get("market") == market]
+    # only include jobs where the activity has ended (activityEnd is in the past)
+    now_bj = datetime.now(BJ)
+    candidates = [
+        j for j in all_jobs
+        if j.get("status") == "completed"
+        and not (market and (j.get("payload") or {}).get("market") != market)
+    ]
+    candidates2 = []
+    for j in candidates:
+        end_str = (j.get("payload") or {}).get("activityEnd", "")
+        if not end_str:
+            continue
+        try:
+            clean = end_str.strip().replace("T", " ")
+            if clean.count(":") == 1:
+                clean += ":00"
+            end_dt = datetime.strptime(clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+            if end_dt >= now_bj:
+                continue
+        except Exception:
+            continue
+        candidates2.append(j)
+    candidates = candidates2
     if job_ids_str:
         wanted = set(job_ids_str.split(","))
         candidates = [j for j in candidates if j.get("id") in wanted]
