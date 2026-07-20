@@ -1546,6 +1546,131 @@ def scheduler_loop() -> None:
         time.sleep(30)
 
 
+def _get_active_jobs() -> list[dict[str, Any]]:
+    """Return scrape-mode jobs whose activity has not ended (or no activityEnd)."""
+    now_bj = datetime.now(BJ)
+    jobs = load_jobs()
+    active: list[dict[str, Any]] = []
+    for j in jobs:
+        if j.get("status") == "running":
+            continue
+        payload = j.get("payload") or {}
+        if payload.get("mode") == "workflow":
+            continue
+        end_str = payload.get("activityEnd", "")
+        if end_str:
+            try:
+                clean = end_str.strip().replace("T", " ")
+                if clean.count(":") == 1:
+                    clean += ":00"
+                end_dt = datetime.strptime(clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+                if end_dt < now_bj:
+                    continue
+            except Exception:
+                pass
+        active.append(j)
+    return active
+
+
+def _has_today_data(job: dict[str, Any]) -> bool:
+    """Check if the job's latest snapshot has meta.updatedTime from today (BJ)."""
+    today_key = datetime.now(BJ).date().isoformat()
+    snapshots = job.get("snapshots") or []
+    if not snapshots:
+        return False
+    last = snapshots[-1]
+    # Quick check: snapshot timestamp starts with today
+    if not last.get("timestamp", "").startswith(today_key):
+        return False
+    # Verify meta.updatedTime from the JSON file
+    json_path = last.get("json", "")
+    if not json_path:
+        return True  # timestamp says today, assume data available
+    try:
+        p = Path(str(json_path))
+        if not p.exists():
+            p = DATA_ROOT / str(json_path).lstrip("/")
+        data = read_json(p, {})
+        if not isinstance(data, dict):
+            return True
+        meta = data.get("meta") or {}
+        return snapshot_date(meta, today_key) == today_key
+    except Exception:
+        return True  # can't read file, trust the timestamp
+
+
+MAX_RETRIES = 3
+
+
+def daily_scrape_loop() -> None:
+    """Background thread: daily scrape at 12:35, retry 1h later if no today's data (max 3 retries)."""
+    state: dict[str, Any] = {"today": None, "phase": "idle", "retry_time": None, "pending": [], "retry_count": 0}
+    while True:
+        try:
+            now_bj = datetime.now(BJ)
+            today_key = now_bj.date().isoformat()
+
+            if state["today"] != today_key:
+                state["today"] = today_key
+                state["phase"] = "idle"
+                state["retry_time"] = None
+                state["pending"] = []
+                state["retry_count"] = 0
+
+            if state["phase"] == "idle":
+                t35 = now_bj.replace(hour=12, minute=35, second=0, microsecond=0)
+                if now_bj >= t35:
+                    active = _get_active_jobs()
+                    if active:
+                        print(f"[daily_scrape] {today_key} 12:35 — {len(active)} active jobs")
+                        for j in active:
+                            try:
+                                create_job(j["payload"], source="schedule:daily")
+                            except ScriptError as e:
+                                print(f"  skip {j.get('id','')}: {e}")
+                        state["pending"] = active
+                        state["phase"] = "waiting"
+                    else:
+                        print(f"[daily_scrape] {today_key}: no active jobs")
+                        state["phase"] = "done"
+
+            elif state["phase"] == "waiting":
+                jobs_map = {j["id"]: j for j in load_jobs()}
+                running = [j for j in state["pending"]
+                           if jobs_map.get(j["id"], {}).get("status") in ("queued", "running")]
+                if not running:
+                    missing = [j for j in state["pending"]
+                               if not _has_today_data(jobs_map.get(j["id"], {}))]
+                    if missing:
+                        state["retry_count"] += 1
+                        if state["retry_count"] >= MAX_RETRIES:
+                            print(f"[daily_scrape] {today_key}: {len(missing)} still missing after {MAX_RETRIES} retries, giving up")
+                            state["phase"] = "done"
+                        else:
+                            rt = now_bj + timedelta(hours=1)
+                            print(f"[daily_scrape] {today_key}: {len(missing)}/{len(state['pending'])} missing, retry #{state['retry_count']} at {rt.strftime('%H:%M')}")
+                            state["pending"] = missing
+                            state["retry_time"] = rt
+                            state["phase"] = "retry"
+                    else:
+                        print(f"[daily_scrape] {today_key}: all done ✓")
+                        state["phase"] = "done"
+
+            elif state["phase"] == "retry":
+                if state["retry_time"] and now_bj >= state["retry_time"]:
+                    print(f"[daily_scrape] {today_key} retry #{state['retry_count']} — {len(state['pending'])} jobs")
+                    for j in state["pending"]:
+                        try:
+                            create_job(j["payload"], source="schedule:daily")
+                        except ScriptError as e:
+                            print(f"  skip {j.get('id','')}: {e}")
+                    state["phase"] = "waiting"
+                    state["retry_time"] = None
+        except Exception as exc:
+            print(f"[daily_scrape] error: {exc}", file=sys.stderr)
+        time.sleep(30)
+
+
 @app.get("/")
 @app.get("/css888")
 @app.get("/css888/")
@@ -3581,6 +3706,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
 def main() -> None:
     ensure_state()
     threading.Thread(target=scheduler_loop, daemon=True).start()
+    threading.Thread(target=daily_scrape_loop, daemon=True).start()
     threading.Thread(target=sync_activities_loop, daemon=True).start()
     host = os.environ.get("WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("WEB_PORT", "48234"))
