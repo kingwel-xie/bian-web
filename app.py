@@ -1599,7 +1599,7 @@ def _has_today_data(job: dict[str, Any]) -> bool:
         return True  # can't read file, trust the timestamp
 
 
-MAX_RETRIES = 3
+MAX_RETRIES = 8
 
 
 def daily_scrape_loop() -> None:
