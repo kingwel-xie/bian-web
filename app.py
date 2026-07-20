@@ -3663,7 +3663,10 @@ def api_job_delta_analysis(job_id: str) -> Response:
         base_vol = to_decimal(last_row.get("marketQuoteVolume"))
         if base_vol is None:
             base_vol = to_decimal(last_row.get("marketBaseVolume"))
-        pred_hour = now_bj.replace(minute=0, second=0, microsecond=0)
+        # start predictions from the hour after end_boundary to avoid overlapping market rows
+        pred_hour = end_boundary.replace(minute=0, second=0, microsecond=0)
+        if pred_hour < end_boundary:
+            pred_hour += timedelta(hours=1)
         while pred_hour < act_end_dt:
             hour_end = pred_hour + timedelta(hours=1)
             partial = hour_end > act_end_dt
