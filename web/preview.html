@@ -641,10 +641,11 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
         const avg = tierVol / t.count;
         const medEst = avg * 0.9;
         const q1Est = avg * 0.8;
-        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td></tr>");
+        const target = (medEst + q1Est) / 2;
+        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\"><b>" + fmtVolume(target) + "</b></td></tr>");
       }
       document.getElementById("calcResult").innerHTML =
-        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
+        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
     }
 
     const rMode = preview.rewardMode || "rank";
