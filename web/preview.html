@@ -176,13 +176,13 @@
           <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">总成交量 (M)
             <input id="calcTotalVol" type="text" inputmode="numeric" pattern="[0-9]*" style="width:140px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="100" />
           </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">50名占比%
+          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">1~50名占比%
             <input id="calcPct50" type="number" step="0.1" min="0" max="100" value="12.8" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
           </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">200名占比%
+          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">51~200名占比%
             <input id="calcPct200" type="number" step="0.1" min="0" max="100" value="17.4" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
           </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">1000名占比%
+          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">201~1000名占比%
             <input id="calcPct1000" type="number" step="0.1" min="0" max="100" value="14.4" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
           </label>
           <button id="calcBtn" type="button" style="height:32px;padding:0 16px;border:1px solid var(--line);border-radius:6px;background:#4a7c8c;color:#fff;font-size:12px;font-weight:700;cursor:pointer">计算预估均值</button>
@@ -629,9 +629,9 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       const totalVol = parseFloat(tvEl.value.replace(/,/g, "")) * 1_000_000;
       if (!totalVol || totalVol <= 0) { showToast("请输入总成交量"); return; }
       const tiers = [
-        { name: "50名", count: 50, el: document.getElementById("calcPct50") },
-        { name: "200名", count: 200, el: document.getElementById("calcPct200") },
-        { name: "1000名", count: 1000, el: document.getElementById("calcPct1000") },
+        { name: "1~50名", count: 50, el: document.getElementById("calcPct50") },
+        { name: "51~200名", count: 150, el: document.getElementById("calcPct200") },
+        { name: "201~1000名", count: 800, el: document.getElementById("calcPct1000") },
       ];
       const rows = [];
       for (const t of tiers) {
