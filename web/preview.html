@@ -176,15 +176,7 @@
           <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">总成交量 (M)
             <input id="calcTotalVol" type="text" inputmode="numeric" pattern="[0-9]*" style="width:140px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="100" />
           </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">21~50名占比%
-            <input id="calcPct50" type="number" step="0.1" min="0" max="100" value="12.8" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
-          </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">51~200名占比%
-            <input id="calcPct200" type="number" step="0.1" min="0" max="100" value="17.4" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
-          </label>
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">201~1000名占比%
-            <input id="calcPct1000" type="number" step="0.1" min="0" max="100" value="14.4" style="width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" />
-          </label>
+          <div id="calcTierInputs" style="display:flex;gap:12px;flex-wrap:wrap"></div>
           <button id="calcBtn" type="button" style="height:32px;padding:0 16px;border:1px solid var(--line);border-radius:6px;background:#4a7c8c;color:#fff;font-size:12px;font-weight:700;cursor:pointer">计算预估均值</button>
         </div>
         <div id="calcResult" style="margin-top:8px;margin-left:16px;font-size:13px;color:var(--accent);font-weight:400"></div>
@@ -284,6 +276,7 @@ let _trendData = null;
 let _trendTierIdx = -1;
 let _trendMode = "volume";
 let _deltaStat = "avg"; // "avg" | "med" | "q1" | "last"
+let _calcTiers = [];
 const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9","#f39c12","#16a085","#e67e22","#7f8c8d"];
 
 (async () => {
@@ -628,14 +621,12 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       if (!tvEl) return;
       const totalVol = parseFloat(tvEl.value.replace(/,/g, "")) * 1_000_000;
       if (!totalVol || totalVol <= 0) { showToast("请输入总成交量"); return; }
-      const tiers = [
-        { name: "21~50名", min: 21, max: 50, el: document.getElementById("calcPct50") },
-        { name: "51~200名", min: 51, max: 200, el: document.getElementById("calcPct200") },
-        { name: "201~1000名", min: 201, max: 1000, el: document.getElementById("calcPct1000") },
-      ];
+      const tiers = _calcTiers || [];
       const rows = [];
       for (const t of tiers) {
-        const pct = parseFloat(t.el.value);
+        const el = document.getElementById(t.inputId);
+        if (!el) continue;
+        const pct = parseFloat(el.value);
         if (!pct || pct <= 0 || pct > 100) { showToast(t.name + " 占比无效 (0~100)"); return; }
         const cnt = t.max - t.min + 1;
         const tierVol = totalVol * pct / 100;
@@ -643,10 +634,10 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
         const medEst = avg * 0.9;
         const q1Est = avg * 0.8;
         const target = (medEst + q1Est) / 2;
-        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\"><b>" + fmtVolume(target) + "</b></td></tr>");
+        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\" style=\"color:#d0312d;font-weight:700\">" + fmtVolume(target) + "</td></tr>");
       }
       document.getElementById("calcResult").innerHTML =
-        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
+        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num" style="color:#d0312d;font-weight:700">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
     }
 
     const rMode = preview.rewardMode || "rank";
@@ -655,7 +646,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     const ranges =
       rMode === "rank" && rTiers.length > 0
         ? (() => {
-            const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
+      const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
             const result = [];
             let cursor = 1;
             for (const t of sorted) {
@@ -1475,8 +1466,62 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       const v = this.value.trim();
       if (v) this.value = v.replace(/,/g, "");
     });
+    // Build calculator tier inputs from rewardTiers
+    const calcTierContainer = document.getElementById("calcTierInputs");
+    _calcTiers = [];
+    const calcRewardTiers = preview.rewardTiers || [];
+    const hasRewardTiers = (preview.rewardMode || "rank") === "rank" && calcRewardTiers.length > 0;
+    if (hasRewardTiers) {
+      const sorted = [...calcRewardTiers].sort((a, b) => a.rankMin - b.rankMin);
+      for (const t of sorted) {
+        const statsLabel = t.rankMin + "~" + t.rankMax;
+        const statsEntry = _statsCache ? _statsCache.find(s => s.label === statsLabel) : null;
+        const pct = statsEntry && _totalVolCache > 0 ? (statsEntry.total / _totalVolCache * 100) : 0;
+        const id = "calcPct_" + t.rankMin + "_" + t.rankMax;
+        const name = t.rankMin + "~" + t.rankMax + "名";
+        _calcTiers.push({ name, min: t.rankMin, max: t.rankMax, inputId: id });
+        const label = document.createElement("label");
+        label.style.cssText = "font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px";
+        label.innerHTML = name + "占比%";
+        const input = document.createElement("input");
+        input.id = id;
+        input.type = "number";
+        input.step = "0.1";
+        input.min = "0";
+        input.max = "100";
+        input.value = pct.toFixed(1);
+        input.style.cssText = "width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none";
+        label.appendChild(input);
+        calcTierContainer.appendChild(label);
+      }
+    } else {
+      const fallbackTiers = [
+        { name: "21~50名", min: 21, max: 50 },
+        { name: "51~200名", min: 51, max: 200 },
+        { name: "201~1000名", min: 201, max: 1000 },
+      ];
+      for (const t of fallbackTiers) {
+        const statsLabel = t.min + "~" + t.max;
+        const statsEntry = _statsCache ? _statsCache.find(s => s.label === statsLabel) : null;
+        const pct = statsEntry && _totalVolCache > 0 ? (statsEntry.total / _totalVolCache * 100) : 0;
+        const id = "calcPct_" + t.min + "_" + t.max;
+        _calcTiers.push({ name: t.name, min: t.min, max: t.max, inputId: id });
+        const label = document.createElement("label");
+        label.style.cssText = "font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px";
+        label.innerHTML = t.name + "占比%";
+        const input = document.createElement("input");
+        input.id = id;
+        input.type = "number";
+        input.step = "0.1";
+        input.min = "0";
+        input.max = "100";
+        input.value = pct.toFixed(1);
+        input.style.cssText = "width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none";
+        label.appendChild(input);
+        calcTierContainer.appendChild(label);
+      }
+    }
     document.getElementById("calcBtn").addEventListener("click", _calcReward);
-
     // --- Team picker ---
     let _pickerNick = "", _pickerUid = "";
     const pickerModal = document.getElementById("teamPickerModal");
