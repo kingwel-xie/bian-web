@@ -629,16 +629,17 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       const totalVol = parseFloat(tvEl.value.replace(/,/g, "")) * 1_000_000;
       if (!totalVol || totalVol <= 0) { showToast("请输入总成交量"); return; }
       const tiers = [
-        { name: "1~50名", count: 50, el: document.getElementById("calcPct50") },
-        { name: "51~200名", count: 150, el: document.getElementById("calcPct200") },
-        { name: "201~1000名", count: 800, el: document.getElementById("calcPct1000") },
+        { name: "1~50名", min: 1, max: 50, el: document.getElementById("calcPct50") },
+        { name: "51~200名", min: 51, max: 200, el: document.getElementById("calcPct200") },
+        { name: "201~1000名", min: 201, max: 1000, el: document.getElementById("calcPct1000") },
       ];
       const rows = [];
       for (const t of tiers) {
         const pct = parseFloat(t.el.value);
         if (!pct || pct <= 0 || pct > 100) { showToast(t.name + " 占比无效 (0~100)"); return; }
+        const cnt = t.max - t.min + 1;
         const tierVol = totalVol * pct / 100;
-        const avg = tierVol / t.count;
+        const avg = tierVol / cnt;
         const medEst = avg * 0.9;
         const q1Est = avg * 0.8;
         const target = (medEst + q1Est) / 2;
