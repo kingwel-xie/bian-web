@@ -34,6 +34,7 @@ ACTIVITIES_CACHE_FILE = STATE_DIR / "activities_cache.json"
 ACTIVITIES_CACHE_TTL = 600
 ACTIVITIES_DB_FILE = STATE_DIR / "activities_db.json"
 TEAMS_FILE = STATE_DIR / "teams.json"
+REWARDS_FILE = STATE_DIR / "rewards.json"
 KNOWN_SYMBOLS = {
     "bill": "BILLUSDT",
     "aig": "AIGENSYNUSDT",
@@ -1394,6 +1395,14 @@ def save_teams_db(db: dict[str, Any]) -> None:
     write_json(TEAMS_FILE, db)
 
 
+def load_rewards_db() -> dict[str, Any]:
+    return read_json(REWARDS_FILE, {"records": []})
+
+
+def save_rewards_db(db: dict[str, Any]) -> None:
+    write_json(REWARDS_FILE, db)
+
+
 ACTIVITY_KEYWORDS_FILE = STATE_DIR / "activity_keywords.json"
 _keywords_cache: dict[str, Any] | None = None
 _keywords_cache_at: float = 0
@@ -1717,6 +1726,13 @@ def activity_html() -> Response:
 @app.get("/growth.html")
 def growth_html() -> Response:
     response = send_from_directory(app.static_folder, "growth.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
+@app.get("/rewards.html")
+def rewards_html() -> Response:
+    response = send_from_directory(app.static_folder, "rewards.html")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
@@ -3407,6 +3423,319 @@ def api_merge_teams() -> Response:
     db["updatedAt"] = datetime.now(timezone.utc).isoformat()
     save_teams_db(db)
     return jsonify({"db": db})
+
+
+@app.get("/api/rewards/ended-jobs")
+def api_rewards_ended_jobs() -> Response:
+    now_bj = datetime.now(BJ)
+    jobs = load_jobs()
+    result = []
+    for j in jobs:
+        payload = j.get("payload") or {}
+        end_str = payload.get("activityEnd", "") or ""
+        if not end_str:
+            continue
+        try:
+            clean = end_str.strip().replace("T", " ")
+            end_dt = datetime.strptime(clean[:19] if clean.count(":") >= 2 else clean + ":00", "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+        except Exception:
+            continue
+        if end_dt >= now_bj:
+            continue
+        reward_mode = payload.get("rewardMode", "rank")
+        if reward_mode == "rank":
+            reward_tiers = payload.get("rewardTiers") or []
+            if not isinstance(reward_tiers, list) or not reward_tiers:
+                continue
+        else:
+            reward_tiers = []
+            total_r = payload.get("totalReward") or 0
+            eligible = payload.get("eligibleUsers") or 0
+            if not total_r or not eligible:
+                continue
+        result.append({
+            "id": j.get("id"),
+            "name": j.get("name") or payload.get("name", ""),
+            "jobName": j.get("name") or payload.get("name", ""),
+            "rewardToken": payload.get("rewardToken", ""),
+            "rewardMode": reward_mode,
+            "rewardTiers": reward_tiers,
+            "totalReward": payload.get("totalReward"),
+            "eligibleUsers": payload.get("eligibleUsers"),
+            "activityEnd": end_str,
+            "resourceId": payload.get("resourceId", ""),
+        })
+    result.sort(key=lambda x: x["activityEnd"], reverse=True)
+    return jsonify({"jobs": result})
+
+
+@app.get("/api/rewards/total-candidates")
+def api_rewards_total_candidates() -> Response:
+    job_id = request.args.get("jobId", "").strip()
+    if not job_id:
+        return jsonify({"error": "缺少 jobId"}), 400
+    jobs = load_jobs()
+    job = None
+    for j in jobs:
+        if j.get("id") == job_id:
+            job = j
+            break
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    payload = job.get("payload") or {}
+    if payload.get("rewardMode") != "total":
+        return jsonify({"error": "非总量奖励任务"}), 400
+    total_reward = float(payload.get("totalReward") or 0)
+    eligible_users = int(payload.get("eligibleUsers") or 0)
+    if not total_reward or not eligible_users:
+        return jsonify({"error": "任务未配置总奖池或有效用户数"}), 400
+    snapshots = job.get("snapshots") or []
+    if not snapshots:
+        return jsonify({"error": "无快照数据"}), 400
+    json_path_str = snapshots[-1].get("json")
+    if not json_path_str:
+        return jsonify({"error": "无快照文件"}), 400
+    json_path = Path(str(json_path_str))
+    if not json_path.exists():
+        return jsonify({"error": "快照文件不存在"}), 400
+    data = read_json(json_path, {})
+    rows = data.get("rows") if isinstance(data, dict) else []
+    if not isinstance(rows, list):
+        return jsonify({"error": "快照数据格式错误"}), 400
+    rows.sort(key=lambda r: int(r.get("sequence") or 999999))
+    top_rows = rows[:eligible_users]
+    users = []
+    total_volume = 0.0
+    for r in top_rows:
+        grade = float(r.get("grade") or 0)
+        total_volume += grade
+        users.append({
+            "sequence": int(r.get("sequence") or 0),
+            "nickname": r.get("nickName") or r.get("nickname") or "",
+            "userId": r.get("userId") or "",
+            "grade": grade,
+        })
+    return jsonify({
+        "users": users,
+        "totalReward": total_reward,
+        "eligibleUsers": eligible_users,
+        "totalVolume": total_volume,
+        "rewardToken": (payload.get("rewardToken") or "").strip().upper(),
+    })
+
+
+@app.route("/api/rewards", methods=["GET", "PUT"])
+def api_rewards() -> Response:
+    if request.method == "GET":
+        job_id = request.args.get("jobId", "").strip()
+        db = load_rewards_db()
+        records = db.get("records", [])
+        if job_id:
+            records = [r for r in records if r.get("jobId") == job_id]
+            tiers: dict[int, int] = {}
+            for r in records:
+                ti = r.get("tierIndex", 0)
+                tiers[ti] = tiers.get(ti, 0) + 1
+            return jsonify({"tiers": tiers, "records": records, "cost": db.get("costs", {}).get(job_id, 0)})
+        jobs_map = {j.get("id"): j for j in load_jobs()}
+        grouped: dict[str, Any] = {}
+        for r in records:
+            jid = r.get("jobId", "")
+            if not jid:
+                continue
+            if jid not in grouped:
+                job = jobs_map.get(jid, {})
+                p = job.get("payload") or {}
+                price_usd = job.get("rewardPriceUsd") or p.get("rewardPriceUsd")
+                if price_usd is not None:
+                    try:
+                        price_usd = float(price_usd)
+                    except (TypeError, ValueError):
+                        price_usd = None
+                reward_mode = r.get("rewardMode") or p.get("rewardMode") or "rank"
+                grouped[jid] = {
+                    "jobName": r.get("jobName", "") or p.get("name", ""),
+                    "rewardToken": r.get("rewardToken", "") or p.get("rewardToken", ""),
+                    "rewardMode": reward_mode,
+                    "rewardTiers": p.get("rewardTiers", []),
+                    "totalReward": p.get("totalReward"),
+                    "eligibleUsers": p.get("eligibleUsers"),
+                    "activityStart": p.get("activityStart", ""),
+                    "activityEnd": p.get("activityEnd", ""),
+                    "rewardPriceUsd": price_usd,
+                    "resourceId": p.get("resourceId", ""),
+                    "tierInfo": {},
+                    "records": [],
+                }
+            if r.get("rewardMode") == "total":
+                grouped[jid]["records"].append(r)
+            else:
+                ti = r.get("tierIndex", 0)
+                if ti not in grouped[jid]["tierInfo"]:
+                    grouped[jid]["tierInfo"][ti] = {"count": 0}
+                grouped[jid]["tierInfo"][ti]["count"] += 1
+                grouped[jid]["records"].append(r)
+        for jid, g in grouped.items():
+            recs = g.get("records", [])
+            g["totalRecords"] = len(recs)
+            g["paidRecords"] = sum(1 for r in recs if r.get("paid"))
+            paid_at_list = [r["paidAt"] for r in recs if r.get("paidAt")]
+            g["allPaid"] = g["totalRecords"] > 0 and g["paidRecords"] == g["totalRecords"]
+            g["paidAt"] = max(paid_at_list) if paid_at_list else None
+            g["cost"] = db.get("costs", {}).get(jid, 0)
+            if g.get("rewardMode") == "total":
+                total_vol = sum(float(r.get("volume") or r.get("grade") or 0) for r in recs)
+                total_amt = sum(float(r.get("amount") or 0) for r in recs)
+                g["totalVolume"] = total_vol
+                g["totalAmount"] = total_amt
+        return jsonify({"jobs": grouped})
+
+    body = request.get_json(force=True) or {}
+    job_id = str(body.get("jobId") or "").strip()
+    reward_mode = body.get("rewardMode", "rank")
+
+    jobs = load_jobs()
+    job = None
+    for j in jobs:
+        if j.get("id") == job_id:
+            job = j
+            break
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+
+    payload = job.get("payload") or {}
+    job_name = job.get("name") or payload.get("name", "")
+    reward_token = payload.get("rewardToken", "")
+
+    db = load_rewards_db()
+    db["records"] = [r for r in db.get("records", []) if r.get("jobId") != job_id]
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    if reward_mode == "total":
+        users_in = body.get("users") or []
+        total_volume = float(body.get("totalVolume") or 0)
+        total_reward = float(payload.get("totalReward") or 0)
+        if not users_in or not total_volume or not total_reward:
+            return jsonify({"error": "缺少 users 或 totalVolume 或 totalReward"}), 400
+        for u in users_in:
+            nickname = str(u.get("nickname") or "").strip()
+            user_id = str(u.get("userId") or "").strip()
+            grade = float(u.get("grade") or 0)
+            if not nickname or grade <= 0:
+                continue
+            amount = grade / total_volume * total_reward
+            db["records"].append({
+                "id": uuid.uuid4().hex[:12],
+                "jobId": job_id,
+                "jobName": job_name,
+                "rewardToken": reward_token,
+                "rewardMode": "total",
+                "nickname": nickname,
+                "userId": user_id,
+                "grade": grade,
+                "volume": grade,
+                "amount": str(round(amount, 4)),
+                "totalReward": str(total_reward),
+                "eligibleUsers": payload.get("eligibleUsers"),
+                "totalVolume": total_volume,
+                "createdAt": now,
+                "paid": False,
+                "paidAt": None,
+            })
+    else:
+        tiers_in = body.get("tiers") or []
+        if not isinstance(tiers_in, list):
+            return jsonify({"error": "缺少 tiers"}), 400
+        reward_tiers = payload.get("rewardTiers") or []
+        for t in tiers_in:
+            ti = t.get("tierIndex")
+            count = int(t.get("count", 0))
+            if count <= 0 or ti is None:
+                continue
+            if ti < 0 or ti >= len(reward_tiers):
+                continue
+            tier_info = reward_tiers[ti]
+            for _ in range(count):
+                db["records"].append({
+                    "id": uuid.uuid4().hex[:12],
+                    "jobId": job_id,
+                    "jobName": job_name,
+                    "rewardToken": reward_token,
+                    "tierIndex": ti,
+                    "rankMin": tier_info.get("rankMin"),
+                    "rankMax": tier_info.get("rankMax"),
+                    "amount": tier_info.get("amount", "0"),
+                    "createdAt": now,
+                    "paid": False,
+                    "paidAt": None,
+                })
+
+    db["updatedAt"] = now
+    cost = body.get("cost")
+    if cost is not None:
+        try:
+            cost = float(cost)
+        except (TypeError, ValueError):
+            cost = 0
+        c = db.get("costs", {})
+        c[job_id] = cost
+        db["costs"] = c
+    save_rewards_db(db)
+
+    if reward_mode == "total":
+        total_vol = sum(float(r.get("volume") or r.get("grade") or 0) for r in db["records"] if r.get("jobId") == job_id)
+        total_amt = sum(float(r.get("amount") or 0) for r in db["records"] if r.get("jobId") == job_id)
+        return jsonify({"ok": True, "totalVolume": total_vol, "totalAmount": total_amt, "count": len([r for r in db["records"] if r.get("jobId") == job_id])})
+    tiers_out: dict[int, int] = {}
+    for r in db["records"]:
+        if r.get("jobId") == job_id:
+            ti = r.get("tierIndex", 0)
+            tiers_out[ti] = tiers_out.get(ti, 0) + 1
+    return jsonify({"tiers": tiers_out})
+
+
+@app.delete("/api/rewards/<record_id>")
+def api_delete_reward(record_id: str) -> Response:
+    db = load_rewards_db()
+    before = len(db.get("records", []))
+    db["records"] = [r for r in db.get("records", []) if r.get("id") != record_id]
+    if len(db["records"]) == before:
+        return jsonify({"error": "记录不存在"}), 404
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_rewards_db(db)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/rewards/<job_id>/toggle-paid")
+def api_toggle_paid(job_id: str) -> Response:
+    db = load_rewards_db()
+    records = [r for r in db.get("records", []) if r.get("jobId") == job_id]
+    if not records:
+        return jsonify({"error": "无记录"}), 404
+    any_unpaid = any(not r.get("paid") for r in records)
+    now_str = datetime.now(BJ).strftime("%Y-%m-%d %H:%M:%S")
+    for r in records:
+        r["paid"] = any_unpaid
+        r["paidAt"] = now_str if any_unpaid else None
+    save_rewards_db(db)
+    return jsonify({"paid": any_unpaid, "paidAt": now_str if any_unpaid else None})
+
+
+@app.get("/api/jobs/<job_id>/params")
+def api_job_params(job_id: str) -> Response:
+    jobs = load_jobs()
+    for j in jobs:
+        if j.get("id") == job_id:
+            payload = j.get("payload") or {}
+            return jsonify({
+                "name": j.get("name") or payload.get("name", ""),
+                "rewardToken": payload.get("rewardToken", ""),
+                "rewardTiers": payload.get("rewardTiers", []),
+                "rewardMode": payload.get("rewardMode", ""),
+                "activityEnd": payload.get("activityEnd", ""),
+            })
+    return jsonify({"error": "任务不存在"}), 404
 
 
 @app.get("/teams.html")

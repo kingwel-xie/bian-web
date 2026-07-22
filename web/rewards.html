@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>奖励记录管理</title>
+<link rel="stylesheet" href="/css888/styles.css?v=20260704i" />
+<style>
+  .job-hd { display:flex; align-items:center; gap:8px; min-width:0; }
+  .job-hd .job-rid { font-size:11px; color:var(--muted); flex-shrink:0; }
+  .job-hd .job-act-time { font-size:11px; color:var(--muted); flex-shrink:0; }
+  .job-hd .token-badge { font-size:10px; font-weight:700; padding:2px 10px; background:#d4933a; color:#fff; border:0; border-radius:999px; flex-shrink:0; line-height:18px; }
+  .job-actions { display:flex; align-items:flex-start; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .job-actions .del-job-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:28px; border-radius:999px; color:var(--ink); font-weight:600; }
+  .job-actions .del-job-btn:hover { border-color:var(--bad); background:rgba(196,81,69,0.12); color:var(--bad); }
+  .job-actions .edit-job-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:28px; border-radius:999px; color:var(--ink); font-weight:600; }
+  .job-actions .edit-job-btn:hover { border-color:var(--accent-2); background:rgba(74,124,140,0.12); color:var(--accent-2); }
+  .job-actions .tog-paid-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:28px; border-radius:999px; color:var(--ink); font-weight:600; }
+  .job-actions .tog-paid-btn:hover { border-color:var(--good); background:rgba(39,174,96,0.12); color:var(--good); }
+  .badge { position:relative; display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600; padding:2px 10px; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--accent); white-space:nowrap; }
+  .badge-count { position:absolute; top:-7px; right:-7px; font-size:9px; font-weight:700; background:var(--accent-2); color:#fff; border-radius:999px; padding:0 5px; line-height:15px; min-width:15px; text-align:center; pointer-events:none; }
+  .job-body { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .total-bar { grid-column:1/-1; display:flex; gap:14px; align-items:baseline; padding:6px 0 0; border-top:1px solid var(--line); margin-top:2px; font-size:12px; color:var(--accent); }
+  .total-bar .total-amt { font-weight:700; }
+  .total-bar .total-usd { color:var(--good); font-weight:700; }
+  .total-bar .total-price { color:var(--muted); font-weight:400; font-size:11px; }
+  .paid-bar { grid-column:1/-1; padding:2px 0 0; font-size:12px; }
+  .paid-bar .paid-ok { color:var(--good); font-weight:600; }
+  .job.paid { opacity:.55; }
+  .job.paid .job-name { text-decoration-color:var(--muted); }
+  .empty-state { color:var(--muted); text-align:center; padding:48px 0; font-size:13px; }
+  .msg { font-size:12px; color:var(--good); min-height:1.2em; padding:4px 0; }
+
+  .modal-header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; background:#eee7d9; border-radius:8px 8px 0 0; }
+  .modal-header h3 { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; color:var(--accent); }
+  .modal-close-btn { background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:0 4px; line-height:1; }
+  .modal-close-btn:hover { color:#333; }
+  .modal-body { padding:12px 14px; overflow-y:auto; flex:1; }
+  .modal-job-select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; background:#fffdf8; color:var(--ink); margin-bottom:10px; box-sizing:border-box; }
+  .tier-card { border:1px solid var(--line); border-radius:6px; background:var(--panel); margin-bottom:4px; display:flex; align-items:center; gap:8px; padding:8px 12px; }
+  .tier-label { flex:1; font-size:13px; color:var(--ink); }
+  .tier-label .sub { color:var(--muted); font-size:11px; }
+  .tier-count { font-size:14px; font-weight:700; color:var(--accent); min-width:32px; text-align:center; }
+  .tier-btn { border:1px solid var(--line); border-radius:4px; background:#f5f3ef; color:var(--ink); width:28px; height:28px; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; min-height:auto; }
+  .tier-btn:hover { background:var(--accent-2); color:#fff; border-color:var(--accent-2); }
+  .tier-btn:active { opacity:0.7; }
+  .modal-msg { font-size:11px; color:var(--good); min-height:1em; padding:0 14px 8px; }
+  .total-candidate-wrap { max-height:360px; overflow-y:auto; margin-bottom:4px; border:1px solid var(--line); border-radius:6px; }
+  .total-summary { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--muted); padding:6px 2px 10px; border-bottom:1px solid var(--line); margin-bottom:10px; }
+  .total-summary span { font-weight:600; color:var(--accent); }
+  .total-candidate-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+  .total-candidate-table th { text-align:left; padding:4px 8px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .total-candidate-table td { padding:4px 8px; border-bottom:1px solid rgba(46,42,36,0.06); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .total-candidate-table .num { text-align:right; }
+  .total-candidate-table .chk { width:32px; text-align:center; }
+  .total-candidate-table th:nth-child(2), .total-candidate-table td:nth-child(2) { width:42px; text-align:center; }
+  .total-candidate-table th:nth-child(3) { width:auto; }
+  .total-candidate-table td:nth-child(3) { max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .total-candidate-table th:nth-child(4), .total-candidate-table td:nth-child(4) { width:105px; text-align:right; }
+  .total-candidate-table th:nth-child(5), .total-candidate-table td:nth-child(5) { width:120px; }
+  .total-candidate-table input[type=checkbox] { accent-color:var(--accent-2); }
+  .total-candidate-table .reward-cell { font-weight:600; color:var(--accent-2); }
+  .total-row.hide { display:none; }
+  .total-search-input { width:100%; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12px; background:#fffdf8; color:var(--ink); box-sizing:border-box; margin-bottom:6px; outline:none; }
+  .total-search-input:focus { border-color:var(--accent-2); }
+  .total-footer { display:flex; gap:16px; font-size:12px; padding:8px 2px 0; border-top:1px solid var(--line); margin-top:6px; color:var(--muted); }
+  .total-footer span { font-weight:600; }
+  .total-footer .ok { color:var(--good); }
+  .total-footer .warn { color:var(--bad); }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">BIAN-WEB REWARDS</p>
+      <h1>奖励记录管理</h1>
+      <p class="subtitle">管理已结束任务的奖励发放记录。选择任务、配置各档位发放人数，系统自动计算人均价值。</p>
+      <p style="margin:10px 0 0;font-size:13px;display:flex;gap:14px;flex-wrap:wrap">
+        <a href="index.html" style="color:var(--accent-2)">← 返回任务台</a>
+      </p>
+    </div>
+  </header>
+
+  <section class="grid">
+    <section class="panel jobs-panel">
+      <div class="jobs-header">
+        <span>奖励记录</span>
+        <b id="jobCount">0</b>
+      </div>
+      <div class="filter-bar">
+        <button id="openAddModalBtn" type="button" class="mini" style="background:var(--accent-2);color:#fff;border:0;border-radius:999px;line-height:1">+ 添加奖励</button>
+        <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" style="margin-left:8px" />
+        <span id="statsSummary" style="margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap"></span>
+      </div>
+      <div id="jobList" class="job-list"></div>
+      <div id="msg" class="msg"></div>
+    </section>
+  </section>
+</main>
+
+<div id="addModal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="min-width:420px;max-width:500px;padding:0">
+    <div class="modal-header">
+      <h3>添加奖励</h3>
+      <button class="modal-close-btn" id="modalCloseBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <select id="modalJobSelect" class="modal-job-select">
+        <option value="">— 选择已结束任务 —</option>
+      </select>
+      <div id="modalTierArea"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:0 2px">
+        <label style="font-size:12px;color:var(--muted);flex-shrink:0">成本 (USDT)</label>
+        <input id="modalCostInput" type="number" step="0.01" min="0" value="0"
+          style="flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);box-sizing:border-box" />
+      </div>
+    </div>
+    <div id="modalMsg" class="modal-msg"></div>
+    <div class="modal-footer" style="padding:8px 14px;border-top:1px solid rgba(46,42,36,0.08);display:flex;justify-content:flex-end;gap:8px">
+      <button id="modalCancelBtn" type="button" class="modal-close-btn" style="font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-weight:700">取消</button>
+      <button id="modalConfirmBtn" type="button" style="font-size:12px;padding:5px 18px;border:0;border-radius:6px;background:var(--accent-2);color:#fff;cursor:pointer;font-weight:700">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const jobListEl = document.getElementById("jobList");
+const msgEl = document.getElementById("msg");
+const jobCountEl = document.getElementById("jobCount");
+const searchInput = document.getElementById("searchInput");
+const openAddModalBtn = document.getElementById("openAddModalBtn");
+const addModal = document.getElementById("addModal");
+const modalCloseBtn = document.getElementById("modalCloseBtn");
+const modalCancelBtn = document.getElementById("modalCancelBtn");
+const modalConfirmBtn = document.getElementById("modalConfirmBtn");
+const modalJobSelect = document.getElementById("modalJobSelect");
+const modalTierArea = document.getElementById("modalTierArea");
+const modalMsg = document.getElementById("modalMsg");
+const modalTitleEl = addModal.querySelector("h3");
+const modalCostInput = document.getElementById("modalCostInput");
+
+let _endedJobs = [];
+let _modalJob = null;
+let _modalTiers = {};
+let _allRecords = {};
+let _totalCandidates = null;
+let _totalSearchText = "";
+
+function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+const _badgeColors = [
+  { bg:"#e6f0f2", border:"#4a7c8c", text:"#4a7c8c" },
+  { bg:"#f5eee6", border:"#d4933a", text:"#d4933a" },
+  { bg:"#f3e8f5", border:"#8e44ad", text:"#8e44ad" },
+  { bg:"#e6f5ec", border:"#27ae60", text:"#27ae60" },
+  { bg:"#f5e6e6", border:"#c0392b", text:"#c0392b" },
+  { bg:"#e6ecf5", border:"#2980b9", text:"#2980b9" },
+  { bg:"#f5f0e6", border:"#f39c12", text:"#f39c12" },
+  { bg:"#e6f5f0", border:"#16a085", text:"#16a085" },
+];
+
+function fmtValue(v) {
+  if (!Number.isFinite(v)) return "0";
+  if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
+  if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
+  if (v >= 1000) return (v / 1000).toFixed(1) + "K";
+  if (v >= 1) return v.toFixed(2);
+  return v.toFixed(4);
+}
+
+async function loadAll() {
+  try {
+    const [endedResp, recordsResp] = await Promise.all([
+      fetch("/api/rewards/ended-jobs"),
+      fetch("/api/rewards"),
+    ]);
+    const endedData = await endedResp.json();
+    const recordsData = await recordsResp.json();
+    _allRecords = recordsData.jobs || {};
+    _endedJobs = endedData.jobs || [];
+    renderJobs();
+  } catch (e) {
+    msgEl.textContent = "加载失败";
+  }
+}
+
+function renderJobs() {
+  const entries = Object.entries(_allRecords);
+  const q = searchInput.value.trim().toLowerCase();
+  let filtered = entries.filter(([jid, jRecords]) => {
+    if (!q) return true;
+    return (jRecords.jobName || "").toLowerCase().includes(q);
+  });
+  jobCountEl.textContent = filtered.length;
+  filtered.sort((a, b) => {
+    const endA = a[1].activityEnd || "";
+    const endB = b[1].activityEnd || "";
+    return endB.localeCompare(endA);
+  });
+  if (!filtered.length) {
+    jobListEl.innerHTML = '<div class="empty-state">' + (q ? "没有匹配的任务。" : "暂无奖励记录") + "</div>";
+    return;
+  }
+  let html = "";
+  for (const [jid, jRecords] of filtered) {
+    const token = (jRecords.rewardToken || "").toUpperCase();
+    const price = token === "USDT" ? 1 : jRecords.rewardPriceUsd;
+    const isTotal = jRecords.rewardMode === "total";
+    let bodyHtml = "";
+    let totalUSD = 0;
+    let totalTokens = 0;
+    if (isTotal) {
+      const totalVol = jRecords.totalVolume || 0;
+      const totalAmt = jRecords.totalAmount || 0;
+      jRecords._totalTokens = totalAmt;
+      jRecords._totalUSD = 0;
+      if (price != null && price > 0) jRecords._totalUSD = totalAmt * price;
+      jRecords._price = price;
+      bodyHtml = '<div style="font-size:12px;color:var(--muted);padding:4px 0;display:flex;gap:14px;flex-wrap:wrap">' +
+        '<span>总量奖励</span>' +
+        '<span>已发 <b style="color:var(--accent)">' + (jRecords.paidRecords || 0) + '</b> / <b>' + (jRecords.totalRecords || 0) + '</b> 人</span>' +
+        (totalVol > 0 ? '<span>总交易量: <b>' + Number(totalVol).toLocaleString() + '</b></span>' : "") +
+        (totalAmt > 0 ? '<span>总奖励: <b>' + totalAmt.toFixed(4) + " " + escapeHtml(token) + '</b></span>' : "") +
+        '</div>';
+    } else {
+      const tierInfo = jRecords.tierInfo || {};
+      const tiers = jRecords.rewardTiers || [];
+      let badges = "";
+      for (let i = 0; i < tiers.length; i++) {
+        const t = tiers[i];
+        const cnt = (tierInfo[i] && tierInfo[i].count) || 0;
+        if (!cnt) continue;
+        const amt = parseFloat(t.amount) || 0;
+        const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
+        const perPerson = tierCount > 0 ? amt / tierCount : 0;
+        const usdVal = price != null ? perPerson * price : null;
+        const totalUsdVal = usdVal != null ? usdVal * cnt : null;
+        if (totalUsdVal != null) totalUSD += totalUsdVal;
+        totalTokens += perPerson * cnt;
+        const c = _badgeColors[i % _badgeColors.length];
+        const tip = perPerson.toFixed(4) + " " + escapeHtml(jRecords.rewardToken || "");
+        badges += '<span class="badge" style="background:' + c.bg + ';border-color:' + c.border + ';color:' + c.text + '" title="' + tip + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
+      }
+      jRecords._totalTokens = totalTokens;
+      jRecords._totalUSD = totalUSD;
+      jRecords._price = price;
+      bodyHtml = badges;
+    }
+    let totalStr = "";
+    const totalAmt = jRecords._totalTokens || 0;
+    const totalUsdVal = jRecords._totalUSD || 0;
+    if (totalAmt > 0) {
+      totalStr = '<div class="total-bar">' +
+        '<span class="total-amt">合计： ' + fmtValue(totalAmt) + " " + escapeHtml(jRecords.rewardToken || "") + "</span>";
+      if (totalUsdVal > 0) {
+        totalStr += '<span class="total-usd">~$' + fmtValue(totalUsdVal) + "</span>";
+      }
+      if (price != null) {
+        totalStr += '<span class="total-price">收盘价 @$' + price.toFixed(4) + '</span>';
+      }
+      const cost = parseFloat(jRecords.cost) || 0;
+      if (cost > 0) {
+        totalStr += '<span class="total-cost" style="color:var(--muted)">成本 $' + fmtValue(cost) + '</span>';
+      }
+      if (cost > 0 && totalUsdVal > 0) {
+        const profit = totalUsdVal - cost;
+        totalStr += '<span class="total-profit" style="color:' + (profit >= 0 ? 'var(--good)' : 'var(--bad)') + ';font-weight:700">盈利 ~$' + fmtValue(profit) + '</span>';
+      }
+      totalStr += "</div>";
+    }
+    let paidStr = "";
+    let paidCls = "";
+    if (jRecords.totalRecords > 0 && jRecords.allPaid) {
+      paidStr = '<div class="paid-bar"><span class="paid-ok">✅ 已发放 ' + escapeHtml(jRecords.paidAt || "") + "</span></div>";
+      paidCls = ' paid';
+    }
+    const actStr = (jRecords.activityStart || "") && (jRecords.activityEnd || "")
+      ? escapeHtml(jRecords.activityStart) + " ~ " + escapeHtml(jRecords.activityEnd)
+      : jRecords.activityEnd ? escapeHtml(jRecords.activityEnd) : "";
+
+    html += '<div class="job' + paidCls + '">' +
+      '<div class="job-hd">' +
+        '<span class="job-name" style="font-weight:700">' + escapeHtml(jRecords.jobName || "") + '</span>' +
+        (jRecords.resourceId ? '<span class="job-rid"> [' + escapeHtml(jRecords.resourceId) + ']</span>' : "") +
+        (actStr ? '<span class="job-act-time">' + actStr + "</span>" : "") +
+        '<span class="token-badge">' + escapeHtml(jRecords.rewardToken || "") + '</span>' +
+      "</div>" +
+      '<div class="job-actions">' +
+        '<button class="edit-job-btn" data-jid="' + escapeHtml(jid) + '" title="修改奖励">✎ 编辑</button>' +
+        '<button class="del-job-btn" data-jid="' + escapeHtml(jid) + '" title="删除该任务所有奖励记录">🗑 删除</button>' +
+        (jRecords.totalRecords > 0 ? '<button class="tog-paid-btn" data-jid="' + escapeHtml(jid) + '">' + (jRecords.allPaid ? "↩ 取消发放" : "📤 标记已发放") + '</button>' : "") +
+      "</div>" +
+      '<div class="job-body">' + bodyHtml + "</div>" +
+      totalStr +
+      paidStr +
+      "</div>";
+  }
+  const statsEl = document.getElementById("statsSummary");
+  let sumCost = 0, sumProfit = 0, sumUnpaid = 0;
+  const unpaidByToken = {};
+  for (const [, jr] of filtered) {
+    const c = parseFloat(jr.cost) || 0;
+    if (c > 0) sumCost += c;
+    if (jr._totalUSD > 0 && c > 0) sumProfit += jr._totalUSD - c;
+    const recs = jr.records || [];
+    const price = jr._price;
+    const token = (jr.rewardToken || "").toUpperCase();
+    for (const r of recs) {
+      let usdVal = 0, tokVal = 0;
+      if (r.rewardMode === "total") {
+        tokVal = parseFloat(r.amount) || 0;
+        usdVal = price != null ? tokVal * price : 0;
+      } else if (r.rankMin != null && r.rankMax != null) {
+        const tierCnt = (r.rankMax - r.rankMin + 1) || 1;
+        tokVal = (parseFloat(r.amount) || 0) / tierCnt;
+        usdVal = price != null ? tokVal * price : 0;
+      }
+      if (!r.paid) {
+        sumUnpaid += usdVal;
+        if (tokVal > 0) unpaidByToken[token] = (unpaidByToken[token] || 0) + tokVal;
+      }
+    }
+  }
+  let statsParts = [];
+  if (sumCost > 0) statsParts.push('总成本: <b style="color:var(--muted)">$' + fmtValue(sumCost) + '</b>');
+  if (sumProfit !== 0) statsParts.push('总盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + fmtValue(sumProfit) + '</b>');
+  if (sumUnpaid > 0) statsParts.push('未发放: <b style="color:var(--accent-2)">~$' + fmtValue(sumUnpaid) + '</b>');
+  statsEl.innerHTML = statsParts.length
+    ? '<span class="stats-clickable" style="cursor:pointer;border-bottom:1px dashed var(--line)">' + statsParts.join("  ") + "</span>"
+    : "";
+  statsEl.querySelectorAll(".stats-clickable").forEach(el => {
+    el.addEventListener("click", function() {
+      let lines = [];
+      if (sumCost > 0) lines.push("总成本: $" + fmtValue(sumCost));
+      if (sumProfit !== 0) lines.push("总盈利: ~$" + fmtValue(sumProfit));
+      if (sumUnpaid > 0) {
+        lines.push("");
+        lines.push("未发放: ~$" + fmtValue(sumUnpaid));
+        const details = Object.entries(unpaidByToken).map(([t, v]) => "  " + Number(v).toLocaleString() + " " + t).join("\n");
+        lines.push(details);
+      }
+      alert(lines.join("\n"));
+    });
+  });
+  jobListEl.innerHTML = html;
+
+  jobListEl.querySelectorAll(".del-job-btn").forEach(btn => {
+    btn.addEventListener("click", async function() {
+      if (!confirm("删除该任务所有奖励记录？")) return;
+      const jid = this.dataset.jid;
+      try {
+        const resp = await fetch("/api/rewards", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId: jid, tiers: [] }),
+        });
+        if (!resp.ok) throw new Error("删除失败");
+        await loadAll();
+      } catch (e) {
+        msgEl.textContent = "❌ " + e.message;
+      }
+    });
+  });
+  jobListEl.querySelectorAll(".edit-job-btn").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const jid = this.dataset.jid;
+      const jRecords = _allRecords[jid];
+      if (!jRecords) return;
+      openModal(jid, jRecords);
+    });
+  });
+  jobListEl.querySelectorAll(".tog-paid-btn").forEach(btn => {
+    btn.addEventListener("click", async function() {
+      const jid = this.dataset.jid;
+      const jRecords = _allRecords[jid];
+      if (!jRecords) return;
+      if (!jRecords.allPaid) {
+        const tokenStr = fmtValue(jRecords._totalTokens) + " " + (jRecords.rewardToken || "");
+        const usdStr = jRecords._totalUSD > 0 ? " ~$" + fmtValue(jRecords._totalUSD) : "";
+        const priceStr = jRecords._price != null ? " (price: $" + fmtValue(jRecords._price) + ")" : "";
+        if (!confirm("确认标记合计 " + tokenStr + usdStr + priceStr + " 为已发放？")) return;
+      }
+      try {
+        const resp = await fetch("/api/rewards/" + encodeURIComponent(jid) + "/toggle-paid", { method: "POST" });
+        if (!resp.ok) throw new Error("操作失败");
+        await loadAll();
+      } catch (e) { msgEl.textContent = "❌ " + e.message; }
+    });
+  });
+}
+
+searchInput.addEventListener("input", renderJobs);
+
+// --- Modal ---
+async function loadEndedJobs() {
+  try {
+    const resp = await fetch("/api/rewards/ended-jobs");
+    const data = await resp.json();
+    _endedJobs = data.jobs || [];
+    modalJobSelect.innerHTML = '<option value="">— 选择已结束任务 —</option>' +
+      _endedJobs.map(j => {
+        const modeTag = j.rewardMode === "total" ? " [总量]" : "";
+        return '<option value="' + escapeHtml(j.id) + '">' + escapeHtml(j.jobName || j.name || "") + modeTag + "</option>";
+      }).join("");
+  } catch (e) {
+    modalMsg.textContent = "加载任务列表失败";
+  }
+}
+
+async function openModal(jobId, jobData) {
+  addModal.style.display = "flex";
+  modalTierArea.innerHTML = "";
+  _modalJob = null;
+  _modalTiers = {};
+  _totalCandidates = null;
+  _totalSearchText = "";
+  modalConfirmBtn.disabled = false;
+  modalMsg.textContent = "";
+  modalCostInput.style.display = "";
+  if (jobId && jobData) {
+    modalTitleEl.textContent = "修改奖励";
+    modalJobSelect.style.display = "none";
+    _modalJob = { id: jobId, ...jobData };
+    if (jobData.rewardMode === "total") {
+      await loadTotalCandidates(jobId);
+      renderTotalCandidates();
+    } else {
+      const ti = jobData.tierInfo || {};
+      for (const k in ti) _modalTiers[parseInt(k)] = ti[k].count || 0;
+      modalCostInput.value = jobData.cost || 0;
+      renderModalTiers();
+    }
+  } else {
+    modalTitleEl.textContent = "添加奖励";
+    modalJobSelect.style.display = "";
+    modalCostInput.value = 0;
+    await loadEndedJobs();
+  }
+}
+
+function closeModal() {
+  addModal.style.display = "none";
+}
+
+async function loadTotalCandidates(jobId) {
+  try {
+    const resp = await fetch("/api/rewards/total-candidates?jobId=" + encodeURIComponent(jobId));
+    if (!resp.ok) throw new Error("加载失败");
+    const data = await resp.json();
+    _totalCandidates = data;
+    const existing = (_allRecords[jobId] && _allRecords[jobId].records) || [];
+    const existingMap = {};
+    for (const r of existing) {
+      if (r.rewardMode === "total") existingMap[r.nickname || ""] = r;
+    }
+    for (const u of data.users) {
+      const ex = existingMap[u.nickname];
+      if (ex) {
+        u.checked = true;
+        u.grade = parseFloat(ex.volume || ex.grade || 0);
+      } else {
+        u.checked = false;
+      }
+    }
+    renderTotalCandidates();
+  } catch (e) {
+    modalMsg.textContent = "❌ " + e.message;
+    _totalCandidates = null;
+  }
+}
+
+function renderTotalCandidates() {
+  if (!_totalCandidates) {
+    modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">加载中...</div>';
+    return;
+  }
+  const data = _totalCandidates;
+  const users = data.users || [];
+  const token = data.rewardToken || "";
+  const totalReward = data.totalReward || 0;
+  const eligible = data.eligibleUsers || 0;
+  const totalVolume = data.totalVolume || 0;
+  const searchVal = escapeHtml(_totalSearchText || "");
+  let html = '<div class="total-summary">总奖池: <span>' + Number(totalReward).toLocaleString() + " " + escapeHtml(token) + '</span> | 有效用户数: <span>' + eligible + '</span> | 总交易量: <span>' + Number(totalVolume).toLocaleString() + "</span></div>";
+  html += '<input class="total-search-input" id="totalSearchInput" type="text" placeholder="搜索昵称…" value="' + searchVal + '">';
+  html += '<div class="total-candidate-wrap"><table class="total-candidate-table"><thead><tr>' +
+    '<th class="chk"></th>' +
+    '<th>排名</th>' +
+    '<th>昵称</th>' +
+    '<th class="num">交易量</th>' +
+    '<th class="num">奖励</th>' +
+    '</tr></thead><tbody>';
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i];
+    const grade = u.grade || 0;
+    const reward = totalVolume > 0 ? grade / totalVolume * totalReward : 0;
+    const checked = u.checked ? " checked" : "";
+    const nick = (u.nickname || "").toLowerCase();
+    const hide = _totalSearchText && !nick.includes(_totalSearchText.toLowerCase());
+    html += '<tr class="total-row' + (hide ? ' hide' : '') + '" data-nick="' + escapeHtml(nick) + '">' +
+      '<td class="chk"><input type="checkbox" class="total-chk" data-idx="' + i + '"' + checked + '></td>' +
+      '<td>' + u.sequence + '</td>' +
+      '<td>' + escapeHtml(u.nickname || u.userId || "") + '</td>' +
+      '<td class="num">' + Number(grade).toLocaleString() + '</td>' +
+      '<td class="num reward-cell" id="rewardCell_' + i + '">' + reward.toFixed(4) + " " + escapeHtml(token) + '</td>' +
+      "</tr>";
+  }
+  html += "</tbody></table></div>";
+  html += '<div class="total-footer" id="totalFooter">已选: <span id="totalChecked" class="ok">0</span> 人 | 总交易量: <span id="totalCheckedVol">0</span> | 总奖励: <span id="totalCheckedReward">0</span> ' + escapeHtml(token) + "</div>";
+  modalTierArea.innerHTML = html;
+  modalTierArea.querySelectorAll(".total-chk").forEach(cb => {
+    cb.addEventListener("change", function() {
+      const idx = parseInt(this.dataset.idx);
+      if (_totalCandidates && _totalCandidates.users && _totalCandidates.users[idx]) {
+        _totalCandidates.users[idx].checked = this.checked;
+      }
+      updateTotalFooter();
+    });
+  });
+  const searchEl = document.getElementById("totalSearchInput");
+  if (searchEl) {
+    searchEl.addEventListener("input", function() {
+      _totalSearchText = this.value;
+      const q = this.value.toLowerCase();
+      document.querySelectorAll(".total-row").forEach(row => {
+        const nick = (row.dataset.nick || "").toLowerCase();
+        row.classList.toggle("hide", q && !nick.includes(q));
+      });
+      updateTotalFooter();
+    });
+  }
+  updateTotalFooter();
+}
+
+function updateTotalFooter() {
+  const data = _totalCandidates;
+  if (!data || !data.users) return;
+  let checkedCount = 0, checkedVol = 0, checkedReward = 0;
+  const totalVolume = data.totalVolume || 0;
+  const totalReward = data.totalReward || 0;
+  for (let i = 0; i < data.users.length; i++) {
+    const u = data.users[i];
+    if (!u.checked) continue;
+    checkedCount++;
+    const grade = u.grade || 0;
+    checkedVol += grade;
+    checkedReward += totalVolume > 0 ? grade / totalVolume * totalReward : 0;
+  }
+  const volEl = document.getElementById("totalCheckedVol");
+  const rwEl = document.getElementById("totalCheckedReward");
+  const cntEl = document.getElementById("totalChecked");
+  if (cntEl) cntEl.textContent = checkedCount;
+  if (volEl) volEl.textContent = Number(checkedVol).toLocaleString();
+  if (rwEl) rwEl.textContent = checkedReward.toFixed(4);
+}
+
+function renderModalTiers() {
+  if (!_modalJob) {
+    modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">先选择一个已结束任务</div>';
+    return;
+  }
+  if (_modalJob.rewardMode === "total") {
+    if (_totalCandidates) {
+      renderTotalCandidates();
+    } else {
+      modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">加载中...</div>';
+    }
+    return;
+  }
+  const tiers = _modalJob.rewardTiers || [];
+  const token = _modalJob.rewardToken || "";
+  if (!tiers.length) {
+    modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">该任务无分档配置</div>';
+    return;
+  }
+  let html = "";
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i];
+    const count = _modalTiers[i] || 0;
+    const label = t.rankMin + "~" + t.rankMax + "名";
+    const amt = t.amount || "0";
+    html += '<div class="tier-card">' +
+      '<span class="tier-label">' + escapeHtml(label) + " · " + escapeHtml(amt) + ' <span class="sub">' + escapeHtml(token) + "</span></span>" +
+      '<button class="tier-btn" data-ti="' + i + '" data-dir="-1">−</button>' +
+      '<span class="tier-count" id="mCount_' + i + '">' + count + "</span>" +
+      '<button class="tier-btn" data-ti="' + i + '" data-dir="1">+</button>' +
+      "</div>";
+  }
+  modalTierArea.innerHTML = html;
+  modalTierArea.querySelectorAll(".tier-btn").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const ti = parseInt(this.dataset.ti);
+      const dir = parseInt(this.dataset.dir);
+      const cur = _modalTiers[ti] || 0;
+      const newCount = cur + dir;
+      if (newCount < 0) return;
+      _modalTiers[ti] = newCount;
+      const el = document.getElementById("mCount_" + ti);
+      if (el) el.textContent = newCount;
+    });
+  });
+}
+
+modalJobSelect.addEventListener("change", async function() {
+  const id = this.value;
+  if (!id) { _modalJob = null; _modalTiers = {}; _totalCandidates = null; modalTitleEl.textContent = "添加奖励"; renderModalTiers(); return; }
+  _modalJob = _endedJobs.find(j => j.id === id);
+  if (!_modalJob) return;
+  modalTitleEl.textContent = "添加奖励 — " + escapeHtml(_modalJob.jobName || _modalJob.name || "");
+  _modalTiers = {};
+  _totalCandidates = null;
+  modalCostInput.value = 0;
+  if (_modalJob.rewardMode === "total") {
+    await loadTotalCandidates(id);
+  } else {
+    try {
+      const resp = await fetch("/api/rewards?jobId=" + encodeURIComponent(id));
+      const data = await resp.json();
+      for (const ti in (data.tiers || {})) _modalTiers[parseInt(ti)] = data.tiers[ti];
+      modalCostInput.value = data.cost || 0;
+    } catch (e) { _modalTiers = {}; }
+  }
+  renderModalTiers();
+});
+
+async function modalSubmit() {
+  if (!_modalJob) { modalMsg.textContent = "请选择任务"; return; }
+  const isTotal = _modalJob.rewardMode === "total";
+  let body;
+  if (isTotal) {
+    if (!_totalCandidates || !_totalCandidates.users) { modalMsg.textContent = "候选数据未加载"; return; }
+    const users = [];
+    let totalCheckedVol = 0;
+    for (const u of _totalCandidates.users) {
+      if (!u.checked) continue;
+      const grade = parseFloat(u.grade) || 0;
+      if (grade <= 0) continue;
+      users.push({ nickname: u.nickname, userId: u.userId, grade });
+      totalCheckedVol += grade;
+    }
+    if (!users.length) { modalMsg.textContent = "请至少选择一个用户"; return; }
+    body = { jobId: _modalJob.id, rewardMode: "total", users, totalVolume: _totalCandidates.totalVolume, cost: parseFloat(modalCostInput.value) || 0 };
+  } else {
+    const tiers = [];
+    for (const ti in _modalTiers) {
+      const count = _modalTiers[ti];
+      if (count > 0) tiers.push({ tierIndex: parseInt(ti), count });
+    }
+    body = { jobId: _modalJob.id, tiers, cost: parseFloat(modalCostInput.value) || 0 };
+  }
+  try {
+    const resp = await fetch("/api/rewards", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error("提交失败");
+    closeModal();
+    await loadAll();
+  } catch (e) {
+    modalMsg.textContent = "❌ " + e.message;
+  }
+}
+
+openAddModalBtn.addEventListener("click", openModal);
+modalCloseBtn.addEventListener("click", closeModal);
+modalCancelBtn.addEventListener("click", closeModal);
+addModal.addEventListener("click", function(evt) { if (evt.target === addModal) closeModal(); });
+modalConfirmBtn.addEventListener("click", modalSubmit);
+
+loadAll();
+</script>
+</body>
+</html>
