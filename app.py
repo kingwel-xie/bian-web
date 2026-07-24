@@ -130,8 +130,6 @@ def normalize_scrape_symbols(raw_symbols: Any) -> tuple[str, list[str]]:
             raise ScriptError(f"symbol '{sym}' 格式无效。")
         if token is None:
             token = t
-        elif token != t:
-            raise ScriptError(f"symbol 基础币种不一致: {token} vs {t}")
         cleaned.append(s)
     if not cleaned:
         raise ScriptError("缺少 symbol。")
