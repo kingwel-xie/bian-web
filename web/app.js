@@ -214,8 +214,9 @@ function openEditModal(job) {
   _editJobId = job.id;
   const p = job.payload || {};
   document.getElementById("editMarket").value = (p.market || "um").toLowerCase();
-  document.getElementById("editToken").value = (p.token || (p.symbol || "").replace(/USDT$/i, "") || "").toUpperCase();
-  document.getElementById("editSymbol").value = (p.symbol || "").toUpperCase();
+  const symVal = Array.isArray(p.symbol) ? p.symbol[0] : (p.symbol || "");
+  document.getElementById("editToken").value = (p.token || symVal.replace(/USDT$/i, "") || "").toUpperCase();
+  document.getElementById("editSymbol").value = (Array.isArray(p.symbol) ? p.symbol.join(", ") : p.symbol || "").toUpperCase();
   document.getElementById("editName").value = job.name || p.name || "";
   document.getElementById("editRewardToken").value = p.rewardToken || document.getElementById("editToken").value || "";
   const rewardMode = p.rewardMode || "rank";

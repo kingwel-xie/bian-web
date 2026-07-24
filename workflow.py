@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="输入活动 URL，自动抓榜、出图、计算市场成交量比例。")
     parser.add_argument("url", help="Binance 活动页面 URL")
     parser.add_argument("--name", help="手动指定输出目录/榜单名，例如 bill 或 aig")
-    parser.add_argument("--symbol", help="手动指定合约交易对，例如 BILLUSDT")
+    parser.add_argument("--symbol", action="append", help="手动指定合约交易对，例如 BILLUSDT（可多次）")
     parser.add_argument("--top", type=int, default=500, help="抓取前 N 名，默认 500")
     parser.add_argument("--page-size", type=int, default=100, help="分页大小，默认 100")
     parser.add_argument("--output-root", default="..", help="输出根目录，默认 ..")
@@ -237,7 +237,8 @@ def main() -> int:
     root = Path(args.output_root).expanduser().resolve()
     inferred_name, inferred_symbol, slug = infer_from_url(args.url)
     name = (args.name or inferred_name).lower()
-    symbol = (args.symbol or inferred_symbol).upper()
+    symbols = [s.upper() for s in (args.symbol or [inferred_symbol])]
+    symbol = symbols[0]
     directory = root / name
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -276,6 +277,7 @@ def main() -> int:
             "message": "当前只有 1 个日快照，已完成初始化；下一次日快照后才能计算增量比例。",
             "name": name,
             "symbol": symbol,
+            "symbols": symbols,
             "url": args.url,
             "auto": auto_result,
             "snapshots": [
@@ -338,6 +340,7 @@ def main() -> int:
         "status": "updated",
         "name": name,
         "symbol": symbol,
+        "symbols": symbols,
         "url": args.url,
         "date": current["date"],
         "previousDate": previous["date"],

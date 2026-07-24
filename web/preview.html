@@ -313,7 +313,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     }
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
     const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
-    const heading = preview.taskName || [preview.market, preview.token || preview.symbol].filter(Boolean).join(" ") || preview.name || "排行榜预览";
+    const heading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || preview.name || "排行榜预览";
     document.title = heading + " — 排行榜预览";
     const _actUrl = preview.url;
     document.getElementById("title").innerHTML = `${escapeHtml(heading)}${_actUrl ? ` <a href="${escapeHtml(_actUrl)}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(_actUrl.replace(DOMAIN.OFFICIAL, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
@@ -822,7 +822,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     const deltaResults = document.getElementById("deltaResults");
     const deltaSub = document.getElementById("deltaAnalysisSub");
 
-    deltaSymbolInput.value = (previewData.symbol || (previewData.token ? previewData.token + "USDT" : "") || "").toUpperCase();
+    deltaSymbolInput.value = (Array.isArray(previewData.symbol) ? previewData.symbol[0] : previewData.symbol || (previewData.token ? previewData.token + "USDT" : "") || "").toUpperCase();
 
     async function loadDeltaAnalysis() {
       const symbol = deltaSymbolInput.value.trim().toUpperCase();

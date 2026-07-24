@@ -106,19 +106,36 @@ class ScriptError(RuntimeError):
     pass
 
 
-def normalize_scrape_symbol(raw_symbol: Any) -> tuple[str, str]:
-    symbol = str(raw_symbol or "").upper().strip()
-    symbol = re.sub(r"[^A-Z0-9]", "", symbol)
-    if not symbol:
-        raise ScriptError("缺少 symbol。")
-    if symbol.endswith("USDT") and len(symbol) > 4:
-        token = symbol[:-4]
+def normalize_scrape_symbols(raw_symbols: Any) -> tuple[str, list[str]]:
+    if isinstance(raw_symbols, str):
+        parts = [s.strip() for s in raw_symbols.replace(",", " ").split() if s.strip()]
+    elif isinstance(raw_symbols, list):
+        parts = [str(s).strip() for s in raw_symbols if str(s).strip()]
     else:
-        token = symbol
-        symbol = f"{symbol}USDT"
-    if not re.fullmatch(r"[A-Z0-9]{1,24}", token):
-        raise ScriptError("symbol 格式无效。")
-    return token.lower(), symbol
+        parts = []
+    if not parts:
+        raise ScriptError("缺少 symbol。")
+    cleaned: list[str] = []
+    token: str | None = None
+    for sym in parts:
+        s = re.sub(r"[^A-Z0-9]", "", sym.upper())
+        if not s:
+            continue
+        if s.endswith("USDT") and len(s) > 4:
+            t = s[:-4]
+        else:
+            t = s
+            s = f"{s}USDT"
+        if not re.fullmatch(r"[A-Z0-9]{1,24}", t):
+            raise ScriptError(f"symbol '{sym}' 格式无效。")
+        if token is None:
+            token = t
+        elif token != t:
+            raise ScriptError(f"symbol 基础币种不一致: {token} vs {t}")
+        cleaned.append(s)
+    if not cleaned:
+        raise ScriptError("缺少 symbol。")
+    return (token or "").lower(), cleaned
 
 
 def normalize_scrape_market(raw_market: Any) -> str:
@@ -132,7 +149,7 @@ def normalize_scrape_market(raw_market: Any) -> str:
 
 def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
     market = normalize_scrape_market(payload.get("market"))
-    token, symbol = normalize_scrape_symbol(payload.get("symbol"))
+    token, symbols = normalize_scrape_symbols(payload.get("symbol"))
     url = str(payload.get("url") or "").strip()
     resource_id = str(payload.get("resourceId") or "").strip()
     if not resource_id or not re.fullmatch(r"\d{1,12}", resource_id):
@@ -152,7 +169,7 @@ def normalize_scrape_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "mode": "scrape",
         "market": market,
         "token": token,
-        "symbol": symbol,
+        "symbol": symbols,
         "name": resource_id,
         "url": url,
         "resourceId": resource_id,
@@ -771,7 +788,11 @@ def workflow_command(payload: dict[str, Any]) -> list[str]:
     if payload.get("name"):
         command.extend(["--name", str(payload["name"])])
     if payload.get("symbol"):
-        command.extend(["--symbol", str(payload["symbol"]).upper()])
+        symbols = payload["symbol"]
+        if isinstance(symbols, str):
+            symbols = [symbols]
+        for s in symbols:
+            command.extend(["--symbol", str(s).upper()])
     if payload.get("refresh"):
         command.append("--refresh")
     if payload.get("proxy"):
@@ -1373,7 +1394,7 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             job = existing
         else:
             market = str(payload.get("market") or "").upper()
-            token = str(payload.get("token") or payload.get("symbol") or "").upper()
+            token = str(payload.get("token") or (payload.get("symbol") or [None])[0] or "").upper()
             default_name = f"{market} {token}".strip()
             job = {
                 "id": uuid.uuid4().hex[:12],
@@ -2557,14 +2578,22 @@ def api_update_job_params(job_id: str) -> Response:
     body = request.get_json(force=True) or {}
     market = str(body.get("market") or "").strip().lower()
     token = str(body.get("token") or "").strip().upper()
-    symbol = str(body.get("symbol") or "").strip().upper()
+    raw_symbol = body.get("symbol")
+    symbols: list[str] = []
+    if isinstance(raw_symbol, str):
+        symbols = [s.strip().upper() for s in raw_symbol.replace(",", " ").split() if s.strip().upper()]
+    elif isinstance(raw_symbol, list):
+        symbols = [str(s).strip().upper() for s in raw_symbol if str(s).strip()]
 
     if market not in SCRAPE_MARKETS:
         return jsonify({"error": "market 必须为 um、spot 或 saving"}), 400
     if not token or not re.match(r"^[A-Z0-9]{1,24}$", token):
         return jsonify({"error": "token 格式无效"}), 400
-    if not symbol or not re.match(r"^[A-Z0-9]{2,30}$", symbol):
-        return jsonify({"error": "symbol 格式无效"}), 400
+    for s in symbols:
+        if not re.match(r"^[A-Z0-9]{2,30}$", s):
+            return jsonify({"error": f"symbol '{s}' 格式无效"}), 400
+    if not symbols:
+        return jsonify({"error": "缺少 symbol"}), 400
 
     with state_lock:
         jobs = load_jobs()
@@ -2573,7 +2602,7 @@ def api_update_job_params(job_id: str) -> Response:
                 p = job.setdefault("payload", {})
                 p["market"] = market
                 p["token"] = token
-                p["symbol"] = symbol
+                p["symbol"] = symbols
                 name = str(body.get("name") or "").strip()
                 job["name"] = name if name else f"{market.upper()} {token}"
                 reward_token = str(body.get("rewardToken") or "").strip().upper()
@@ -2796,7 +2825,9 @@ def api_job_preview(job_id: str) -> Response:
 
         preview = scrape_preview_from_json(json_path, limit=payload.get("top") or 1000, previous_json_path=prev_json_path)
         preview["market"] = payload.get("market", "").upper()
-        preview["symbol"] = payload.get("symbol", "")
+        preview["symbol"] = payload.get("symbol", [])
+        if isinstance(preview["symbol"], str):
+            preview["symbol"] = [preview["symbol"]]
         preview["token"] = payload.get("token", "").upper()
         preview["rewardToken"] = payload.get("rewardToken", "")
         preview["rewardAmount"] = payload.get("rewardAmount", "")
@@ -3087,7 +3118,7 @@ def api_team_analysis_cross() -> Response:
     for job in candidates:
         job_id = job.get("id", "")
         payload = job.get("payload", {})
-        job_name = (payload.get("token") or payload.get("symbol") or job.get("name") or job_id)
+        job_name = (payload.get("token") or (payload.get("symbol") or [None])[0] or job.get("name") or job_id)
         snapshots = job.get("snapshots") or []
         if not snapshots:
             continue
@@ -3840,7 +3871,11 @@ def api_job_delta_analysis(job_id: str) -> Response:
         return jsonify({"error": "任务不存在"}), 404
     payload = job.get("payload") or {}
     token = (request.args.get("token") or payload.get("token") or "").upper()
-    symbol = (request.args.get("symbol") or payload.get("symbol") or "").upper()
+    raw_symbols = payload.get("symbol") or []
+    if isinstance(raw_symbols, str):
+        raw_symbols = [raw_symbols]
+    first_symbol = raw_symbols[0] if raw_symbols else ""
+    symbol = (request.args.get("symbol") or first_symbol).upper()
     if not symbol:
         if token:
             symbol = token + "USDT"
@@ -4135,6 +4170,16 @@ def api_auth_logout() -> Response:
 
 def main() -> None:
     ensure_state()
+    # migrate symbol from string to list
+    jobs = load_jobs()
+    changed = False
+    for j in jobs:
+        p = j.get("payload")
+        if p and isinstance(p.get("symbol"), str):
+            p["symbol"] = [p["symbol"]]
+            changed = True
+    if changed:
+        save_jobs(jobs)
     threading.Thread(target=scheduler_loop, daemon=True).start()
     threading.Thread(target=daily_scrape_loop, daemon=True).start()
     threading.Thread(target=sync_activities_loop, daemon=True).start()
