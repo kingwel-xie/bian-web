@@ -5,8 +5,9 @@ services:
     network_mode: host
     environment:
       DATA_ROOT: /data
-      WEB_HOST: 0.0.0.0
+      WEB_HOST: 127.0.0.1
       WEB_PORT: "48234"
+      ACCESS_KEY: "002127"
     volumes:
       - ./data:/data
       - ./web:/app/web:ro

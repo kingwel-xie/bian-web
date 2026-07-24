@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, session, redirect, url_for
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -55,6 +55,10 @@ _rp_lock = threading.Lock()
 SCRAPE_MARKETS = {"um", "spot", "saving"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
+app.secret_key = os.environ.get("SECRET_KEY", "bian-web-default-secret")
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+ACCESS_KEY = os.environ.get("ACCESS_KEY", "")
 
 
 @app.after_request
@@ -76,6 +80,21 @@ def compress_response(response: Response) -> Response:
     response.headers["Content-Encoding"] = "gzip"
     response.headers["Content-Length"] = len(response.get_data())
     return response
+
+
+_EXEMPT_PATHS = {"/login", "/api/auth/login", "/api/auth/check"}
+@app.before_request
+def require_auth() -> Response | None:
+    if not ACCESS_KEY:
+        return None
+    path = request.path.rstrip("/") or "/"
+    if path in _EXEMPT_PATHS:
+        return None
+    if path.startswith("/_static/") or path.startswith("/css888/"):
+        return None
+    if session.get("authenticated"):
+        return None
+    return redirect(url_for("login_page", next=request.full_path))
 
 
 state_lock = threading.RLock()
@@ -1608,11 +1627,11 @@ def _has_today_data(job: dict[str, Any]) -> bool:
         return True  # can't read file, trust the timestamp
 
 
-MAX_RETRIES = 8
+MAX_RETRIES = 6
 
 
 def daily_scrape_loop() -> None:
-    """Background thread: daily scrape at 12:35, retry 1h later if no today's data (max 3 retries)."""
+    """Background thread: daily scrape at 12:39, retry 1h later if no today's data (max 6 retries)."""
     state: dict[str, Any] = {"today": None, "phase": "idle", "retry_time": None, "pending": [], "retry_count": 0}
     while True:
         try:
@@ -1627,11 +1646,11 @@ def daily_scrape_loop() -> None:
                 state["retry_count"] = 0
 
             if state["phase"] == "idle":
-                t35 = now_bj.replace(hour=12, minute=35, second=0, microsecond=0)
+                t35 = now_bj.replace(hour=12, minute=39, second=0, microsecond=0)
                 if now_bj >= t35:
                     active = _get_active_jobs()
                     if active:
-                        print(f"[daily_scrape] {today_key} 12:35 — {len(active)} active jobs")
+                        print(f"[daily_scrape] {today_key} 12:39 — {len(active)} active jobs")
                         for j in active:
                             try:
                                 create_job(j["payload"], source="schedule:daily")
@@ -1998,7 +2017,7 @@ def api_jobs() -> Response:
             end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
             ts = end_dt.timestamp()
             now_bj = datetime.now(timezone.utc).astimezone(BJ)
-            if end_dt + timedelta(hours=24) < now_bj:
+            if end_dt + timedelta(hours=12) < now_bj:
                 return (2, -ts, "")
             return (0, ts, "")
         except ValueError:
@@ -2123,6 +2142,48 @@ def get_token_price(reward_token: str, activity_end: str) -> float | None:
         except Exception:
             continue
     return None
+
+
+_live_price_cache: dict[str, tuple[float, float]] = {}
+_LIVE_PRICE_TTL = 300  # 5 minutes
+
+
+def get_live_prices(tokens: list[str]) -> dict[str, float]:
+    import requests as req
+    now = time.time()
+    result: dict[str, float] = {}
+    to_fetch: list[str] = []
+    for t in tokens:
+        sym = t.strip().upper()
+        if sym in ("USDT", "USDC"):
+            result[sym] = 1.0
+            continue
+        cached = _live_price_cache.get(sym)
+        if cached and now - cached[1] < _LIVE_PRICE_TTL:
+            result[sym] = cached[0]
+            continue
+        to_fetch.append(sym)
+    for sym in to_fetch:
+        fetched = False
+        for url in (
+            f"https://api.binance.com/api/v3/ticker/price?symbol={sym}USDT",
+            f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={sym}USDT",
+        ):
+            try:
+                resp = req.get(url, timeout=5)
+                data = resp.json()
+                if "price" in data:
+                    price = float(data["price"])
+                    if price > 0:
+                        result[sym] = price
+                        _live_price_cache[sym] = (price, now)
+                        fetched = True
+                        break
+            except Exception:
+                continue
+        if not fetched:
+            result[sym] = 0
+    return result
 
 
 @app.get("/api/analysis")
@@ -2277,7 +2338,7 @@ def api_analysis() -> Response:
             end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
             ts = end_dt.timestamp()
             now_bj = datetime.now(timezone.utc).astimezone(BJ)
-            if end_dt + timedelta(hours=24) < now_bj:
+            if end_dt + timedelta(hours=12) < now_bj:
                 return (2, -ts, "")
             return (0, ts, "")
         except ValueError:
@@ -3425,6 +3486,15 @@ def api_merge_teams() -> Response:
     return jsonify({"db": db})
 
 
+@app.post("/api/rewards/refresh-prices")
+def api_rewards_refresh_prices() -> Response:
+    tokens = (request.json or {}).get("tokens", [])
+    if not isinstance(tokens, list):
+        return jsonify({"error": "tokens must be a list"}), 400
+    prices = get_live_prices([str(t) for t in tokens])
+    return jsonify({"prices": prices})
+
+
 @app.get("/api/rewards/ended-jobs")
 def api_rewards_ended_jobs() -> Response:
     now_bj = datetime.now(BJ)
@@ -4033,6 +4103,34 @@ def api_job_delta_analysis(job_id: str) -> Response:
 
     proxy_label = "无可用连接" if no_connection else ("直连" if proxy is None else str(proxy))
     return jsonify({"pairs": pairs, "symbol": symbol, "proxyStatus": proxy_label, "klinesUrl": klines_url})
+
+
+@app.get("/login")
+def login_page() -> Response:
+    return send_from_directory(app.static_folder, "login.html")
+
+
+@app.post("/api/auth/login")
+def api_auth_login() -> Response:
+    data = request.json or {}
+    if data.get("key") == ACCESS_KEY:
+        session["authenticated"] = True
+        session.permanent = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "密码错误"}), 403
+
+
+@app.get("/api/auth/check")
+def api_auth_check() -> Response:
+    if session.get("authenticated"):
+        return jsonify({"ok": True})
+    return jsonify({"error": "未登录"}), 401
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout() -> Response:
+    session.clear()
+    return jsonify({"ok": True})
 
 
 def main() -> None:

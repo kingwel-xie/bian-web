@@ -55,6 +55,8 @@
   .chart-group-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
   .chart-axis-label { font-size: 11px; fill: #333; text-anchor: middle; }
   .chart-tooltip { position: fixed; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 100; }
+  .c-green { color:var(--good); font-weight:600; }
+  .c-red { color:var(--bad); font-weight:600; }
 </style>
 </head>
 <body>
@@ -159,6 +161,19 @@
       </div>
       <div id="distWrap" class="chart-wrap">
         <svg id="distChart" height="400"></svg>
+      </div>
+    </div>
+
+    <hr class="page-sep">
+
+    <div class="analysis-panel">
+      <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">奖励效率</h3>
+      <p style="margin:0 0 12px;font-size:11px;color:var(--muted)">排除前5名后，占比% = 该档成交量占6~1000总量百分比、奖励% = 该档奖励占6~1000总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效</p>
+      <div class="table-wrap">
+        <table id="rewardEffTable" style="width:auto;min-width:auto">
+          <thead id="rewardEffHead"></thead>
+          <tbody id="rewardEffBody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -286,7 +301,7 @@ function renderAnalysis(data) {
   // Job selector — exclude active (未到期) jobs by default
   _cachedRanges = ranges;
   const endedJobs = allRankJobs.filter(j => !j.rewardPriceIsLive);
-  selectedJobIds = (endedJobs.length ? endedJobs : allRankJobs).map(j => j.id);
+  selectedJobIds = (endedJobs.length ? endedJobs : allRankJobs).slice(0, 3).map(j => j.id);
   renderJobSelector(allRankJobs, ranges);
   renderTable(allRankJobs, ranges);
   renderAnalysisExtra(allRankJobs, ranges);
@@ -321,6 +336,7 @@ function renderJobSelector(jobs, ranges) {
       renderEfficiencyChart(allRankJobs, ranges);
       renderRatioChart(allRankJobs, ranges);
       renderDistributionChart(allRankJobs, ranges);
+      renderRewardEfficiency(allRankJobs);
     });
   });
 }
@@ -349,7 +365,7 @@ function renderTable(jobs, ranges) {
     const j = visible[ji];
     const name = (j.name || "") + (j.resourceId ? " [" + j.resourceId + "]" : "");
     const cls = ji < visible.length - 1 ? ' class="job-divider"' : '';
-    headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><span class="job-name">${escapeHtml(name)}</span>`);
+    headHtml.push(`<th colspan="${COLS_PER_JOB}"${cls}><a class="job-name" href="/preview.html?job=${escapeHtml(j.id)}" target="_blank" style="color:var(--accent-2);font-size:14px;font-weight:700;text-decoration:underline;text-decoration-style:dashed;text-underline-offset:3px">${escapeHtml(name)}</a>`);
     {
       const s = j.activityStart || "";
       const e = j.activityEnd || "";
@@ -429,8 +445,9 @@ function renderAnalysisExtra(jobs, ranges) {
   document.getElementById("analysisExtra").style.display = "";
   renderEfficiencyChart(visible, ranges);
   renderRatioChart(visible, ranges);
-  renderElasticityTable(visible, ranges);
   renderDistributionChart(visible, ranges);
+  renderRewardEfficiency(visible);
+  renderElasticityTable(visible, ranges);
 }
 
 function renderEfficiencyChart(jobs, ranges) {
@@ -1084,6 +1101,58 @@ function renderDistributionChart(jobs, ranges) {
   const chartEl = document.getElementById("distChart");
   chartEl.setAttribute("width", W2);
   chartEl.innerHTML = svg;
+}
+
+function renderRewardEfficiency(jobs) {
+  const visible = jobs.filter(j => selectedJobIds.includes(j.id));
+  const panel = document.getElementById("rewardEffTable").parentElement.parentElement;
+  if (!visible.length) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+
+  const tiers = (visible[0].rewardTiers || []);
+  let headHtml = '<tr><th rowspan="2">任务</th>';
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i];
+    const dl = i > 0 ? 'border-left:1px solid var(--line-strong);' : '';
+    headHtml += '<th colspan="3" class="num" style="text-align:center;' + dl + '">' + t.rankMin + '~' + t.rankMax + '</th>';
+  }
+  headHtml += '</tr><tr>';
+  for (let i = 0; i < tiers.length; i++) {
+    const dl = i > 0 ? 'border-left:1px solid var(--line-strong);' : '';
+    headHtml += '<th class="num" style="font-weight:400;' + dl + '">占比%</th><th class="num" style="font-weight:400">奖励%</th><th class="num" style="font-weight:400">效率</th>';
+  }
+  headHtml += '</tr>';
+  document.getElementById("rewardEffHead").innerHTML = headHtml;
+
+  let bodyHtml = '';
+  for (const j of visible) {
+    const jt = (j.rewardTiers || []);
+    const totalReward = jt.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const rr = j.ranges;
+    const totalVol = rr.reduce((s, r) => s + (r.total || 0), 0);
+
+    const name = escapeHtml(j.name || j.resourceId || j.id);
+    bodyHtml += '<tr><td>' + name + '</td>';
+
+    for (let i = 0; i < jt.length; i++) {
+      const t = jt[i];
+      const r = rr.find(x => { const [m] = x.label.split('~').map(Number); return m === t.rankMin; });
+      const dl = i > 0 ? 'border-left:1px solid var(--line-strong);' : '';
+      if (r && totalReward > 0 && totalVol > 0) {
+        const rs = (parseFloat(t.amount) || 0) / totalReward;
+        const vs = (r.total || 0) / totalVol;
+        const eff = vs / rs;
+        const cls = eff > 1.05 ? 'c-green' : eff < 0.95 ? 'c-red' : '';
+        bodyHtml += '<td class="num" style="' + dl + '">' + (vs * 100).toFixed(1) + '</td>';
+        bodyHtml += '<td class="num">' + (rs * 100).toFixed(1) + '</td>';
+        bodyHtml += '<td class="num ' + cls + '">' + eff.toFixed(2) + '</td>';
+      } else {
+        bodyHtml += '<td class="num" style="' + dl + '">—</td><td class="num">—</td><td class="num">—</td>';
+      }
+    }
+    bodyHtml += '</tr>';
+  }
+  document.getElementById("rewardEffBody").innerHTML = bodyHtml;
 }
 
 document.getElementById("btnSpot").addEventListener("click", () => {

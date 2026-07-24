@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BIAN-WEB · 登录</title>
+<link rel="stylesheet" href="/css888/styles.css">
+<style>
+.login-wrap { max-width:340px; margin:100px auto; text-align:center; }
+.login-wrap h1 { font-size:20px; margin-bottom:28px; }
+.login-wrap input { width:100%; padding:10px 14px; border:1px solid var(--line); border-radius:6px; font-size:14px; background:#fffdf8; color:var(--ink); box-sizing:border-box; outline:none; }
+.login-wrap input:focus { border-color:var(--accent-2); }
+.login-wrap .btn { margin-top:16px; width:100%; padding:10px; border:0; border-radius:6px; background:var(--accent-2); color:#fff; font-size:14px; cursor:pointer; font-weight:700; }
+.login-wrap .btn:disabled { opacity:.5; cursor:default; }
+.login-wrap .err { color:var(--bad); font-size:12px; margin-top:10px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<main class="shell">
+<div class="login-wrap">
+  <p class="eyebrow">BIAN-WEB</p>
+  <h1>登录</h1>
+  <input id="keyInput" type="password" placeholder="请输入访问密码" autofocus>
+  <button id="loginBtn" class="btn">确认</button>
+  <p id="errMsg" class="err"></p>
+</div>
+</main>
+<script>
+const keyInput = document.getElementById("keyInput");
+const loginBtn = document.getElementById("loginBtn");
+const errMsg = document.getElementById("errMsg");
+const next = new URLSearchParams(location.search).get("next") || "/";
+
+function doLogin() {
+  const key = keyInput.value.trim();
+  if (!key) { errMsg.textContent = "请输入密码"; return; }
+  loginBtn.disabled = true;
+  loginBtn.textContent = "验证中…";
+  fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({key}) })
+    .then(r => { if (!r.ok) throw new Error("密码错误"); location.href = next; })
+    .catch(e => { errMsg.textContent = e.message; loginBtn.disabled = false; loginBtn.textContent = "确认"; });
+}
+loginBtn.addEventListener("click", doLogin);
+keyInput.addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+keyInput.focus();
+</script>
+</body>
+</html>

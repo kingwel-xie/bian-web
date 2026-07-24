@@ -9,7 +9,8 @@
   .job-hd { display:flex; align-items:center; gap:8px; min-width:0; }
   .job-hd .job-rid { font-size:11px; color:var(--muted); flex-shrink:0; }
   .job-hd .job-act-time { font-size:11px; color:var(--muted); flex-shrink:0; }
-  .job-hd .token-badge { font-size:10px; font-weight:700; padding:2px 10px; background:#d4933a; color:#fff; border:0; border-radius:999px; flex-shrink:0; line-height:18px; }
+  .job-hd .token-badge { font-size:10px; font-weight:700; padding:2px 10px; background:#e8e4dc; color:var(--muted); border:1px solid var(--line); border-radius:4px; flex-shrink:0; line-height:18px; }
+  .token-badge.t-hot { background:#e74c3c; color:#fff; }
   .job-actions { display:flex; align-items:flex-start; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .job-actions .del-job-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:28px; border-radius:999px; color:var(--ink); font-weight:600; }
   .job-actions .del-job-btn:hover { border-color:var(--bad); background:rgba(196,81,69,0.12); color:var(--bad); }
@@ -52,13 +53,13 @@
   .total-candidate-table th { text-align:left; padding:4px 8px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--line); white-space:nowrap; }
   .total-candidate-table td { padding:4px 8px; border-bottom:1px solid rgba(46,42,36,0.06); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .total-candidate-table .num { text-align:right; }
-  .total-candidate-table .chk { width:32px; text-align:center; }
-  .total-candidate-table th:nth-child(2), .total-candidate-table td:nth-child(2) { width:42px; text-align:center; }
-  .total-candidate-table th:nth-child(3) { width:auto; }
-  .total-candidate-table td:nth-child(3) { max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .total-candidate-table th:nth-child(4), .total-candidate-table td:nth-child(4) { width:105px; text-align:right; }
-  .total-candidate-table th:nth-child(5), .total-candidate-table td:nth-child(5) { width:120px; }
-  .total-candidate-table input[type=checkbox] { accent-color:var(--accent-2); }
+  .total-candidate-table .chk { width:22px; text-align:center; }
+  .total-candidate-table th:nth-child(2), .total-candidate-table td:nth-child(2) { width:36px; text-align:center; }
+  .total-candidate-table th:nth-child(3) { width:70px; }
+  .total-candidate-table td:nth-child(3) { max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .total-candidate-table th:nth-child(4), .total-candidate-table td:nth-child(4) { width:100px; text-align:right; }
+  .total-candidate-table th:nth-child(5), .total-candidate-table td:nth-child(5) { width:115px; }
+  .total-candidate-table input[type=checkbox] { accent-color:var(--accent-2); width:14px; height:14px; }
   .total-candidate-table .reward-cell { font-weight:600; color:var(--accent-2); }
   .total-row.hide { display:none; }
   .total-search-input { width:100%; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12px; background:#fffdf8; color:var(--ink); box-sizing:border-box; margin-bottom:6px; outline:none; }
@@ -67,6 +68,48 @@
   .total-footer span { font-weight:600; }
   .total-footer .ok { color:var(--good); }
   .total-footer .warn { color:var(--bad); }
+  .stats-table { width:100%; border-collapse:collapse; font-size:11px; table-layout:fixed; }
+   .stats-table th { text-align:left; padding:2px 4px; color:var(--muted); font-weight:600; border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; }
+  .stats-table td { padding:4px 4px; border-bottom:1px solid rgba(46,42,36,0.06); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stats-table .num { text-align:right; }
+   .stats-table th:nth-child(1), .stats-table td:nth-child(1) { width:12%; }
+   .stats-table th:nth-child(2), .stats-table td:nth-child(2) { width:9%; }
+   .stats-table th:nth-child(3), .stats-table td:nth-child(3) { width:5%; }
+   .stats-table th:nth-child(4), .stats-table td:nth-child(4) { width:10%; }
+   .stats-table th:nth-child(5), .stats-table td:nth-child(5) { width:10%; }
+   .stats-table th:nth-child(6), .stats-table td:nth-child(6) { width:11%; }
+   .stats-table th:nth-child(7), .stats-table td:nth-child(7) { width:10%; }
+   .stats-table th:nth-child(8), .stats-table td:nth-child(8) { width:10%; }
+   .stats-table th:nth-child(9), .stats-table td:nth-child(9) { width:11%; }
+   .stats-table th:nth-child(10), .stats-table td:nth-child(10) { width:10%; }
+  .stats-table .profit-pos { color:var(--good); font-weight:700; }
+  .stats-table .profit-neg { color:var(--bad); font-weight:700; }
+  .stats-table .cost { color:var(--muted); }
+  .refresh-price-btn { border:0; background:transparent; cursor:pointer; font-size:11px; color:var(--accent-2); padding:0 2px; margin-left:2px; vertical-align:middle; }
+  #statsUnpaidFilter { width:13px; height:13px; }
+  tr.unpaid-row { background:rgba(196,81,69,0.06); }
+  tr.unpaid-row td:first-child { border-left:3px solid var(--bad); }
+  @media (max-width:640px) {
+    .job-hd { flex-wrap:wrap; }
+    .job-hd .job-act-time { width:100%; font-size:10px; order:10; }
+    .job-hd .token-badge { font-size:9px; padding:1px 8px; line-height:16px; }
+    .job-actions { justify-content:flex-start; }
+    .job-actions button { font-size:11px; padding:0 8px; min-height:26px; }
+    .filter-bar { flex-wrap:wrap; }
+    .filter-bar .filter-search { flex:1; min-width:0; width:auto; margin-left:0 !important; }
+    .filter-bar #statsSummary { width:100%; margin-left:0 !important; margin-top:4px; }
+    .total-bar { flex-wrap:wrap; gap:8px; }
+    .total-candidate-table { font-size:11px; }
+    .total-candidate-table th, .total-candidate-table td { padding:3px 4px; }
+    .total-summary { gap:8px; font-size:11px; }
+    .total-footer { gap:8px; font-size:11px; flex-wrap:wrap; }
+    .tier-card { padding:6px 8px; gap:6px; }
+    .tier-label { font-size:12px; }
+    .tier-label .sub { font-size:10px; }
+    .modal-box { min-width:0 !important; width:calc(100vw - 24px) !important; max-width:none !important; }
+    .modal-body { padding:10px; }
+    .modal-footer { padding:8px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -120,6 +163,27 @@
     <div class="modal-footer" style="padding:8px 14px;border-top:1px solid rgba(46,42,36,0.08);display:flex;justify-content:flex-end;gap:8px">
       <button id="modalCancelBtn" type="button" class="modal-close-btn" style="font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-weight:700">取消</button>
       <button id="modalConfirmBtn" type="button" style="font-size:12px;padding:5px 18px;border:0;border-radius:6px;background:var(--accent-2);color:#fff;cursor:pointer;font-weight:700">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<div id="statsModal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="min-width:420px;max-width:540px;padding:0">
+    <div class="modal-header">
+      <h3>统计详情</h3>
+      <button class="modal-close-btn" id="statsModalCloseBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="statsSummaryBar" style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;align-items:center;margin-bottom:10px"></div>
+      <div id="statsTableWrap" style="max-height:360px;overflow-y:auto;border:1px solid var(--line);border-radius:6px">
+        <table id="statsTable" class="stats-table">
+          <thead><tr><th>任务</th><th class="num">成本</th><th>代币</th><th class="num">数量</th><th class="num">收盘价</th><th class="num">收盘奖励</th><th class="num">盈利</th><th class="num">即时价格<button id="refreshPricesBtn" class="refresh-price-btn" title="刷新即时价格">↻</button></th><th class="num">即时奖励</th><th class="num">即时盈利</th></tr></thead>
+          <tbody id="statsTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding:8px 14px;border-top:1px solid rgba(46,42,36,0.08);display:flex;justify-content:flex-end;gap:8px">
+      <button id="statsModalCloseBtn2" type="button" class="modal-close-btn" style="font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-weight:700">关闭</button>
     </div>
   </div>
 </div>
@@ -278,17 +342,18 @@ function renderJobs() {
       ? escapeHtml(jRecords.activityStart) + " ~ " + escapeHtml(jRecords.activityEnd)
       : jRecords.activityEnd ? escapeHtml(jRecords.activityEnd) : "";
 
+    const tokenBadgeCls = (token === "USDT" || token === "USDC" || token === "BNB") ? " t-hot" : "";
     html += '<div class="job' + paidCls + '">' +
       '<div class="job-hd">' +
-        '<span class="job-name" style="font-weight:700">' + escapeHtml(jRecords.jobName || "") + '</span>' +
+        '<a class="job-name" href="/preview.html?job=' + escapeHtml(jid) + '" target="_blank" style="font-weight:700;color:var(--accent-2);text-decoration:underline;text-decoration-style:dashed;text-underline-offset:3px">' + escapeHtml(jRecords.jobName || "") + '</a>' +
         (jRecords.resourceId ? '<span class="job-rid"> [' + escapeHtml(jRecords.resourceId) + ']</span>' : "") +
         (actStr ? '<span class="job-act-time">' + actStr + "</span>" : "") +
-        '<span class="token-badge">' + escapeHtml(jRecords.rewardToken || "") + '</span>' +
+        '<span class="token-badge' + tokenBadgeCls + '">' + escapeHtml(jRecords.rewardToken || "") + '</span>' +
       "</div>" +
       '<div class="job-actions">' +
-        '<button class="edit-job-btn" data-jid="' + escapeHtml(jid) + '" title="修改奖励">✎ 编辑</button>' +
-        '<button class="del-job-btn" data-jid="' + escapeHtml(jid) + '" title="删除该任务所有奖励记录">🗑 删除</button>' +
-        (jRecords.totalRecords > 0 ? '<button class="tog-paid-btn" data-jid="' + escapeHtml(jid) + '">' + (jRecords.allPaid ? "↩ 取消发放" : "📤 标记已发放") + '</button>' : "") +
+        '<button class="edit-job-btn" data-jid="' + escapeHtml(jid) + '" title="修改奖励">编辑</button>' +
+        '<button class="del-job-btn" data-jid="' + escapeHtml(jid) + '" title="删除该任务所有奖励记录">删除</button>' +
+        (jRecords.totalRecords > 0 ? '<button class="tog-paid-btn" data-jid="' + escapeHtml(jid) + '">' + (jRecords.allPaid ? "撤回" : "发放") + '</button>' : "") +
       "</div>" +
       '<div class="job-body">' + bodyHtml + "</div>" +
       totalStr +
@@ -298,12 +363,17 @@ function renderJobs() {
   const statsEl = document.getElementById("statsSummary");
   let sumCost = 0, sumProfit = 0, sumUnpaid = 0;
   const unpaidByToken = {};
-  for (const [, jr] of filtered) {
+  const jobDetails = [];
+  for (const [jid, jr] of filtered) {
     const c = parseFloat(jr.cost) || 0;
+    const totalUsd = jr._totalUSD || 0;
+    const profit = totalUsd > 0 && c > 0 ? totalUsd - c : null;
     if (c > 0) sumCost += c;
-    if (jr._totalUSD > 0 && c > 0) sumProfit += jr._totalUSD - c;
-    const recs = jr.records || [];
+    if (profit != null) sumProfit += profit;
     const price = jr._price;
+    const tok = (jr.rewardToken || "").toUpperCase();
+    jobDetails.push({ name: jr.jobName || jid, cost: c, token: tok, tok: jr._totalTokens || 0, price, usd: totalUsd, profit, hasUnpaid: false, unpaidTok: 0, livePrice: null });
+    const recs = jr.records || [];
     const token = (jr.rewardToken || "").toUpperCase();
     for (const r of recs) {
       let usdVal = 0, tokVal = 0;
@@ -317,29 +387,98 @@ function renderJobs() {
       }
       if (!r.paid) {
         sumUnpaid += usdVal;
-        if (tokVal > 0) unpaidByToken[token] = (unpaidByToken[token] || 0) + tokVal;
+        if (!unpaidByToken[token]) unpaidByToken[token] = { tok: 0, usd: 0 };
+        if (tokVal > 0) unpaidByToken[token].tok += tokVal;
+        unpaidByToken[token].usd += usdVal;
+        jobDetails[jobDetails.length - 1].hasUnpaid = true;
+        jobDetails[jobDetails.length - 1].unpaidTok += tokVal;
       }
     }
   }
   let statsParts = [];
-  if (sumCost > 0) statsParts.push('总成本: <b style="color:var(--muted)">$' + fmtValue(sumCost) + '</b>');
-  if (sumProfit !== 0) statsParts.push('总盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + fmtValue(sumProfit) + '</b>');
-  if (sumUnpaid > 0) statsParts.push('未发放: <b style="color:var(--accent-2)">~$' + fmtValue(sumUnpaid) + '</b>');
+  if (sumCost > 0) statsParts.push('成本: <b style="color:var(--muted)">$' + fmtValue(sumCost) + '</b>');
+  if (sumProfit !== 0) statsParts.push('盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + fmtValue(sumProfit) + '</b>');
+  if (sumUnpaid > 0) statsParts.push('待发放: <b style="color:var(--accent-2)">~$' + fmtValue(sumUnpaid) + '</b>');
   statsEl.innerHTML = statsParts.length
     ? '<span class="stats-clickable" style="cursor:pointer;border-bottom:1px dashed var(--line)">' + statsParts.join("  ") + "</span>"
     : "";
   statsEl.querySelectorAll(".stats-clickable").forEach(el => {
     el.addEventListener("click", function() {
-      let lines = [];
-      if (sumCost > 0) lines.push("总成本: $" + fmtValue(sumCost));
-      if (sumProfit !== 0) lines.push("总盈利: ~$" + fmtValue(sumProfit));
-      if (sumUnpaid > 0) {
-        lines.push("");
-        lines.push("未发放: ~$" + fmtValue(sumUnpaid));
-        const details = Object.entries(unpaidByToken).map(([t, v]) => "  " + Number(v).toLocaleString() + " " + t).join("\n");
-        lines.push(details);
+      const barEl = document.getElementById("statsSummaryBar");
+      const tbodyEl = document.getElementById("statsTbody");
+      const filterCb = document.getElementById("statsUnpaidFilter");
+      function renderStatsBar() {
+        const prevChecked = document.getElementById("statsUnpaidFilter")?.checked ?? true;
+        let b = "";
+        if (sumCost > 0) b += '<span>成本: <b style="color:var(--muted)">$' + sumCost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+        if (sumProfit !== 0) b += '<span>盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + sumProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+        if (sumUnpaid > 0) b += '<span>待发放: <b style="color:var(--accent-2)">~$' + sumUnpaid.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+        barEl.innerHTML = b + '<label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;margin-left:auto"><input type="checkbox" id="statsUnpaidFilter" ' + (prevChecked ? 'checked' : '') + ' style="accent-color:var(--accent-2);width:13px;height:13px"> 只看未发放</label>';
+        document.getElementById("refreshPricesBtn").onclick = refreshPrices;
+        document.getElementById("statsUnpaidFilter").addEventListener("change", renderStatsRows);
       }
-      alert(lines.join("\n"));
+      function renderStatsRows() {
+        const activeCb = document.getElementById("statsUnpaidFilter");
+        let rows = "";
+        for (const d of jobDetails) {
+          if (d.cost <= 0 && d.usd <= 0) continue;
+          if (activeCb && activeCb.checked && !d.hasUnpaid) continue;
+          const profitCls = d.profit != null ? (d.profit >= 0 ? "profit-pos" : "profit-neg") : "";
+          const profitText = d.profit != null ? (d.profit >= 0 ? "+" : "") + d.profit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+          let livePriceText = "—", liveUsdText = "—", liveProfitText = "—";
+          let liveProfitCls = "";
+          if (d.hasUnpaid && d.livePrice != null) {
+            livePriceText = '$' + d.livePrice.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4});
+            const liveUsd = d.tok * d.livePrice;
+            liveUsdText = liveUsd > 0 ? '~$' + liveUsd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+            const liveProfit = liveUsd - d.cost;
+            liveProfitText = (liveProfit >= 0 ? "+" : "") + liveProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+            liveProfitCls = liveProfit >= 0 ? " profit-pos" : " profit-neg";
+          }
+          const unpaidCls = d.hasUnpaid ? " unpaid-row" : "";
+          const costText = d.cost > 0 ? '$' + d.cost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+          const tokText = d.tok > 0 ? d.tok.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
+          const priceText = d.price != null ? '$' + d.price.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
+          const usdText = d.usd > 0 ? '~$' + d.usd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+          rows += '<tr class="' + unpaidCls + '">' +
+            '<td title="' + escapeHtml(d.name) + '">' + escapeHtml(d.name) + '</td>' +
+            '<td class="num cost" title="' + costText + '">' + costText + '</td>' +
+            '<td title="' + escapeHtml(d.token) + '">' + escapeHtml(d.token) + '</td>' +
+            '<td class="num" title="' + tokText + '">' + tokText + '</td>' +
+            '<td class="num" title="' + priceText + '">' + priceText + '</td>' +
+            '<td class="num" title="' + usdText + '">' + usdText + '</td>' +
+            '<td class="num ' + profitCls + '" title="' + profitText + '">' + profitText + '</td>' +
+            '<td class="num" title="' + livePriceText + '">' + livePriceText + '</td>' +
+            '<td class="num" title="' + liveUsdText + '">' + liveUsdText + '</td>' +
+            '<td class="num' + liveProfitCls + '" title="' + liveProfitText + '">' + liveProfitText + '</td>' +
+            '</tr>';
+        }
+        tbodyEl.innerHTML = rows;
+      }
+      async function refreshPrices() {
+        const btn = document.getElementById("refreshPricesBtn");
+        if (btn) btn.textContent = "⏳";
+        const allTokens = [...new Set(jobDetails.map(d => d.token))];
+        if (allTokens.length) {
+          try {
+            const resp = await fetch("/api/rewards/refresh-prices", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({tokens: allTokens}) });
+            const data = await resp.json();
+            for (const d of jobDetails) {
+              if (d.token in (data.prices || {})) d.livePrice = data.prices[d.token];
+            }
+          } catch (e) { modalMsg.textContent = "价格获取失败"; }
+        }
+        let newSumUnpaid = 0;
+        for (const d of jobDetails) { newSumUnpaid += d.unpaidTok * (d.livePrice != null ? d.livePrice : d.price); }
+        sumUnpaid = newSumUnpaid;
+        renderStatsBar();
+        renderStatsRows();
+        if (btn) btn.textContent = "↻";
+      }
+      for (const d of jobDetails) { d.livePrice = null; }
+      renderStatsBar();
+      renderStatsRows();
+      document.getElementById("statsModal").style.display = "flex";
     });
   });
   jobListEl.innerHTML = html;
@@ -422,6 +561,7 @@ async function openModal(jobId, jobData) {
     modalJobSelect.style.display = "none";
     _modalJob = { id: jobId, ...jobData };
     if (jobData.rewardMode === "total") {
+      modalCostInput.value = jobData.cost || 0;
       await loadTotalCandidates(jobId);
       renderTotalCandidates();
     } else {
@@ -579,8 +719,10 @@ function renderModalTiers() {
     const count = _modalTiers[i] || 0;
     const label = t.rankMin + "~" + t.rankMax + "名";
     const amt = t.amount || "0";
+    const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
+    const perPerson = tierCount > 0 ? (parseFloat(amt) / tierCount).toFixed(4) : "0";
     html += '<div class="tier-card">' +
-      '<span class="tier-label">' + escapeHtml(label) + " · " + escapeHtml(amt) + ' <span class="sub">' + escapeHtml(token) + "</span></span>" +
+      '<span class="tier-label">' + escapeHtml(label) + " · " + escapeHtml(amt) + ' <span class="sub">' + escapeHtml(token) + " · 人均 " + perPerson + '</span></span>' +
       '<button class="tier-btn" data-ti="' + i + '" data-dir="-1">−</button>' +
       '<span class="tier-count" id="mCount_' + i + '">' + count + "</span>" +
       '<button class="tier-btn" data-ti="' + i + '" data-dir="1">+</button>' +
@@ -667,6 +809,11 @@ modalCloseBtn.addEventListener("click", closeModal);
 modalCancelBtn.addEventListener("click", closeModal);
 addModal.addEventListener("click", function(evt) { if (evt.target === addModal) closeModal(); });
 modalConfirmBtn.addEventListener("click", modalSubmit);
+
+const statsModal = document.getElementById("statsModal");
+document.getElementById("statsModalCloseBtn").addEventListener("click", function() { statsModal.style.display = "none"; });
+document.getElementById("statsModalCloseBtn2").addEventListener("click", function() { statsModal.style.display = "none"; });
+statsModal.addEventListener("click", function(evt) { if (evt.target === statsModal) statsModal.style.display = "none"; });
 
 loadAll();
 </script>
