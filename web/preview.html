@@ -822,7 +822,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     const deltaResults = document.getElementById("deltaResults");
     const deltaSub = document.getElementById("deltaAnalysisSub");
 
-    deltaSymbolInput.value = (Array.isArray(previewData.symbol) ? previewData.symbol[0] : previewData.symbol || (previewData.token ? previewData.token + "USDT" : "") || "").toUpperCase();
+    deltaSymbolInput.value = (Array.isArray(previewData.symbol) ? previewData.symbol.join(", ") : previewData.symbol || (previewData.token ? previewData.token + "USDT" : "") || "").toUpperCase();
 
     async function loadDeltaAnalysis() {
       const symbol = deltaSymbolInput.value.trim().toUpperCase();

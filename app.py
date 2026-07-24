@@ -3872,13 +3872,13 @@ def api_job_delta_analysis(job_id: str) -> Response:
     raw_symbols = payload.get("symbol") or []
     if isinstance(raw_symbols, str):
         raw_symbols = [raw_symbols]
-    first_symbol = raw_symbols[0] if raw_symbols else ""
-    symbol = (request.args.get("symbol") or first_symbol).upper()
-    if not symbol:
+    query_symbol = (request.args.get("symbol") or (raw_symbols[0] if raw_symbols else "")).upper()
+    if not query_symbol:
         if token:
-            symbol = token + "USDT"
+            query_symbol = token + "USDT"
         else:
             return jsonify({"error": "缺少交易对"}), 400
+    symbols = [s.strip() for s in query_symbol.replace(",", " ").split() if s.strip()]
     market_type = str(payload.get("market") or "").lower()
     klines_url = SPOT_KLINES if market_type == "spot" else FAPI_KLINES
 
@@ -3964,33 +3964,43 @@ def api_job_delta_analysis(job_id: str) -> Response:
             try:
                 start_ms = int(start_bj.astimezone(timezone.utc).timestamp() * 1000)
                 end_ms = int(end_bj.astimezone(timezone.utc).timestamp() * 1000)
-                resp = requests.get(
-                    klines_url,
-                    params={
-                        "symbol": symbol,
-                        "interval": "1h",
-                        "startTime": start_ms,
-                        "endTime": end_ms,
-                        "limit": 1500,
-                    },
-                    proxies=request_proxies(proxy),
-                    timeout=15,
-                )
-                payload_k = resp.json()
-                if resp.status_code == 200 and isinstance(payload_k, list):
-                    base_v = Decimal("0")
-                    quote_v = Decimal("0")
-                    for k in payload_k:
-                        if isinstance(k, list) and len(k) >= 8:
-                            base_v += to_decimal(k[5]) or Decimal("0")
-                            quote_v += to_decimal(k[7]) or Decimal("0")
-                    pair["marketBaseVolume"] = decimal_text(base_v)
-                    pair["marketQuoteVolume"] = decimal_text(quote_v)
-                    pair["klines"] = len(payload_k)
-                    if quote_v and leaderboard_delta is not None:
-                        pair["leaderboardDeltaRatio"] = decimal_text(leaderboard_delta / quote_v)
-                else:
-                    pair["error"] = f"Binance API HTTP {resp.status_code}"
+                total_base_v = Decimal("0")
+                total_quote_v = Decimal("0")
+                total_klines = 0
+                fetch_err = None
+                for sym in symbols:
+                    try:
+                        resp = requests.get(
+                            klines_url,
+                            params={
+                                "symbol": sym,
+                                "interval": "1h",
+                                "startTime": start_ms,
+                                "endTime": end_ms,
+                                "limit": 1500,
+                            },
+                            proxies=request_proxies(proxy),
+                            timeout=15,
+                        )
+                        payload_k = resp.json()
+                        if resp.status_code == 200 and isinstance(payload_k, list):
+                            for k in payload_k:
+                                if isinstance(k, list) and len(k) >= 8:
+                                    total_base_v += to_decimal(k[5]) or Decimal("0")
+                                    total_quote_v += to_decimal(k[7]) or Decimal("0")
+                            total_klines += len(payload_k)
+                        else:
+                            fetch_err = f"Binance API HTTP {resp.status_code} for {sym}"
+                    except Exception as exc:
+                        fetch_err = f"{sym}: {exc}"
+                pair["marketBaseVolume"] = decimal_text(total_base_v)
+                pair["marketQuoteVolume"] = decimal_text(total_quote_v)
+                pair["klines"] = total_klines
+                pair["symbols"] = symbols
+                if total_quote_v and leaderboard_delta is not None:
+                    pair["leaderboardDeltaRatio"] = decimal_text(leaderboard_delta / total_quote_v)
+                elif fetch_err:
+                    pair["error"] = fetch_err
             except Exception as exc:
                 pair["error"] = str(exc)
         pairs.append(pair)
@@ -4031,22 +4041,38 @@ def api_job_delta_analysis(job_id: str) -> Response:
     if not no_connection and snapshot_data and pairs and end_boundary > last_time:
         gap_start_ms = int(last_time.astimezone(timezone.utc).timestamp() * 1000)
         gap_end_ms = int(end_boundary.astimezone(timezone.utc).timestamp() * 1000)
+        gap_klines_data: list[list] = []
+        for sym in symbols:
+            try:
+                resp_gap = requests.get(
+                    klines_url,
+                    params={
+                        "symbol": sym,
+                        "interval": "1h",
+                        "startTime": gap_start_ms,
+                        "endTime": gap_end_ms,
+                        "limit": 1500,
+                    },
+                    proxies=request_proxies(proxy),
+                    timeout=15,
+                )
+                payload_k = resp_gap.json()
+                if resp_gap.status_code == 200 and isinstance(payload_k, list):
+                    gap_klines_data.extend(payload_k)
+            except Exception:
+                pass
         try:
-            resp_gap = requests.get(
-                klines_url,
-                params={
-                    "symbol": symbol,
-                    "interval": "1h",
-                    "startTime": gap_start_ms,
-                    "endTime": gap_end_ms,
-                    "limit": 1500,
-                },
-                proxies=request_proxies(proxy),
-                timeout=15,
-            )
-            payload_k = resp_gap.json()
-            if resp_gap.status_code == 200 and isinstance(payload_k, list):
-                for k in payload_k:
+            gap_agg: dict[int, list] = {}
+            for k in gap_klines_data:
+                if not isinstance(k, list) or len(k) < 8:
+                    continue
+                ot = k[0]
+                if ot not in gap_agg:
+                    gap_agg[ot] = [k[0], 0, 0, 0, 0, Decimal("0"), 0, Decimal("0")]
+                gap_agg[ot][5] = (gap_agg[ot][5] or Decimal("0")) + (to_decimal(k[5]) or Decimal("0"))
+                gap_agg[ot][7] = (gap_agg[ot][7] or Decimal("0")) + (to_decimal(k[7]) or Decimal("0"))
+            merged_gap = sorted(gap_agg.values(), key=lambda x: x[0])
+            for k in merged_gap:
                     if not isinstance(k, list) or len(k) < 8:
                         continue
                     open_ms = k[0]
@@ -4083,7 +4109,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
                         "klines": 1,
                         "partialHour": is_partial,
                         "error": None,
-                        "symbol": symbol,
+                        "symbols": symbols,
                     })
         except Exception as exc:
             pass  # silently skip on error
@@ -4130,12 +4156,12 @@ def api_job_delta_analysis(job_id: str) -> Response:
                 "predicted": True,
                 "klines": 0,
                 "error": None,
-                "symbol": symbol,
+                "symbols": symbols,
             })
             pred_hour = hour_end
 
     proxy_label = "无可用连接" if no_connection else ("直连" if proxy is None else str(proxy))
-    return jsonify({"pairs": pairs, "symbol": symbol, "proxyStatus": proxy_label, "klinesUrl": klines_url})
+    return jsonify({"pairs": pairs, "symbol": " / ".join(symbols), "proxyStatus": proxy_label, "klinesUrl": klines_url})
 
 
 @app.get("/login")
