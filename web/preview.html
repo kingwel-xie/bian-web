@@ -115,6 +115,7 @@
     <div class="preview-head">
       <div>
         <h2 style="font-size:18px;margin:0;display:inline" id="title">排行榜预览</h2>
+        <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:8px">← 返回主页</a>
         <span id="actTime" style="margin-left:12px;font-size:12px;color:var(--muted)"></span>
         <p class="preview-meta" id="meta">加载中...</p>
       </div>
@@ -143,7 +144,7 @@
       <h3>增量分析 <span id="deltaAnalysisSub" style="font-weight:400;font-size:12px;color:var(--muted)"></span></h3>
       <div style="padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label style="font-size:12px;color:var(--muted)">Symbol</label>
-        <input id="deltaSymbol" value="" style="width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="CELOUSDT" />
+        <input id="deltaSymbol" value="" style="width:280px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="CELOUSDT" />
         <button id="loadDeltaBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">加载市场数据</button>
         <span id="deltaLoadStatus" style="font-size:12px;color:var(--muted)"></span>
       </div>
@@ -880,6 +881,15 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
         const curSum = (isMarket || isPred) ? (p.curSum != null ? fmtVolume(Number(p.curSum)) : "—") : (fmtVolume(Number(p.cur?.sum) || 0));
         const delta = (isMarket || isPred) ? (p.leaderboardDelta != null ? fmtVolume(Number(p.leaderboardDelta)) : "—") : (p.leaderboardDelta != null ? fmtVolume(Number(p.leaderboardDelta)) : "—");
         const vol = p.marketQuoteVolume != null ? fmtVolume(Number(p.marketQuoteVolume)) : "—";
+        const symVols = p.symbolVolumes;
+        let symVolTooltip = "";
+        if (symVols && typeof symVols === "object") {
+          const parts = Object.entries(symVols)
+            .filter(([, v]) => v != null && v !== "0")
+            .map(([sym, v]) => `${sym} ${fmtVolume(Number(v))}`);
+          if (parts.length > 1) symVolTooltip = parts.join(" | ");
+        }
+        const volTitle = symVolTooltip ? ` title="${escapeHtml(symVolTooltip)}"` : rawTitle;
         const ratio = (p.leaderboardDeltaRatio != null ? (Number(p.leaderboardDeltaRatio) * 100).toFixed(4) + "%" : "—");
         const klines = p.klines || (p.error ? "—" : 0);
         const errHtml = p.error ? `<span style="color:#b34a4a;font-size:11px">${escapeHtml(p.error)}</span>` : "";
@@ -889,7 +899,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
           <td class="num">${isPred ? i(prevSum) : prevSum}</td>
           <td class="num">${isPred ? i(curSum) : curSum}</td>
           <td class="num">${isPred ? i(delta) : delta}</td>
-          <td class="num"${rawTitle}>${isPred ? i(vol) : vol}</td>
+          <td class="num"${volTitle}>${isPred ? i(vol) : vol}</td>
           <td class="num">${isPred ? i(ratio) : ratio}</td>
           <td class="num">${isPred ? i(klines) : klines}</td>
         </tr>`;

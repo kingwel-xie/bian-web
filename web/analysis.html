@@ -62,7 +62,7 @@
 <body>
 <main class="shell">
   <div class="page-head">
-    <h2 style="margin-bottom:0">任务分析</h2>
+    <h2 style="margin-bottom:0">任务分析 <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:12px">← 返回主页</a></h2>
     <hr class="sep">
     <div style="display:flex;gap:6px">
       <button class="market-btn active" data-market="spot" id="btnSpot">SPOT</button>
@@ -71,6 +71,11 @@
   </div>
 
   <div id="jobSelector" class="job-selector" style="display:none"></div>
+
+  <div id="similarBar" style="display:none; margin-top:8px; align-items:center; gap:12px">
+    <button id="findSimilarBtn" class="market-btn" style="font-size:12px;padding:2px 14px;min-height:30px">查找相似任务</button>
+    <span id="similarStatus" style="font-size:11px;color:var(--muted)"></span>
+  </div>
 
   <hr class="page-sep" id="tableSep" style="display:none">
 
@@ -244,6 +249,49 @@ function tierPerPerson(tiers, label) {
   return count > 0 ? amt / count : null;
 }
 
+function normalizedTierAllocation(tiers) {
+  if (!tiers || !tiers.length) return null;
+  const sorted = [...tiers].sort((a, b) => a.rankMin - b.rankMin);
+  const weighted = sorted.map(t => t.amount * (t.rankMax - t.rankMin + 1));
+  const total = weighted.reduce((s, v) => s + v, 0);
+  if (!total) return null;
+  return {
+    boundaries: sorted.map(t => ({ rankMin: t.rankMin, rankMax: t.rankMax })),
+    ratios: weighted.map(v => v / total),
+  };
+}
+
+function tiersMatch(a, b) {
+  const na = normalizedTierAllocation(a);
+  const nb = normalizedTierAllocation(b);
+  if (!na || !nb) return false;
+  if (na.ratios.length !== nb.ratios.length) return false;
+  for (let i = 0; i < na.ratios.length; i++) {
+    if (na.boundaries[i].rankMin !== nb.boundaries[i].rankMin) return false;
+    if (na.boundaries[i].rankMax !== nb.boundaries[i].rankMax) return false;
+    if (Math.abs(na.ratios[i] - nb.ratios[i]) > 0.01) return false;
+  }
+  return true;
+}
+
+function perPersonSimilar(a, b, maxFactor) {
+  if (!a || !b) return false;
+  const sortedA = [...a].sort((x, y) => x.rankMin - y.rankMin);
+  const sortedB = [...b].sort((x, y) => x.rankMin - y.rankMin);
+  if (sortedA.length !== sortedB.length) return false;
+  for (let i = 0; i < sortedA.length; i++) {
+    const ca = sortedA[i].rankMax - sortedA[i].rankMin + 1;
+    const cb = sortedB[i].rankMax - sortedB[i].rankMin + 1;
+    const pa = Number(sortedA[i].amount) / ca;
+    const pb = Number(sortedB[i].amount) / cb;
+    if (pa <= 0 && pb <= 0) continue;
+    if (pa <= 0 || pb <= 0) return false;
+    const ratio = Math.max(pa, pb) / Math.min(pa, pb);
+    if (ratio > maxFactor) return false;
+  }
+  return true;
+}
+
 let currentMarket = "spot";
 let selectedJobIds = null;
 let allRankJobs = [];
@@ -332,6 +380,7 @@ function renderJobSelector(jobs, ranges) {
         btn.classList.add("selected");
         return;
       }
+      updateSimilarBar();
       renderTable(allRankJobs, ranges);
       renderEfficiencyChart(allRankJobs, ranges);
       renderRatioChart(allRankJobs, ranges);
@@ -339,6 +388,48 @@ function renderJobSelector(jobs, ranges) {
       renderRewardEfficiency(allRankJobs);
     });
   });
+  updateSimilarBar();
+}
+
+function updateSimilarBar() {
+  const bar = document.getElementById("similarBar");
+  const status = document.getElementById("similarStatus");
+  const refJob = allRankJobs.find(j => j.id === selectedJobIds[0]);
+  if (refJob && refJob.rewardTiers && refJob.rewardTiers.length) {
+    bar.style.display = "flex";
+    status.textContent = "";
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+function findSimilar() {
+  const refJob = allRankJobs.find(j => j.id === selectedJobIds[0]);
+  if (!refJob || !refJob.rewardTiers || !refJob.rewardTiers.length) return;
+  const refTiers = refJob.rewardTiers;
+  const refToken = refJob.rewardToken || "";
+  const status = document.getElementById("similarStatus");
+  const matching = allRankJobs.filter(j => {
+    if (j.rewardPriceIsLive) return false;
+    if (j.id === refJob.id) return false;
+    if (!tiersMatch(refTiers, j.rewardTiers)) return false;
+    if ((j.rewardToken || "") !== refToken) return false;
+    if (!perPersonSimilar(refTiers, j.rewardTiers, 1.5)) return false;
+    return true;
+  });
+  const matchedIds = matching.map(j => j.id);
+  if (!matchedIds.length) {
+    status.textContent = "未找到相似任务";
+    return;
+  }
+  selectedJobIds = [refJob.id, ...matchedIds];
+  status.textContent = `找到 ${matchedIds.length} 个相似任务`;
+  renderJobSelector(allRankJobs, _cachedRanges);
+  renderTable(allRankJobs, _cachedRanges);
+  renderEfficiencyChart(allRankJobs, _cachedRanges);
+  renderRatioChart(allRankJobs, _cachedRanges);
+  renderDistributionChart(allRankJobs, _cachedRanges);
+  renderRewardEfficiency(allRankJobs);
 }
 
 function renderTable(jobs, ranges) {
@@ -1170,6 +1261,8 @@ document.getElementById("btnUm").addEventListener("click", () => {
 });
 
 loadAnalysis("spot");
+
+document.getElementById("findSimilarBtn").addEventListener("click", findSimilar);
 
 // Chart group toggle
 document.getElementById("chartGroupToggle").addEventListener("click", evt => {

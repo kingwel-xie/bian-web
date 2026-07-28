@@ -57,7 +57,7 @@
 <div class="panel" style="padding:14px">
   <div class="team-head">
     <h2>团队检测</h2>
-    <a id="backLink" href="">← 返回预览</a>
+    <a href="/" style="color:var(--accent-2);font-size:12px">← 返回主页</a>
   </div>
   <div id="meta" class="preview-meta">加载中...</div>
 
@@ -171,10 +171,8 @@ const params = new URLSearchParams(location.search);
 const jobId = params.get("job");
 if (!jobId) {
   document.getElementById("meta").textContent = "缺少 job 参数。";
-  document.getElementById("backLink").href = "preview.html";
 } else {
   document.getElementById("meta").textContent = "任务 " + jobId;
-  document.getElementById("backLink").href = "preview.html?job=" + encodeURIComponent(jobId);
 
   fetch("/api/jobs/" + encodeURIComponent(jobId) + "/preview")
     .then(r => r.json())

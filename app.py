@@ -17,6 +17,7 @@ import gzip
 import io
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -3921,6 +3922,18 @@ def api_job_delta_analysis(job_id: str) -> Response:
     if len(snapshot_data) < 2:
         return jsonify({"error": "可读的快照不足 2 个"}), 400
 
+    # parse activity end time to bound kline fetching
+    kline_end_boundary = None
+    act_end_str = payload.get("activityEnd")
+    if act_end_str:
+        try:
+            act_end_clean = act_end_str.strip().replace("T", " ")
+            if act_end_clean.count(":") == 1:
+                act_end_clean += ":00"
+            kline_end_boundary = datetime.strptime(act_end_clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+        except Exception:
+            pass
+
     pairs = []
     for i in range(1, len(snapshot_data)):
         prev = snapshot_data[i - 1]
@@ -3933,6 +3946,11 @@ def api_job_delta_analysis(job_id: str) -> Response:
             eligible_delta = cur["eligibleVolume"] - prev["eligibleVolume"]
         end_bj = cur["updatedAtBj"].replace(microsecond=0)
         start_bj = prev["updatedAtBj"].replace(microsecond=0)
+        # skip pairs whose end snapshot is at or after activityEnd
+        if kline_end_boundary and end_bj >= kline_end_boundary:
+            continue
+        # cap window/kline range at activityEnd
+        pair_end_bj = min(end_bj, kline_end_boundary) if kline_end_boundary else end_bj
         pair = {
             "prevTimestamp": prev["timestamp"],
             "curTimestamp": cur["timestamp"],
@@ -3951,7 +3969,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
             "leaderboardDelta": decimal_text(leaderboard_delta),
             "eligibleDelta": decimal_text(eligible_delta),
             "windowStart": start_bj.strftime("%Y-%m-%d %H:%M:%S"),
-            "windowEnd": end_bj.strftime("%Y-%m-%d %H:%M:%S"),
+            "windowEnd": pair_end_bj.strftime("%Y-%m-%d %H:%M:%S"),
             "marketBaseVolume": None,
             "marketQuoteVolume": None,
             "leaderboardDeltaRatio": None,
@@ -3961,48 +3979,56 @@ def api_job_delta_analysis(job_id: str) -> Response:
         if no_connection:
             pair["error"] = "无可用连接方式"
         else:
-            try:
-                start_ms = int(start_bj.astimezone(timezone.utc).timestamp() * 1000)
-                end_ms = int(end_bj.astimezone(timezone.utc).timestamp() * 1000)
-                total_base_v = Decimal("0")
-                total_quote_v = Decimal("0")
-                total_klines = 0
-                fetch_err = None
-                for sym in symbols:
-                    try:
-                        resp = requests.get(
-                            klines_url,
-                            params={
-                                "symbol": sym,
-                                "interval": "1h",
-                                "startTime": start_ms,
-                                "endTime": end_ms,
-                                "limit": 1500,
-                            },
-                            proxies=request_proxies(proxy),
-                            timeout=15,
-                        )
-                        payload_k = resp.json()
-                        if resp.status_code == 200 and isinstance(payload_k, list):
-                            for k in payload_k:
-                                if isinstance(k, list) and len(k) >= 8:
-                                    total_base_v += to_decimal(k[5]) or Decimal("0")
-                                    total_quote_v += to_decimal(k[7]) or Decimal("0")
-                            total_klines += len(payload_k)
-                        else:
-                            fetch_err = f"Binance API HTTP {resp.status_code} for {sym}"
-                    except Exception as exc:
-                        fetch_err = f"{sym}: {exc}"
-                pair["marketBaseVolume"] = decimal_text(total_base_v)
-                pair["marketQuoteVolume"] = decimal_text(total_quote_v)
-                pair["klines"] = total_klines
-                pair["symbols"] = symbols
-                if total_quote_v and leaderboard_delta is not None:
-                    pair["leaderboardDeltaRatio"] = decimal_text(leaderboard_delta / total_quote_v)
-                elif fetch_err:
-                    pair["error"] = fetch_err
-            except Exception as exc:
-                pair["error"] = str(exc)
+            if pair_end_bj > start_bj:
+                try:
+                    start_ms = int(start_bj.astimezone(timezone.utc).timestamp() * 1000)
+                    end_ms = int(pair_end_bj.astimezone(timezone.utc).timestamp() * 1000)
+                    total_base_v = Decimal("0")
+                    total_quote_v = Decimal("0")
+                    fetch_err = None
+                    sym_volumes: dict[str, str] = {}
+                    per_sym_klines = 0
+                    for sym in symbols:
+                        try:
+                            resp = requests.get(
+                                klines_url,
+                                params={
+                                    "symbol": sym,
+                                    "interval": "1h",
+                                    "startTime": start_ms,
+                                    "endTime": end_ms,
+                                    "limit": 1500,
+                                },
+                                proxies=request_proxies(proxy),
+                                timeout=15,
+                            )
+                            payload_k = resp.json()
+                            if resp.status_code == 200 and isinstance(payload_k, list):
+                                sym_qv = Decimal("0")
+                                for k in payload_k:
+                                    if isinstance(k, list) and len(k) >= 8:
+                                        total_base_v += to_decimal(k[5]) or Decimal("0")
+                                        qv = to_decimal(k[7]) or Decimal("0")
+                                        total_quote_v += qv
+                                        sym_qv += qv
+                                if len(payload_k) > per_sym_klines:
+                                    per_sym_klines = len(payload_k)
+                                sym_volumes[sym] = decimal_text(sym_qv)
+                            else:
+                                fetch_err = f"Binance API HTTP {resp.status_code} for {sym}"
+                        except Exception as exc:
+                            fetch_err = f"{sym}: {exc}"
+                    pair["marketBaseVolume"] = decimal_text(total_base_v)
+                    pair["marketQuoteVolume"] = decimal_text(total_quote_v)
+                    pair["symbolVolumes"] = sym_volumes
+                    pair["klines"] = per_sym_klines
+                    pair["symbols"] = symbols
+                    if total_quote_v and leaderboard_delta is not None:
+                        pair["leaderboardDeltaRatio"] = decimal_text(leaderboard_delta / total_quote_v)
+                    elif fetch_err:
+                        pair["error"] = fetch_err
+                except Exception as exc:
+                    pair["error"] = str(exc)
         pairs.append(pair)
 
     # hourly market / prediction rows
@@ -4022,26 +4048,42 @@ def api_job_delta_analysis(job_id: str) -> Response:
             pass
     end_boundary = min(now_bj, act_end_dt) if act_end_dt else now_bj
     if snapshot_data and pairs:
-        last_snap = snapshot_data[-1]
-        last_time = last_snap["updatedAtBj"]
         last_pair = pairs[-1]
+        # use the last pair's windowEnd (may be capped) instead of raw snapshot time
+        last_time_str = last_pair.get("windowEnd", "")
+        if last_time_str:
+            try:
+                last_time = datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+            except Exception:
+                last_time = datetime.now(BJ)
+        else:
+            last_time = datetime.now(BJ)
         ratio_raw = last_pair.get("leaderboardDeltaRatio")
         if ratio_raw is not None:
             try:
                 ratio = Decimal(str(ratio_raw))
             except Exception:
                 ratio = None
-        running_sum = to_decimal(last_snap.get("sum"))
+        running_sum = to_decimal(last_pair.get("cur", {}).get("sum"))
         if running_sum is None:
-            cur_sum_str = last_pair.get("cur", {}).get("sum")
-            if cur_sum_str is not None:
-                running_sum = to_decimal(cur_sum_str)
+            # fallback to last snapshot sum
+            if kline_end_boundary:
+                # find the last snapshot at or before boundary
+                for sd in reversed(snapshot_data):
+                    sd_time = sd["updatedAtBj"].replace(microsecond=0)
+                    if sd_time <= kline_end_boundary:
+                        running_sum = to_decimal(sd.get("sum"))
+                        break
+            else:
+                last_snap = snapshot_data[-1]
+                running_sum = to_decimal(last_snap.get("sum"))
 
     # market rows (real klines from last snapshot to end_boundary)
     if not no_connection and snapshot_data and pairs and end_boundary > last_time:
         gap_start_ms = int(last_time.astimezone(timezone.utc).timestamp() * 1000)
         gap_end_ms = int(end_boundary.astimezone(timezone.utc).timestamp() * 1000)
-        gap_klines_data: list[list] = []
+        # fetch per-symbol klines, tag each with symbol name
+        tagged_klines: list[tuple[str, list]] = []
         for sym in symbols:
             try:
                 resp_gap = requests.get(
@@ -4058,59 +4100,62 @@ def api_job_delta_analysis(job_id: str) -> Response:
                 )
                 payload_k = resp_gap.json()
                 if resp_gap.status_code == 200 and isinstance(payload_k, list):
-                    gap_klines_data.extend(payload_k)
+                    for k in payload_k:
+                        if isinstance(k, list) and len(k) >= 8:
+                            tagged_klines.append((sym, k))
             except Exception:
                 pass
         try:
-            gap_agg: dict[int, list] = {}
-            for k in gap_klines_data:
-                if not isinstance(k, list) or len(k) < 8:
-                    continue
+            # aggregate by open time: {open_ms: {total_quote, total_base, sym_quote: {sym: qv}}}
+            hour_agg: dict[int, dict] = {}
+            for sym, k in tagged_klines:
                 ot = k[0]
-                if ot not in gap_agg:
-                    gap_agg[ot] = [k[0], 0, 0, 0, 0, Decimal("0"), 0, Decimal("0")]
-                gap_agg[ot][5] = (gap_agg[ot][5] or Decimal("0")) + (to_decimal(k[5]) or Decimal("0"))
-                gap_agg[ot][7] = (gap_agg[ot][7] or Decimal("0")) + (to_decimal(k[7]) or Decimal("0"))
-            merged_gap = sorted(gap_agg.values(), key=lambda x: x[0])
-            for k in merged_gap:
-                    if not isinstance(k, list) or len(k) < 8:
-                        continue
-                    open_ms = k[0]
-                    close_ms = k[6]
-                    base_v = to_decimal(k[5]) or Decimal("0")
-                    quote_v = to_decimal(k[7]) or Decimal("0")
-                    open_dt = datetime.fromtimestamp(open_ms / 1000, BJ)
-                    close_dt = datetime.fromtimestamp(close_ms / 1000, BJ)
-                    if open_dt >= end_boundary:
-                        continue
-                    is_partial = close_dt > end_boundary
-                    scale = Decimal("1")
-                    if is_partial:
-                        elapsed = max((end_boundary - open_dt).total_seconds(), 1)
-                        scale = Decimal("3600") / Decimal(str(elapsed))
-                    scaled_quote = quote_v * scale if quote_v else None
-                    scaled_base = base_v * scale if base_v else None
-                    est_delta = (scaled_quote * ratio if ratio is not None and scaled_quote else None)
-                    prev_sum = running_sum
-                    cur_sum = (prev_sum + est_delta if est_delta is not None and prev_sum is not None else None)
-                    if cur_sum is not None:
-                        running_sum = cur_sum
-                    pairs.append({
-                        "type": "market",
-                        "windowStart": open_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                        "windowEnd": close_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                        "marketBaseVolume": decimal_text(scaled_base) if scaled_base is not None else None,
-                        "marketQuoteVolume": decimal_text(scaled_quote) if scaled_quote is not None else None,
-                        "rawQuoteVolume": decimal_text(quote_v) if quote_v else None,
-                        "leaderboardDelta": decimal_text(est_delta) if est_delta is not None else None,
-                        "leaderboardDeltaRatio": None,
-                        "prevSum": decimal_text(prev_sum) if prev_sum is not None else None,
-                        "curSum": decimal_text(cur_sum) if cur_sum is not None else None,
-                        "klines": 1,
-                        "partialHour": is_partial,
-                        "error": None,
-                        "symbols": symbols,
-                    })
+                if ot not in hour_agg:
+                    hour_agg[ot] = {"base": Decimal("0"), "quote": Decimal("0"), "sym_qv": defaultdict(Decimal)}
+                qv = to_decimal(k[7]) or Decimal("0")
+                bv = to_decimal(k[5]) or Decimal("0")
+                hour_agg[ot]["base"] += bv
+                hour_agg[ot]["quote"] += qv
+                hour_agg[ot]["sym_qv"][sym] += qv
+            merged_gap = sorted(hour_agg.items(), key=lambda x: x[0])
+            for open_ms, ha in merged_gap:
+                base_v = ha["base"]
+                quote_v = ha["quote"]
+                open_dt = datetime.fromtimestamp(open_ms / 1000, BJ)
+                close_dt = open_dt + timedelta(hours=1)
+                close_ms = open_ms + 3600000
+                if open_dt >= end_boundary:
+                    continue
+                is_partial = close_dt > end_boundary
+                scale = Decimal("1")
+                if is_partial:
+                    elapsed = max((end_boundary - open_dt).total_seconds(), 1)
+                    scale = Decimal("3600") / Decimal(str(elapsed))
+                scaled_quote = quote_v * scale if quote_v else None
+                scaled_base = base_v * scale if base_v else None
+                sym_volumes_gap = {sym: decimal_text(qv * scale) if qv else None for sym, qv in ha["sym_qv"].items()}
+                est_delta = (scaled_quote * ratio if ratio is not None and scaled_quote else None)
+                prev_sum = running_sum
+                cur_sum = (prev_sum + est_delta if est_delta is not None and prev_sum is not None else None)
+                if cur_sum is not None:
+                    running_sum = cur_sum
+                pairs.append({
+                    "type": "market",
+                    "windowStart": open_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "windowEnd": close_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "marketBaseVolume": decimal_text(scaled_base) if scaled_base is not None else None,
+                    "marketQuoteVolume": decimal_text(scaled_quote) if scaled_quote is not None else None,
+                    "rawQuoteVolume": decimal_text(quote_v) if quote_v else None,
+                    "symbolVolumes": sym_volumes_gap,
+                    "leaderboardDelta": decimal_text(est_delta) if est_delta is not None else None,
+                    "leaderboardDeltaRatio": None,
+                    "prevSum": decimal_text(prev_sum) if prev_sum is not None else None,
+                    "curSum": decimal_text(cur_sum) if cur_sum is not None else None,
+                    "klines": 1,
+                    "partialHour": is_partial,
+                    "error": None,
+                    "symbols": symbols,
+                })
         except Exception as exc:
             pass  # silently skip on error
 
