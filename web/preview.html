@@ -50,6 +50,14 @@
   .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
   .search-clear { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 13px; color: var(--muted); line-height: 1; display: none; vertical-align: middle; }
   .search-clear:hover { color: var(--ink); }
+  .pager { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .pager-info { font-weight: 700; color: var(--ink); }
+  .pager-sep { opacity: 0.4; }
+  .pager-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 14px; cursor: pointer; font-weight: 700; font-size: 12px; }
+  .pager-btn:hover:not(:disabled) { background: #e1f3f6; color: var(--accent-2); }
+  .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #pageSize { width: auto; flex-shrink: 0; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; color: var(--ink); font-size: 12px; padding: 0 4px; }
+  .pager-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
   .compare-btn:hover { background: #f5f0e8; }
@@ -254,10 +262,37 @@
         <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
       </table>
     </div>
+    <div id="pager" class="pager">
+      <span id="pagerInfo" class="pager-info">共 0 行</span>
+      <span class="pager-sep">·</span>
+      <span class="pager-item">每页 <select id="pageSize">
+        <option value="100" selected>100</option>
+        <option value="50">50</option>
+        <option value="200">200</option>
+        <option value="500">500</option>
+        <option value="0">全部</option>
+      </select></span>
+      <button id="pagePrev" class="pager-btn" type="button">‹ 上一页</button>
+      <span id="pagerPage">第 1 / 1 页</span>
+      <button id="pageNext" class="pager-btn" type="button">下一页 ›</button>
+      <span class="pager-sep">·</span>
+      <span>跳至 <input id="pageJump" type="number" min="1" style="width:56px;height:26px;border:1px solid var(--line);border-radius:6px;background:#fffdf8;color:var(--ink);padding:0 6px;font-size:12px" /> 页</span>
+    </div>
   </div>
 <script>
-const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.iruabmkakw.com" };
+const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.bsmkweb.cc" };
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function withDomain(value, host) {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  try {
+    const url = new URL(raw);
+    url.host = host;
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
 function showToast(msg, ms) {
   const el = document.createElement("div");
   el.textContent = msg;
@@ -279,6 +314,10 @@ let _trendMode = "volume";
 let _deltaStat = "avg"; // "avg" | "med" | "q1" | "last"
 let _calcTiers = [];
 const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9","#f39c12","#16a085","#e67e22","#7f8c8d"];
+
+let pageSize = parseInt(localStorage.getItem("previewPageSize") || "100", 10);
+if (![50, 100, 200, 500, 0].includes(pageSize)) pageSize = 100;
+let page = 1;
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -304,20 +343,52 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     if (!resp.ok || preview.error) throw new Error(preview.error || "加载失败");
 
     const allRows = preview.rows || [];
+    if (preview.noData) {
+      document.title = "排行榜预览 — 无数据";
+      document.getElementById("meta").innerHTML = `<span style="font-size:14px">没有快照数据。请在主页重新抓取，或上传快照文件。</span>`;
+      document.getElementById("downloadLinks").innerHTML = preview.resourceId
+        ? `<a href="#" id="scrapeBtn">🔄 抓取</a>`
+        : "";
+      const bar = document.getElementById("snapshotBar");
+      bar.style.display = "none";
+      const scrapeBtn = document.getElementById("scrapeBtn");
+      if (scrapeBtn) {
+        scrapeBtn.addEventListener("click", async () => {
+          try {
+            const resp = await fetch("/api/scrape/jobs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                resourceId: preview.resourceId,
+                market: preview.market,
+                symbol: preview.symbol,
+                url: preview.url,
+              }),
+            });
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const jobData = await resp.json();
+            const scrapeJobId = jobData?.job?.id;
+            if (scrapeJobId) location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
+            else showToast("抓取已开始，请前往主页查看。", 4000);
+          } catch (err) { showToast("抓取失败: " + err.message, 5000); }
+        });
+      }
+      return;
+    }
     allRows.sort((a, b) => (Number(a.rank) || 0) - (Number(b.rank) || 0));
     for (const r of allRows) {
       r._g = Number(r.grade) || 0;
       r._dg = Number(r.deltaGrade) || 0;
-      r._v = Number(r.restoredTradingVolume ?? r.tradingVolume ?? 0);
+      r._v = Number(r.tradingVolume ?? r.grade ?? 0);
       r._nl = (r.nickname || "").toLowerCase();
       r._pr = r.prevRank != null ? Number(r.prevRank) : null;
     }
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
-    const restoredSum = preview.restoredTradingVolumeSum ? ` · restored ${fmtNumber(preview.restoredTradingVolumeSum)}` : "";
+    const restoredSum = "";
     const heading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || preview.name || "排行榜预览";
     document.title = heading + " — 排行榜预览";
     const _actUrl = preview.url;
-    document.getElementById("title").innerHTML = `${escapeHtml(heading)}${_actUrl ? ` <a href="${escapeHtml(_actUrl)}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(_actUrl.replace(DOMAIN.OFFICIAL, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
+    document.getElementById("title").innerHTML = `${escapeHtml(heading)}${_actUrl ? ` <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
     const actS = preview.activityStart, actE = preview.activityEnd;
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
@@ -343,7 +414,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     }
     const expired = endDt && endDt <= new Date(now - 86400000);
     if (expired) {
-      document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span>${_actUrl ? ` <a href="${escapeHtml(_actUrl)}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🔗官网</a> / <a href="${escapeHtml(_actUrl.replace(DOMAIN.OFFICIAL, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🇨🇳国内</a>` : ""} <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;
+      document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span>${_actUrl ? ` <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🔗官网</a> / <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🇨🇳国内</a>` : ""} <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;
       actTimeEl.style.color = "#999";
       document.getElementById("meta").style.opacity = "0.5";
       const endedEl = document.createElement("span");
@@ -615,6 +686,18 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       if (v >= 1000) return (v / 1000).toFixed(2) + "K";
       return v.toFixed(2);
     }
+
+    function projectTierPcts(projectedTotal, stats, currentTotal, totalDelta) {
+      if (!stats || !currentTotal || !totalDelta || projectedTotal <= currentTotal) {
+        return stats.map(s => ({ label: s.label, pct: s.total / currentTotal * 100 }));
+      }
+      const remaining = projectedTotal - currentTotal;
+      return stats.map(s => {
+        const tierProj = s.total + remaining * (s.sumDelta / totalDelta);
+        const pct = Math.max(0, tierProj / projectedTotal * 100);
+        return { label: s.label, pct };
+      });
+    }
     function fmtDeltaAbs(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${fmtVolume(Math.abs(v))}</span>` : ""; }
 
     function _calcReward() {
@@ -664,8 +747,8 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
           : [["1~5",1,5],["6~20",6,20],["21~50",21,50],["51~200",51,200],["201~1000",201,1000]];
     const stats = rangeStats(allRows, ranges, preview.prevStats);
     const totalCount = allRows.length;
-    const totalVolume = allRows.reduce((s, r) => s + r._g, 0);
-    const totalDelta = allRows.reduce((s, r) => s + r._dg, 0);
+    const totalVolume = stats.reduce((s, st) => s + st.total, 0);
+    const totalDelta = stats.reduce((s, st) => s + st.sumDelta, 0);
     _statsCache = stats; _totalVolCache = totalVolume; _totalDelCache = totalDelta;
     _deltaShowAbs = ((preview.market || "").toLowerCase() === "um" || (preview.market || "").toLowerCase() === "saving");
     // Sync button active state
@@ -715,7 +798,49 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     let teamFilter = "";
     let rankChangeSort = "";
 
-    function renderRows() {
+    function updatePager(total, totalPages) {
+      const info = document.getElementById("pagerInfo");
+      const pagerPage = document.getElementById("pagerPage");
+      const prevBtn = document.getElementById("pagePrev");
+      const nextBtn = document.getElementById("pageNext");
+      const sizeSel = document.getElementById("pageSize");
+      info.textContent = `共 ${total} 行`;
+      pagerPage.textContent = `第 ${totalPages === 0 ? 0 : page} / ${totalPages} 页`;
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages;
+      sizeSel.value = String(pageSize);
+    }
+
+    function bindPager() {
+      document.getElementById("pagePrev").addEventListener("click", () => {
+        if (page > 1) { page--; renderRows(); }
+      });
+      document.getElementById("pageNext").addEventListener("click", () => {
+        const rows = getFilteredSorted();
+        const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+        if (page < totalPages) { page++; renderRows(); }
+      });
+      document.getElementById("pageSize").addEventListener("change", (e) => {
+        const v = parseInt(e.target.value, 10);
+        pageSize = Number.isFinite(v) && v >= 0 ? v : 100;
+        localStorage.setItem("previewPageSize", String(pageSize));
+        page = 1;
+        renderRows();
+      });
+      document.getElementById("pageJump").addEventListener("change", (e) => {
+        const val = parseInt(e.target.value, 10);
+        const rows = getFilteredSorted();
+        const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+        if (Number.isFinite(val) && val >= 1) {
+          page = Math.min(val, totalPages);
+          renderRows();
+        } else {
+          e.target.value = "";
+        }
+      });
+    }
+
+    function getFilteredSorted() {
       const q = document.getElementById("searchInput").value.trim().toLowerCase();
       let rows = allRows;
       if (q || teamFilter) {
@@ -741,7 +866,19 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
           return rankChangeSort === "up" ? da - db : db - da;
         });
       }
-      document.getElementById("rows").innerHTML = rows.length ? rows.map(r => {
+      return rows;
+    }
+
+    function renderRows() {
+      const rows = getFilteredSorted();
+      const total = rows.length;
+      const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+      if (page > totalPages) page = totalPages;
+      if (page < 1) page = 1;
+      const start = pageSize > 0 ? (page - 1) * pageSize : 0;
+      const pageRows = pageSize > 0 ? rows.slice(start, start + pageSize) : rows;
+      updatePager(total, totalPages);
+      document.getElementById("rows").innerHTML = pageRows.length ? pageRows.map(r => {
         const teamName = teamOfUser[r.nickname] || "";
         const nickHtml = teamName
           ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
@@ -758,7 +895,12 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
         <td class="num">${r._dg ? fmtNumber(r._dg) : "—"}</td>
         <td class="num">${chgHtml}</td>
         <td class="num">${escapeHtml(r.region || "—")}</td></tr>`;
-      }).join("") : `<tr><td colspan="8" class="empty">${q || teamFilter ? "没有匹配。" : "没有数据。"}</td></tr>`;
+      }).join("") : `<tr><td colspan="8" class="empty">${qOrTeamFilterActive() ? "没有匹配。" : "没有数据。"}</td></tr>`;
+    }
+
+    function qOrTeamFilterActive() {
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      return !!(q || teamFilter);
     }
 
     function updateSortIcons() {
@@ -772,19 +914,22 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       document.getElementById("searchClearBtn").style.display = q ? "inline" : "none";
     }
 
-    const render = debounce(() => { renderRows(); updateSortIcons(); }, 150);
+    const render = debounce(() => { page = 1; renderRows(); updateSortIcons(); }, 150);
     renderRows();
     updateSortIcons();
+    bindPager();
 
     document.getElementById("searchInput").addEventListener("input", () => { updateClearBtn(); render(); });
     document.getElementById("searchClearBtn").addEventListener("click", () => {
       document.getElementById("searchInput").value = "";
       updateClearBtn();
+      page = 1;
       renderRows();
       updateSortIcons();
     });
     teamFilterEl.addEventListener("change", () => {
       teamFilter = teamFilterEl.value;
+      page = 1;
       renderRows();
       updateSortIcons();
     });
@@ -792,6 +937,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       volumeSort = !volumeSort;
       deltaSort = false;
       rankChangeSort = "";
+      page = 1;
       renderRows();
       updateSortIcons();
     });
@@ -799,6 +945,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       deltaSort = !deltaSort;
       volumeSort = false;
       rankChangeSort = "";
+      page = 1;
       renderRows();
       updateSortIcons();
     });
@@ -808,6 +955,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       else rankChangeSort = "";
       deltaSort = false;
       volumeSort = false;
+      page = 1;
       renderRows();
       updateSortIcons();
     });
@@ -939,6 +1087,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
           if (calcInput && calcPanel) {
             calcInput.value = Math.round(fillSum / 1_000_000);
             calcPanel.style.display = "";
+            if (typeof recalcProjectedPcts === "function") recalcProjectedPcts();
             _calcReward();
           }
         }
@@ -979,7 +1128,7 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     }
 
     function computeTotalReward(price) {
-      // Sum restoredTradingVolume of top eligibleUsers rows
+      // Sum grade of top eligibleUsers rows
       const sorted = [...allRows].sort((a, b) => (a.rank || 999999) - (b.rank || 999999));
       const top = sorted.slice(0, eligibleUsers);
       let totalVolume = 0;
@@ -1472,21 +1621,35 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
     calcToolPanel.style.display = "";
     const calcTotalVolEl = document.getElementById("calcTotalVol");
     calcTotalVolEl.value = Math.round(_totalVolCache / 1_000_000);
+
+    function recalcProjectedPcts() {
+      const projectedVal = parseFloat(calcTotalVolEl.value.replace(/,/g, "")) * 1_000_000;
+      if (!projectedVal || projectedVal <= 0) return;
+      const projected = projectTierPcts(projectedVal, _statsCache, _totalVolCache, _totalDelCache);
+      for (const s of projected) {
+        const input = document.getElementById("calcPct_" + s.label.replace("~", "_"));
+        if (input) input.value = s.pct.toFixed(1);
+      }
+    }
+
     calcTotalVolEl.addEventListener("blur", function() {
       const v = this.value.trim();
       if (v) this.value = v.replace(/,/g, "");
+      recalcProjectedPcts();
     });
     // Build calculator tier inputs from rewardTiers
     const calcTierContainer = document.getElementById("calcTierInputs");
     _calcTiers = [];
     const calcRewardTiers = preview.rewardTiers || [];
     const hasRewardTiers = (preview.rewardMode || "rank") === "rank" && calcRewardTiers.length > 0;
+    const initCurrent = _totalVolCache;
+    const initPcts = projectTierPcts(initCurrent, _statsCache, _totalVolCache, _totalDelCache);
     if (hasRewardTiers) {
       const sorted = [...calcRewardTiers].sort((a, b) => a.rankMin - b.rankMin);
       for (const t of sorted) {
         const statsLabel = t.rankMin + "~" + t.rankMax;
-        const statsEntry = _statsCache ? _statsCache.find(s => s.label === statsLabel) : null;
-        const pct = statsEntry && _totalVolCache > 0 ? (statsEntry.total / _totalVolCache * 100) : 0;
+        const projectedEntry = initPcts.find(s => s.label === statsLabel);
+        const pct = projectedEntry ? projectedEntry.pct : 0;
         const id = "calcPct_" + t.rankMin + "_" + t.rankMax;
         const name = t.rankMin + "~" + t.rankMax + "名";
         _calcTiers.push({ name, min: t.rankMin, max: t.rankMax, inputId: id });
@@ -1512,8 +1675,8 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
       ];
       for (const t of fallbackTiers) {
         const statsLabel = t.min + "~" + t.max;
-        const statsEntry = _statsCache ? _statsCache.find(s => s.label === statsLabel) : null;
-        const pct = statsEntry && _totalVolCache > 0 ? (statsEntry.total / _totalVolCache * 100) : 0;
+        const projectedEntry = initPcts.find(s => s.label === statsLabel);
+        const pct = projectedEntry ? projectedEntry.pct : 0;
         const id = "calcPct_" + t.min + "_" + t.max;
         _calcTiers.push({ name: t.name, min: t.min, max: t.max, inputId: id });
         const label = document.createElement("label");

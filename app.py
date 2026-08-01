@@ -53,6 +53,48 @@ SCRAPE_PAGE_SIZE = 100
 
 _running_processes: dict[str, subprocess.Popen] = {}
 _rp_lock = threading.Lock()
+
+# --- In-memory response caches (P1) -----------------------------------------
+# Keys embed file mtime/size signatures, so entries auto-invalidate when
+# snapshot JSON files change; no manual invalidation needed.
+_preview_cache: dict[tuple, tuple[float, dict]] = {}
+_trend_cache: dict[tuple, tuple[float, dict]] = {}
+_cache_lock = threading.Lock()
+_PREVIEW_CACHE_MAX = 32
+_TREND_CACHE_MAX = 64
+
+
+def _file_sig(path: Path | None) -> tuple[str, int, int] | None:
+    if not path:
+        return None
+    try:
+        st = path.stat()
+        return (str(path.resolve()), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def _cache_get(cache: dict[tuple, tuple[float, dict]], key: tuple) -> dict | None:
+    with _cache_lock:
+        entry = cache.get(key)
+        if entry is None:
+            return None
+        return dict(entry[1])
+
+
+def _cache_put(
+    cache: dict[tuple, tuple[float, dict]],
+    key: tuple,
+    value: dict,
+    max_entries: int,
+) -> None:
+    with _cache_lock:
+        if key in cache:
+            cache[key] = (time.time(), value)
+            return
+        if len(cache) >= max_entries:
+            cache.clear()
+        cache[key] = (time.time(), value)
 SCRAPE_MARKETS = {"um", "spot", "saving"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
@@ -234,17 +276,6 @@ def decimal_float(value: Any) -> float | None:
 
 def decimal_text(value: Decimal | None) -> str | None:
     return format(value, "f") if value is not None else None
-
-
-def restored_trading_volume(row: dict[str, Any]) -> Decimal | None:
-    volume = to_decimal(row.get("restoredTradingVolume"))
-    if volume is None:
-        volume = to_decimal(row.get("tradingVolume"))
-    if volume is None:
-        grade = to_decimal(row.get("grade"))
-        if grade is not None:
-            volume = grade * grade
-    return volume
 
 
 def snapshot_date(meta: dict[str, Any], fallback: str) -> str:
@@ -942,7 +973,7 @@ def compact_leaderboard_rows(
                 "nickname": nickname,
                 "userId": row.get("userId"),
                 "grade": row.get("grade"),
-                "restoredTradingVolume": decimal_float(restored_trading_volume(row)),
+                "tradingVolume": row.get("tradingVolume"),
                 "deltaGrade": decimal_float(
                     delta_row.get("deltaGrade") if delta_row else None
                 ),
@@ -1117,7 +1148,7 @@ def scrape_preview_from_json(
     if not isinstance(rows, list):
         rows = []
     csv_path = json_path.with_suffix(".csv")
-    xlsx_path = ensure_scrape_xlsx(json_path, str(data.get("name") or json_path.parent.name))
+    xlsx_path = json_path.with_suffix(".xlsx")
     discovery_candidates = sorted(json_path.parent.glob("*_discovery.json"), key=lambda p: p.stat().st_mtime)
     discovery_path = discovery_candidates[-1] if discovery_candidates else None
 
@@ -1145,11 +1176,10 @@ def scrape_preview_from_json(
         "top": data.get("top"),
         "count": data.get("count"),
         "sum": data.get("sum"),
-        "restoredTradingVolumeSum": data.get("restoredTradingVolumeSum"),
         "meta": data.get("meta") or {},
         "jsonUrl": public_file(json_path),
         "csvUrl": public_file(csv_path) if csv_path.exists() else None,
-        "xlsxUrl": public_file(xlsx_path) if xlsx_path and xlsx_path.exists() else None,
+        "xlsxUrl": public_file(xlsx_path),
         "discoveryUrl": public_file(discovery_path) if discovery_path else None,
         "rows": compact_leaderboard_rows(rows, limit, delta_by_nickname),
     }
@@ -1186,8 +1216,7 @@ def attach_scrape_preview(result: Any) -> Any:
         if json_path:
             current["jsonUrl"] = public_file_or_none(json_path)
             current["csvUrl"] = public_file_or_none(current.get("csv"))
-            xlsx_path = ensure_scrape_xlsx(Path(str(json_path)), str(current.get("name") or "leaderboard"))
-            current["xlsxUrl"] = public_file_or_none(xlsx_path)
+            current["xlsxUrl"] = public_file_or_none(Path(str(json_path)).with_suffix(".xlsx"))
             try:
                 json_path_obj = Path(str(json_path))
                 preview_data = read_json(json_path_obj, {})
@@ -1334,7 +1363,6 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
                     "csv": str(item.get("csv", "")),
                     "rows": item.get("rows", 0),
                     "sum": item.get("sum"),
-                    "restoredTradingVolumeSum": item.get("restoredTradingVolumeSum"),
                 }
                 with state_lock:
                     jobs = load_jobs()
@@ -1391,6 +1419,8 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             existing["startedAt"] = None
             existing["finishedAt"] = None
             job = existing
+            if existing.get("payload", {}).get("top") is not None:
+                payload["top"] = existing["payload"]["top"]
         else:
             market = str(payload.get("market") or "").upper()
             token = str(payload.get("token") or (payload.get("symbol") or [None])[0] or "").upper()
@@ -2116,6 +2146,10 @@ def _extend_ranges(max_rank: int) -> list[tuple[int, int]]:
     return ranges
 
 
+_token_price_cache: dict[tuple[str, str], tuple[float | None, float]] = {}
+_TOKEN_PRICE_TTL = 600  # 10 minutes
+
+
 def get_token_price(reward_token: str, activity_end: str) -> float | None:
     if not reward_token or not activity_end:
         return None
@@ -2126,8 +2160,14 @@ def get_token_price(reward_token: str, activity_end: str) -> float | None:
         dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
     except (ValueError, OSError):
         return None
-    import requests as req
     now_bj = datetime.now(timezone.utc).astimezone(BJ)
+    cache_key = (token, str(activity_end).strip())
+    now = time.time()
+    cached = _token_price_cache.get(cache_key)
+    if cached and now - cached[1] < _TOKEN_PRICE_TTL:
+        return cached[0]
+    price: float | None = None
+    import requests as req
     # Activity not yet ended → use live ticker price
     if dt > now_bj:
         safe = token + "USDT"
@@ -2139,29 +2179,32 @@ def get_token_price(reward_token: str, activity_end: str) -> float | None:
                 resp = req.get(ticker_url, timeout=10)
                 data = resp.json()
                 if "price" in data:
-                    return float(data["price"])
+                    price = float(data["price"])
+                    break
             except Exception:
                 continue
-        return None
-    # Activity ended → use historical kline close at end time
-    end_ms = int(dt.astimezone(timezone.utc).timestamp() * 1000)
-    symbol = token + "USDT"
-    for url in (SPOT_KLINES, FAPI_KLINES):
-        try:
-            resp = req.get(
-                url,
-                params={"symbol": symbol, "interval": "1h", "endTime": end_ms, "limit": 1},
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list) and len(data) > 0:
-                    close = float(data[0][4])
-                    if close > 0:
-                        return close
-        except Exception:
-            continue
-    return None
+    else:
+        # Activity ended → use historical kline close at end time
+        end_ms = int(dt.astimezone(timezone.utc).timestamp() * 1000)
+        symbol = token + "USDT"
+        for url in (SPOT_KLINES, FAPI_KLINES):
+            try:
+                resp = req.get(
+                    url,
+                    params={"symbol": symbol, "interval": "1h", "endTime": end_ms, "limit": 1},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list) and len(data) > 0:
+                        close = float(data[0][4])
+                        if close > 0:
+                            price = close
+                            break
+            except Exception:
+                continue
+    _token_price_cache[cache_key] = (price, now)
+    return price
 
 
 _live_price_cache: dict[str, tuple[float, float]] = {}
@@ -2623,7 +2666,7 @@ def api_update_job_params(job_id: str) -> Response:
                         rmax = t.get("rankMax")
                         amt = t.get("amount")
                         if isinstance(rmin, int) and isinstance(rmax, int) and rmin >= 1 and rmax >= rmin:
-                            cleaned.append({"rankMin": rmin, "rankMax": rmax, "amount": str(int(amt) if isinstance(amt, (int, float)) else amt or "0")})
+                            cleaned.append({"rankMin": rmin, "rankMax": rmax, "amount": str(amt) if isinstance(amt, (int, float)) else amt or "0"})
                     if cleaned:
                         p["rewardTiers"] = cleaned
                     else:
@@ -2690,8 +2733,8 @@ def api_delete_snapshot(job_id: str, snapshot_timestamp: str) -> Response:
             return jsonify({"error": "任务不存在"}), 404
 
         snapshots = job.get("snapshots") or []
-        if len(snapshots) < 2:
-            return jsonify({"error": "至少保留一个快照"}), 400
+        if not snapshots:
+            return jsonify({"error": "没有快照"}), 404
 
         idx = next(
             (i for i, s in enumerate(snapshots) if s.get("timestamp") == snapshot_timestamp),
@@ -2764,6 +2807,107 @@ def api_kill_job(job_id: str) -> Response:
     return jsonify({"success": True})
 
 
+def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int]]:
+    team_db = load_teams_db()
+    team_lookup: dict[str, str] = {}
+    team_sizes: dict[str, int] = {}
+    for team in team_db.get("teams") or []:
+        team_name = team.get("name", "")
+        team_sizes[team_name] = len(team.get("members") or [])
+        for m in team.get("members") or []:
+            key = (m.get("nickname") or "").strip()
+            if key and key not in team_lookup:
+                team_lookup[key] = team_name
+    team_map: dict[str, str] = {}
+    for row in rows:
+        nick = row.get("nickname") or ""
+        team_name = team_lookup.get(nickname_value({"nickName": nick}))
+        if team_name:
+            team_map[nick] = team_name
+    return team_map, team_sizes
+
+
+def _build_preview_base(
+    json_path: Path,
+    prev_json_path: Path | None,
+    limit: int,
+    payload: dict,
+    job: dict,
+    snapshots: list,
+) -> dict:
+    preview = scrape_preview_from_json(
+        json_path, limit=limit, previous_json_path=prev_json_path
+    )
+    preview["market"] = payload.get("market", "").upper()
+    preview["symbol"] = payload.get("symbol", [])
+    if isinstance(preview["symbol"], str):
+        preview["symbol"] = [preview["symbol"]]
+    preview["token"] = payload.get("token", "").upper()
+    preview["rewardToken"] = payload.get("rewardToken", "")
+    preview["rewardAmount"] = payload.get("rewardAmount", "")
+    preview["rewardTiers"] = payload.get("rewardTiers")
+    preview["rewardMode"] = payload.get("rewardMode")
+    preview["totalReward"] = payload.get("totalReward")
+    preview["eligibleUsers"] = payload.get("eligibleUsers")
+    if preview.get("rewardTiers"):
+        preview["totalRewardAmount"] = sum(
+            float(t.get("amount", 0) or 0) for t in preview["rewardTiers"]
+        )
+    job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
+    rid = str(payload.get("resourceId") or "").strip()
+    preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
+    preview["activityStart"] = payload.get("activityStart")
+    preview["activityEnd"] = payload.get("activityEnd")
+    preview["snapshots"] = [
+        {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
+        for s in snapshots
+    ]
+
+    # Previous snapshot stats for环比计算
+    prev_stats = None
+    if prev_json_path and prev_json_path.exists():
+        prev_data = read_json(prev_json_path, {})
+        prev_rows = prev_data.get("rows") if isinstance(prev_data, dict) else []
+        if isinstance(prev_rows, list):
+            r_mode = payload.get("rewardMode") or "rank"
+            r_tiers = payload.get("rewardTiers") or []
+            r_eligible = int(payload.get("eligibleUsers") or 0)
+            if r_mode == "rank" and r_tiers:
+                sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
+                ranges = []
+                cursor = 1
+                for t in sorted_tiers:
+                    rmin = t.get("rankMin", 0)
+                    rmax = t.get("rankMax", 0)
+                    if rmin > cursor:
+                        ranges.append((f"{cursor}~{rmin-1}", cursor, rmin-1))
+                    ranges.append((f"{rmin}~{rmax}", rmin, rmax))
+                    cursor = rmax + 1
+            elif r_mode == "total" and r_eligible > 0:
+                ranges = [(f"1~{r_eligible}", 1, r_eligible)]
+            else:
+                ranges = [("1~5",1,5),("6~20",6,20),("21~50",21,50),("51~200",51,200),("201~1000",201,1000)]
+            stats_list = []
+            for label, rmin, rmax in ranges:
+                items = [r for r in prev_rows if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
+                n = len(items)
+                if n == 0:
+                    stats_list.append({"label": label, "total": 0, "avg": 0, "med": 0, "q1": 0, "last": 0})
+                    continue
+                total = sum(float(r.get("grade", 0) or 0) for r in items)
+                by_grade = sorted(items, key=lambda r: float(r.get("grade", 0) or 0))
+                grades = [float(r.get("grade", 0) or 0) for r in by_grade]
+                avg = total / n
+                med = grades[n // 2] if n % 2 else (grades[n // 2 - 1] + grades[n // 2]) / 2
+                q1_index = int(n * 0.25)
+                q1 = grades[min(q1_index, n - 1)]
+                last = float(items[-1].get("grade", 0) or 0)
+                stats_list.append({"label": label, "total": total, "avg": avg, "med": med, "q1": q1, "last": last})
+            prev_stats = stats_list
+    preview["prevStats"] = prev_stats
+    return preview
+
+
 @app.get("/api/jobs/<job_id>/preview")
 def api_job_preview(job_id: str) -> Response:
     jobs = load_jobs()
@@ -2795,7 +2939,18 @@ def api_job_preview(job_id: str) -> Response:
         if not json_path_str and snapshots:
             json_path_str = snapshots[-1].get("json")
         if not json_path_str:
-            return jsonify({"error": "没有预览数据"}), 400
+            return jsonify({
+                "error": None,
+                "noData": True,
+                "rows": [],
+                "snapshots": [],
+                "taskName": job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", ""),
+                "resourceId": payload.get("resourceId", ""),
+                "market": payload.get("market", "").upper(),
+                "symbol": payload.get("symbol", []),
+                "token": payload.get("token", ""),
+                "url": payload.get("url", ""),
+            }), 200
         json_path = Path(str(json_path_str))
 
     try:
@@ -2821,90 +2976,38 @@ def api_job_preview(job_id: str) -> Response:
                 prev_path_str = prev_entry.get("json")
                 if prev_path_str:
                     prev_json_path = Path(str(prev_path_str))
-
-        preview = scrape_preview_from_json(json_path, limit=payload.get("top") or 1000, previous_json_path=prev_json_path)
-        preview["market"] = payload.get("market", "").upper()
-        preview["symbol"] = payload.get("symbol", [])
-        if isinstance(preview["symbol"], str):
-            preview["symbol"] = [preview["symbol"]]
-        preview["token"] = payload.get("token", "").upper()
-        preview["rewardToken"] = payload.get("rewardToken", "")
-        preview["rewardAmount"] = payload.get("rewardAmount", "")
-        preview["rewardTiers"] = payload.get("rewardTiers")
-        preview["rewardMode"] = payload.get("rewardMode")
-        preview["totalReward"] = payload.get("totalReward")
-        preview["eligibleUsers"] = payload.get("eligibleUsers")
-        if preview.get("rewardTiers"):
-            preview["totalRewardAmount"] = sum(
-                int(t.get("amount", 0)) for t in preview["rewardTiers"]
+        limit = payload.get("top") or 1000
+        cache_key = (
+            "preview",
+            _file_sig(json_path),
+            _file_sig(prev_json_path),
+            limit,
+            json.dumps(
+                {
+                    "rewardMode": payload.get("rewardMode"),
+                    "rewardTiers": payload.get("rewardTiers"),
+                    "eligibleUsers": payload.get("eligibleUsers"),
+                    "market": payload.get("market", "").upper(),
+                    "symbol": payload.get("symbol", []),
+                    "token": payload.get("token", "").upper(),
+                    "rewardToken": payload.get("rewardToken", ""),
+                    "rewardAmount": payload.get("rewardAmount", ""),
+                    "activityStart": payload.get("activityStart"),
+                    "activityEnd": payload.get("activityEnd"),
+                },
+                sort_keys=True,
+                default=str,
+            ),
+        )
+        base = _cache_get(_preview_cache, cache_key)
+        if base is None:
+            base = _build_preview_base(
+                json_path, prev_json_path, limit, payload, job, snapshots
             )
-        job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
-        rid = str(payload.get("resourceId") or "").strip()
-        preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
-        preview["activityStart"] = payload.get("activityStart")
-        preview["activityEnd"] = payload.get("activityEnd")
-        preview["snapshots"] = [
-            {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
-            for s in snapshots
-        ]
-        # Previous snapshot stats for环比计算
-        prev_stats = None
-        if prev_json_path and prev_json_path.exists():
-            prev_data = read_json(prev_json_path, {})
-            prev_rows = prev_data.get("rows") if isinstance(prev_data, dict) else []
-            if isinstance(prev_rows, list):
-                r_mode = payload.get("rewardMode") or "rank"
-                r_tiers = payload.get("rewardTiers") or []
-                r_eligible = int(payload.get("eligibleUsers") or 0)
-                if r_mode == "rank" and r_tiers:
-                    sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
-                    ranges = []
-                    cursor = 1
-                    for t in sorted_tiers:
-                        rmin = t.get("rankMin", 0)
-                        rmax = t.get("rankMax", 0)
-                        if rmin > cursor:
-                            ranges.append((f"{cursor}~{rmin-1}", cursor, rmin-1))
-                        ranges.append((f"{rmin}~{rmax}", rmin, rmax))
-                        cursor = rmax + 1
-                elif r_mode == "total" and r_eligible > 0:
-                    ranges = [(f"1~{r_eligible}", 1, r_eligible)]
-                else:
-                    ranges = [("1~5",1,5),("6~20",6,20),("21~50",21,50),("51~200",51,200),("201~1000",201,1000)]
-                stats_list = []
-                for label, rmin, rmax in ranges:
-                    items = [r for r in prev_rows if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
-                    n = len(items)
-                    if n == 0:
-                        stats_list.append({"label": label, "total": 0, "avg": 0, "med": 0, "q1": 0, "last": 0})
-                        continue
-                    total = sum(float(r.get("grade", 0) or 0) for r in items)
-                    by_grade = sorted(items, key=lambda r: float(r.get("grade", 0) or 0))
-                    grades = [float(r.get("grade", 0) or 0) for r in by_grade]
-                    avg = total / n
-                    med = grades[n // 2] if n % 2 else (grades[n // 2 - 1] + grades[n // 2]) / 2
-                    q1_index = int(n * 0.25)
-                    q1 = grades[min(q1_index, n - 1)]
-                    last = float(items[-1].get("grade", 0) or 0)
-                    stats_list.append({"label": label, "total": total, "avg": avg, "med": med, "q1": q1, "last": last})
-                prev_stats = stats_list
-        preview["prevStats"] = prev_stats
-        team_db = load_teams_db()
-        team_lookup: dict[str, str] = {}
-        team_sizes: dict[str, int] = {}
-        for team in team_db.get("teams") or []:
-            team_name = team.get("name", "")
-            team_sizes[team_name] = len(team.get("members") or [])
-            for m in team.get("members") or []:
-                key = (m.get("nickname") or "").strip()
-                if key and key not in team_lookup:
-                    team_lookup[key] = team_name
-        team_map: dict[str, str] = {}
-        for row in preview.get("rows") or []:
-            nick = row.get("nickname") or ""
-            team_name = team_lookup.get(nickname_value({"nickName": nick}))
-            if team_name:
-                team_map[nick] = team_name
+            _cache_put(_preview_cache, cache_key, base, _PREVIEW_CACHE_MAX)
+        preview = dict(base)
+
+        team_map, team_sizes = _build_team_map(preview.get("rows") or [])
         preview["teamMap"] = team_map
         preview["teamSizes"] = team_sizes
         p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
@@ -2924,7 +3027,9 @@ def api_job_preview(job_id: str) -> Response:
 
 @app.get("/api/jobs/<job_id>/trend")
 def api_job_trend(job_id: str) -> Response:
-    """Return per-tier statistics across all snapshots for a job."""
+    """Return per-tier statistics across all snapshots for a job.
+    Optional ?hours=N to compute pctTrend within last N hours before activityEnd."""
+    hours_param = request.args.get("hours", type=int)
     jobs = load_jobs()
     job = next((j for j in jobs if j.get("id") == job_id), None)
     if not job:
@@ -2954,6 +3059,31 @@ def api_job_trend(job_id: str) -> Response:
     else:
         ranges = [("1~5", 1, 5), ("6~20", 6, 20), ("21~50", 21, 50), ("51~200", 51, 200), ("201~1000", 201, 1000)]
     top = payload.get("top") or 1000
+
+    # Cacheable: depends only on snapshot files + reward config + hours param
+    trend_key = (
+        "trend",
+        tuple(
+            _file_sig(Path(str(s.get("json"))))
+            for s in sorted_snaps
+            if s.get("json")
+        ),
+        top,
+        hours_param,
+        json.dumps(
+            {
+                "rewardMode": r_mode,
+                "rewardTiers": r_tiers,
+                "eligibleUsers": r_eligible,
+            },
+            sort_keys=True,
+            default=str,
+        ),
+    )
+    cached_resp = _cache_get(_trend_cache, trend_key)
+    if cached_resp is not None:
+        return jsonify(cached_resp)
+
     result_snapshots = []
     prev_grade_map: dict[int, float] = {}
     for snap in sorted_snaps:
@@ -3003,7 +3133,63 @@ def api_job_trend(job_id: str) -> Response:
             rs["dratio"] = round(rs["sumDelta"] / total_delta * 100, 2) if total_delta else 0
         result_snapshots.append({"timestamp": snap["timestamp"], "rows": len(limited), "totalVol": total_vol, "ranges": range_out})
         prev_grade_map = cur_map
-    return jsonify({"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]})
+    resp: dict[str, Any] = {"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]}
+    # pctTrend: windowed analysis when hours param is given
+    if hours_param and hours_param > 0 and result_snapshots:
+        act_end_str = (payload.get("activityEnd") or "").strip()
+        if act_end_str:
+            try:
+                clean = act_end_str.replace("T", " ")
+                if clean.count(":") == 1:
+                    clean += ":00"
+                act_end_dt = datetime.strptime(clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+            except Exception:
+                act_end_dt = None
+            if act_end_dt:
+                def snap_dt(ts: str) -> datetime:
+                    try:
+                        return datetime.strptime(ts, "%Y-%m-%dT%H%M%S").replace(tzinfo=BJ)
+                    except Exception:
+                        return datetime.min.replace(tzinfo=BJ)
+                last = None
+                for s in reversed(result_snapshots):
+                    if snap_dt(s["timestamp"]) <= act_end_dt:
+                        last = s
+                        break
+                if last is not None:
+                    target_dt = snap_dt(last["timestamp"]) - timedelta(hours=hours_param)
+                    first = None
+                    for s in reversed(result_snapshots):
+                        if snap_dt(s["timestamp"]) <= target_dt:
+                            first = s
+                            break
+                    if first is not None and first is not last:
+                        total_vol_delta = last["totalVol"] - first["totalVol"]
+                    trend_ranges = []
+                    for i, label in enumerate(resp["rangeLabels"]):
+                        first_r = first["ranges"][i]
+                        last_r = last["ranges"][i]
+                        vol_delta = last_r["total"] - first_r["total"]
+                        pct_change = round(last_r["pct"] - first_r["pct"], 2)
+                        delta_pct_of_total = round(vol_delta / total_vol_delta * 100, 2) if total_vol_delta else 0
+                        trend_ranges.append({
+                            "label": label,
+                            "pctStart": first_r["pct"],
+                            "pctEnd": last_r["pct"],
+                            "pctChange": pct_change,
+                            "volStart": first_r["total"],
+                            "volEnd": last_r["total"],
+                            "volDelta": vol_delta,
+                            "deltaPctOfTotal": delta_pct_of_total,
+                        })
+                    resp["pctTrend"] = {
+                        "windowStart": first["timestamp"],
+                        "windowEnd": last["timestamp"],
+                        "totalVolDelta": total_vol_delta,
+                        "ranges": trend_ranges,
+                    }
+    _cache_put(_trend_cache, trend_key, resp, _TREND_CACHE_MAX)
+    return jsonify(resp)
 
 
 @app.get("/api/jobs/<job_id>/team-analysis")
@@ -3856,6 +4042,13 @@ def files(relative: str) -> Response:
     if any(part.startswith(".") for part in parts) or target.suffix.lower() in blocked_suffixes:
         return jsonify({"error": "not found"}), 404
     if not target.exists() or not target.is_file():
+        if target.suffix.lower() == ".xlsx":
+            json_sibling = target.with_suffix(".json")
+            if json_sibling.exists():
+                sheet_name = infer_name_from_file(json_sibling) or json_sibling.parent.name
+                ensure_scrape_xlsx(json_sibling, sheet_name)
+                if target.exists() and target.is_file():
+                    return send_from_directory(target.parent, target.name)
         return jsonify({"error": "not found"}), 404
     return send_from_directory(target.parent, target.name)
 
@@ -3887,6 +4080,20 @@ def api_job_delta_analysis(job_id: str) -> Response:
     if len(snapshots) < 2:
         return jsonify({"error": "至少需要 2 个快照"}), 400
 
+    max_tier_rank = None
+    reward_mode = payload.get("rewardMode") or "rank"
+    if reward_mode == "rank":
+        tiers = payload.get("rewardTiers") or []
+        if tiers:
+            max_tier_rank = max(t.get("rankMax", 0) for t in tiers if isinstance(t, dict))
+    elif reward_mode == "total":
+        eligible = payload.get("eligibleUsers")
+        if eligible:
+            try:
+                max_tier_rank = int(eligible)
+            except (TypeError, ValueError):
+                pass
+
     try:
         proxy = choose_binance_proxy("auto", timeout=8)
     except ScriptError:
@@ -3908,9 +4115,17 @@ def api_job_delta_analysis(job_id: str) -> Response:
         updated_at_ms = to_decimal(meta.get("updatedTime"))
         if updated_at_ms is None:
             continue
+        all_sum = to_decimal(data.get("sum"))
+        tier_sum = None
+        if max_tier_rank is not None:
+            rows = data.get("rows") if isinstance(data, dict) else None
+            if isinstance(rows, list):
+                tier_rows = [r for r in rows if r.get("sequence") is not None and int(r.get("sequence")) <= max_tier_rank]
+                tier_sum = sum((to_decimal(r.get("grade")) for r in tier_rows if r.get("grade") is not None), Decimal("0"))
         snapshot_data.append({
             "timestamp": s["timestamp"],
-            "sum": to_decimal(data.get("sum")),
+            "sum": tier_sum if tier_sum is not None else all_sum,
+            "originalSum": all_sum,
             "eligibleVolume": to_decimal(meta.get("eligibleTradingVolume")),
             "totalUsers": meta.get("total"),
             "updatedTimeMs": updated_at_ms,

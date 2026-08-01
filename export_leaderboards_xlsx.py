@@ -14,7 +14,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-HEADERS = ["rank", "nickname", "userId", "grade", "restoredTradingVolume", "tradingVolume", "region"]
+HEADERS = ["rank", "nickname", "userId", "grade", "tradingVolume", "region"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,17 +79,6 @@ def to_decimal(value: Any) -> Decimal | None:
         return None
 
 
-def restored_trading_volume(row: dict[str, Any]) -> float | None:
-    volume = to_decimal(row.get("restoredTradingVolume"))
-    if volume is None:
-        volume = to_decimal(row.get("tradingVolume"))
-    if volume is None:
-        grade = to_decimal(row.get("grade"))
-        if grade is not None:
-            volume = grade * grade
-    return float(volume) if volume is not None else None
-
-
 def sheet_xml(sheet_name: str, json_path: Path) -> str:
     data = json.loads(json_path.read_text(encoding="utf-8"))
     rows = data.get("rows") or []
@@ -104,7 +93,6 @@ def sheet_xml(sheet_name: str, json_path: Path) -> str:
         ["resourceId", resource_id],
         ["count", data.get("count") or len(rows)],
         ["sum", data.get("sum")],
-        ["restoredTradingVolumeSum", data.get("restoredTradingVolumeSum")],
         ["updatedTime", updated_ms],
         ["sourceJson", str(json_path)],
         ["exportedAt", generated_at],
@@ -124,8 +112,7 @@ def sheet_xml(sheet_name: str, json_path: Path) -> str:
             item.get("nickName") or item.get("nickname"),
             item.get("userId"),
             item.get("grade"),
-            restored_trading_volume(item),
-            item.get("tradingVolume"),
+            item.get("tradingVolume") or item.get("grade"),
             item.get("region"),
         ]
         cells = "".join(cell_xml(row_index, col_index, value) for col_index, value in enumerate(values, start=1))

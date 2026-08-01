@@ -1,4 +1,4 @@
-const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.iruabmkakw.com" };
+const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.bsmkweb.cc" };
 function addCommas(n) {
   const s = String(n).trim();
   const parts = s.split(".");
@@ -24,6 +24,28 @@ const state = {
 };
 
 const TOP_DEFAULTS = { um: 400, spot: 1000, saving: 1500 };
+
+const TIER_PRESETS = [
+  {
+    name: "标准4档",
+    tiers: [
+      { rankMin: 6, rankMax: 20 },
+      { rankMin: 21, rankMax: 50 },
+      { rankMin: 51, rankMax: 200 },
+      { rankMin: 201, rankMax: 1000 },
+    ],
+  },
+  {
+    name: "标准5档",
+    tiers: [
+      { rankMin: 6, rankMax: 20 },
+      { rankMin: 21, rankMax: 50 },
+      { rankMin: 51, rankMax: 200 },
+      { rankMin: 201, rankMax: 1000 },
+      { rankMin: 1001, rankMax: 5000 },
+    ],
+  },
+];
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -118,6 +140,18 @@ function normalizeTaskUrl(value) {
     return `${url.origin}${url.pathname.replace(/\/+$/, "")}${url.search}`;
   } catch {
     return raw.replace(/\/+$/, "");
+  }
+}
+
+function withDomain(value, host) {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  try {
+    const url = new URL(raw);
+    url.host = host;
+    return url.toString();
+  } catch {
+    return raw;
   }
 }
 
@@ -223,21 +257,11 @@ function openEditModal(job) {
   document.getElementById("editRewardMode").value = rewardMode;
   document.getElementById("rewardRankFields").style.display = rewardMode === "rank" ? "" : "none";
   document.getElementById("rewardTotalFields").style.display = rewardMode === "total" ? "" : "none";
-  const tiers = p.rewardTiers && p.rewardTiers.length ? p.rewardTiers : [
-    {rankMin:6, rankMax:20, amount:"0"},
-    {rankMin:21, rankMax:50, amount:"0"},
-    {rankMin:51, rankMax:200, amount:"0"},
-    {rankMin:201, rankMax:1000, amount:"0"},
-  ];
-  for (let i = 0; i < 4; i++) {
-    const t = tiers[i] || {};
-    const minEl = document.getElementById("editTier" + i + "Min");
-    const maxEl = document.getElementById("editTier" + i + "Max");
-    const amtEl = document.getElementById("editTier" + i + "Amt");
-    if (minEl) minEl.value = t.rankMin != null ? t.rankMin : "";
-    if (maxEl) maxEl.value = t.rankMax != null ? t.rankMax : "";
-    if (amtEl) amtEl.value = addCommas(t.amount || "0");
-  }
+  const rowsEl = document.getElementById("editTierRows");
+  rowsEl.innerHTML = "";
+  _tierRowCount = 0;
+  const tiers = p.rewardTiers && p.rewardTiers.length ? p.rewardTiers : [{ rankMin: 6, rankMax: 20, amount: "0" }];
+  for (const t of tiers) addTierRow(t);
   document.getElementById("editTotalReward").value = addCommas(p.totalReward || "");
   document.getElementById("editEligibleUsers").value = p.eligibleUsers != null ? addCommas(String(p.eligibleUsers)) : "";
   const rid = p.resourceId || "";
@@ -250,13 +274,69 @@ function openEditModal(job) {
   document.getElementById("editModal").style.display = "";
 }
 
+let _tierRowCount = 0;
+
+function addTierRow(tier) {
+  const rowsEl = document.getElementById("editTierRows");
+  if (!rowsEl) return;
+  _tierRowCount++;
+  const t = tier || {};
+  const row = document.createElement("div");
+  row.className = "tier-row";
+  row.innerHTML =
+    `<span class="tier-label">第${_tierRowCount}档</span>` +
+    `<input class="tier-min" type="number" min="1" value="${t.rankMin != null ? t.rankMin : ""}" />` +
+    `<span class="tier-sep">~</span>` +
+    `<input class="tier-max" type="number" min="1" value="${t.rankMax != null ? t.rankMax : ""}" />` +
+    `<span class="tier-arrow">奖励</span>` +
+    `<input class="tier-amt" type="text" inputmode="numeric" placeholder="0" value="${t.amount != null ? addCommas(t.amount) : ""}" />` +
+    `<button type="button" class="tier-del-btn" title="删除档位">×</button>`;
+  const amtEl = row.querySelector(".tier-amt");
+  amtEl.addEventListener("blur", () => { const v = amtEl.value.trim(); if (v) amtEl.value = addCommas(v.replace(/,/g, "")); });
+  row.querySelector(".tier-del-btn").addEventListener("click", () => {
+    const remaining = rowsEl.querySelectorAll(".tier-row").length;
+    if (remaining <= 1) return;
+    row.remove();
+    renumberTierRows();
+  });
+  rowsEl.appendChild(row);
+}
+
+function renumberTierRows() {
+  const rowsEl = document.getElementById("editTierRows");
+  rowsEl.querySelectorAll(".tier-row .tier-label").forEach((label, i) => {
+    label.textContent = `第${i + 1}档`;
+  });
+}
+
+function populateTierPresets() {
+  const select = document.getElementById("tierPresetSelect");
+  if (!select) return;
+  select.innerHTML = '<option value="">选择预设...</option>' + TIER_PRESETS.map((p, i) =>
+    `<option value="${i}">${escapeHtml(p.name)}</option>`
+  ).join("");
+  select.addEventListener("change", () => {
+    const idx = parseInt(select.value, 10);
+    if (!Number.isFinite(idx) || !TIER_PRESETS[idx]) return;
+    const rowsEl = document.getElementById("editTierRows");
+    rowsEl.innerHTML = "";
+    _tierRowCount = 0;
+    for (const t of TIER_PRESETS[idx].tiers) addTierRow({ ...t, amount: "0" });
+    select.value = "";
+  });
+}
+
+populateTierPresets();
+
+document.getElementById("addTierBtn").addEventListener("click", () => addTierRow({}));
+
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
 });
 
 // blur handlers to format comma-separated number inputs
-document.querySelectorAll("#editModal .tier-amt, #editTotalReward, #editEligibleUsers").forEach(el => {
+document.querySelectorAll("#editTotalReward, #editEligibleUsers").forEach(el => {
   el.addEventListener("blur", () => { const v = el.value.trim(); if (v) el.value = addCommas(v.replace(/,/g, "")); });
 });
 
@@ -291,17 +371,17 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const body = { market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardMode, activityStart, activityEnd, top: topVal > 0 ? topVal : undefined };
   if (rewardMode === "rank") {
     const rewardTiers = [];
-    for (let i = 0; i < 4; i++) {
-      const minEl = document.getElementById("editTier" + i + "Min");
-      const maxEl = document.getElementById("editTier" + i + "Max");
-      const amtEl = document.getElementById("editTier" + i + "Amt");
+    document.querySelectorAll("#editTierRows .tier-row").forEach(row => {
+      const minEl = row.querySelector(".tier-min");
+      const maxEl = row.querySelector(".tier-max");
+      const amtEl = row.querySelector(".tier-amt");
       const rmin = parseInt(minEl?.value);
       const rmax = parseInt(maxEl?.value);
       const amt = (amtEl?.value || "").replace(/,/g, "").trim() || "0";
       if (rmin >= 1 && rmax >= rmin) {
         rewardTiers.push({ rankMin: rmin, rankMax: rmax, amount: amt || "0" });
       }
-    }
+    });
     if (rewardTiers.length) body.rewardTiers = rewardTiers;
   } else {
     body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
@@ -342,6 +422,8 @@ function renderJobs(jobs) {
     const statusZh = { completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
     const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
     const url = normalizeTaskUrl(payload.url);
+    const officialUrl = withDomain(url, DOMAIN.OFFICIAL);
+    const mirrorUrl = withDomain(url, DOMAIN.MIRROR);
     const jobName = job.name || payload.name || payload.resourceId || job.id;
     const rid = payload.resourceId ? String(payload.resourceId) : "";
     const displayName = rid ? `${jobName}  [${rid}]` : jobName;
@@ -375,7 +457,7 @@ function renderJobs(jobs) {
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
-          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(url.replace(DOMAIN.OFFICIAL, DOMAIN.MIRROR))}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
+          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
           <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>

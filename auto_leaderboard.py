@@ -797,27 +797,6 @@ def decimal_text(value: Decimal) -> str:
     return format(value, "f")
 
 
-def restored_trading_volume(row: dict[str, Any]) -> Decimal | None:
-    volume = to_decimal(row.get("tradingVolume"))
-    if volume is not None:
-        return volume
-    grade = to_decimal(row.get("grade"))
-    if grade is None:
-        return None
-    return grade * grade
-
-
-def enrich_restored_trading_volume(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    enriched = []
-    for row in rows:
-        current = dict(row)
-        volume = restored_trading_volume(current)
-        if volume is not None:
-            current["restoredTradingVolume"] = float(volume)
-        enriched.append(current)
-    return enriched
-
-
 def row_rank(row: dict[str, Any]) -> int | None:
     try:
         return int(row.get("sequence"))
@@ -846,7 +825,6 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "userId",
         "nickName",
         "grade",
-        "restoredTradingVolume",
         "tradingVolume",
         "hitRisk",
         "avatarUrl",
@@ -1103,20 +1081,13 @@ def main() -> int:
                     "resourceId": resource_id,
                     "rows": 0,
                     "sum": "0",
-                    "restoredTradingVolumeSum": "0",
                     "skipped": True,
                     "reason": skip_reason,
                 }
             )
             continue
-        rows = enrich_restored_trading_volume(rows)
         values = [to_decimal(row.get("grade")) for row in rows]
         total = sum((value for value in values if value is not None), Decimal("0"))
-        restored_values = [restored_trading_volume(row) for row in rows]
-        restored_total = sum(
-            (value for value in restored_values if value is not None),
-            Decimal("0"),
-        )
 
         ts_prefix = cli_ts_prefix or timestamp_from_updated_time(meta.get("updatedTime")) or now_bj()
         file_prefix = (
@@ -1142,7 +1113,6 @@ def main() -> int:
                     "resourceId": resource_id,
                     "rows": len(rows),
                     "sum": decimal_text(total),
-                    "restoredTradingVolumeSum": decimal_text(restored_total),
                     "skipped": True,
                     "reason": "snapshot_exists",
                     "csv": str(csv_path),
@@ -1164,10 +1134,8 @@ def main() -> int:
                 "resourceId": resource_id,
                 "top": args.top,
                 "field": "grade",
-                "restoredField": "restoredTradingVolume",
                 "count": len(rows),
                 "sum": decimal_text(total),
-                "restoredTradingVolumeSum": decimal_text(restored_total),
                 "meta": meta,
                 "rows": rows,
             },
@@ -1197,7 +1165,6 @@ def main() -> int:
                 "resourceId": resource_id,
                 "rows": len(rows),
                 "sum": decimal_text(total),
-                "restoredTradingVolumeSum": decimal_text(restored_total),
                 "csv": str(csv_path),
                 "json": str(json_path),
                 "discovery": str(discovery_path),

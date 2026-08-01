@@ -194,6 +194,28 @@
         </table>
       </div>
     </div>
+
+    <hr class="page-sep">
+
+    <div class="analysis-panel" id="pctTrendPanel" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+        <h3 style="margin:0;font-size:13px;color:var(--accent)">最后 4h：增量占比 vs 占比变化</h3>
+        <div id="pctTrendHours" class="btn-group">
+          <button class="chart-group-btn" data-hours="2">2h</button>
+          <button class="chart-group-btn active" data-hours="4">4h</button>
+          <button class="chart-group-btn" data-hours="6">6h</button>
+        </div>
+        <div id="pctTrendGroupToggle" class="btn-group" style="margin-left:auto">
+          <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
+          <button class="chart-group-btn" data-mode="job">按任务分组</button>
+        </div>
+        <button id="loadPctTrendBtn" class="market-btn" style="font-size:12px;padding:2px 14px;min-height:30px">加载趋势数据</button>
+        <span id="pctTrendStatus" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="chart-wrap">
+        <svg id="pctTrendChart" height="360"></svg>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -1337,6 +1359,186 @@ document.getElementById("distGroupToggle").addEventListener("click", evt => {
   _distGroupBy = btn.dataset.mode;
   renderDistributionChart(allRankJobs, _cachedRanges);
 });
+
+// ——— 增量占比 vs 占比变化 ———
+let _pctTrendHours = 4;
+let _pctTrendGroupBy = "tier"; // "tier" | "job"
+let _pctTrendPoints = [];
+
+function showPctTrendPanel() {
+  const visible = allRankJobs.filter(j => selectedJobIds.includes(j.id));
+  const hasEnd = visible.some(j => j.activityEnd);
+  document.getElementById("pctTrendPanel").style.display = hasEnd ? "" : "none";
+}
+
+function loadPctTrendData() {
+  const visible = allRankJobs.filter(j => selectedJobIds.includes(j.id));
+  const status = document.getElementById("pctTrendStatus");
+  const btn = document.getElementById("loadPctTrendBtn");
+  btn.disabled = true;
+  status.textContent = "加载中...";
+  const promises = visible.map(j =>
+    fetch("/api/jobs/" + encodeURIComponent(j.id) + "/trend?hours=" + _pctTrendHours)
+      .then(r => r.ok ? r.json() : null)
+  );
+  Promise.all(promises).then(results => {
+    _pctTrendPoints = [];
+    let jobCount = 0;
+    for (let ji = 0; ji < visible.length; ji++) {
+      const r = results[ji];
+      if (!r || !r.pctTrend || !r.pctTrend.ranges) continue;
+      jobCount++;
+      for (const tr of r.pctTrend.ranges) {
+        if (tr.deltaPctOfTotal == null || tr.pctChange == null) continue;
+        _pctTrendPoints.push({
+          jobName: visible[ji].name || visible[ji].resourceId || visible[ji].id,
+          label: tr.label,
+          x: tr.deltaPctOfTotal,
+          y: tr.pctChange,
+        });
+      }
+    }
+    if (!_pctTrendPoints.length) {
+      status.textContent = "无趋势数据";
+    } else {
+      status.textContent = `已加载 ${jobCount} 个任务 ${_pctTrendPoints.length} 个数据点`;
+    }
+    renderPctTrendChart();
+    btn.disabled = false;
+  }).catch(err => {
+    status.textContent = "加载失败: " + err.message;
+    btn.disabled = false;
+  });
+}
+
+function renderPctTrendChart() {
+  const chartEl = document.getElementById("pctTrendChart");
+  const points = _pctTrendPoints;
+  const groupBy = _pctTrendGroupBy;
+  if (!points.length) {
+    chartEl.innerHTML = '<text x="280" y="180" text-anchor="middle" fill="#999" font-size="13">无趋势数据</text>';
+    chartEl.setAttribute("width", 560);
+    chartEl.setAttribute("height", 360);
+    return;
+  }
+
+  const rowMap = {};
+  for (const p of points) {
+    const key = groupBy === "tier" ? p.label : p.jobName;
+    if (!rowMap[key]) rowMap[key] = { label: key, items: [] };
+    rowMap[key].items.push(p);
+  }
+  const rows = Object.values(rowMap);
+  const maxY = Math.max(0, ...points.map(p => p.x)) * 1.1 || 1;
+  const maxAbs = Math.max(0.01, ...points.map(p => Math.abs(p.y)));
+
+  const maxBars = Math.max(...rows.map(r => r.items.length));
+  const W = 60 + rows.length * (maxBars * 20 + 24);
+  const H = 360, ML = 60, MR = 20, MT = 20, MB = 60;
+  const PW = W - ML - MR;
+  const PH = H - MT - MB;
+  const groupW = PW / rows.length;
+  const barW = Math.min(16, groupW / maxBars - 2);
+
+  function sy(v) { return MT + PH - (v / maxY) * PH; }
+  function pctColor(v) {
+    if (v === 0) return '#999';
+    const t = Math.abs(v) / maxAbs;
+    const o = (0.2 + t * 0.8).toFixed(2);
+    return v > 0 ? `rgba(39,174,96,${o})` : `rgba(192,57,43,${o})`;
+  }
+  function pctTextColor(v) {
+    if (Math.abs(v) < 0.05) return '#999';
+    return v > 0 ? '#27ae60' : '#c0392b';
+  }
+
+  let svg = '<defs><linearGradient id="pctGrad" x1="0" y1="0" x2="1" y2="0">';
+  svg += '<stop offset="0%" stop-color="rgba(192,57,43,0.85)"/>';
+  svg += '<stop offset="50%" stop-color="#bbb"/>';
+  svg += '<stop offset="100%" stop-color="rgba(39,174,96,0.85)"/>';
+  svg += '</linearGradient></defs>';
+
+  // Y axis
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  for (let i = 0; i <= 4; i++) {
+    const v = maxY * i / 4;
+    const y = sy(v);
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<text x="${ML - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${v.toFixed(1)}</text>`;
+  }
+  svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">增量占比 (%)</text>`;
+
+  // X axis
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+
+  // Groups + bars
+  for (let ri = 0; ri < rows.length; ri++) {
+    const r = rows[ri];
+    const gx = ML + ri * groupW;
+    const label = r.label.length > 10 ? r.label.slice(0, 9) + '…' : r.label;
+    svg += `<text class="bar-group-label" x="${gx + groupW / 2}" y="${MT + PH + 18}">${escapeHtml(label)}</text>`;
+
+    const totalW = r.items.length * barW + (r.items.length - 1) * 4;
+    const startX = gx + (groupW - totalW) / 2;
+
+    for (let bi = 0; bi < r.items.length; bi++) {
+      const p = r.items[bi];
+      const bh = Math.max((p.x / maxY) * PH, 1);
+      const bx = startX + bi * (barW + 4);
+      const by = sy(p.x);
+      const tip = escapeHtml(`${p.jobName}　${p.label}　增量占比: ${p.x.toFixed(2)}%　占比变化: ${p.y.toFixed(2)}pp`);
+      const pctStr = (p.y >= 0 ? '+' : '') + p.y.toFixed(1);
+
+      svg += `<rect class="bar-rect" x="${bx}" y="${by}" width="${barW}" height="${Math.max(bh, 1)}" fill="${pctColor(p.y)}" rx="2"
+        onmouseenter="showBarTip(event,'${tip}')"
+        onmousemove="moveBarTip(event)"
+        onmouseleave="hideBarTip()"/>`;
+      svg += `<text x="${bx + barW / 2}" y="${by - 3}" text-anchor="middle" font-size="9" fill="${pctTextColor(p.y)}">${pctStr}pp</text>`;
+    }
+  }
+
+  // Color legend
+  const Lx = ML + PW + 10, Ly = MT + 8;
+  svg += `<rect x="${Lx}" y="${Ly}" width="110" height="12" fill="url(#pctGrad)" rx="2"/>`;
+  const lc = Lx + 55;
+  svg += `<text x="${Lx + 4}" y="${Ly + 24}" font-size="10" fill="#c0392b">下降</text>`;
+  svg += `<text x="${lc}" y="${Ly + 24}" text-anchor="middle" font-size="10" fill="#999">0</text>`;
+  svg += `<text x="${Lx + 106}" y="${Ly + 24}" text-anchor="end" font-size="10" fill="#27ae60">增长</text>`;
+
+  const W2 = ML + PW + 10 + 120 + MR;
+
+  chartEl.setAttribute("width", Math.max(W2, 400));
+  chartEl.setAttribute("height", Math.max(H, 120));
+  chartEl.innerHTML = svg;
+}
+
+// pctTrend hours toggle
+document.getElementById("pctTrendHours").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#pctTrendHours .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _pctTrendHours = parseInt(btn.dataset.hours);
+});
+
+// pctTrend group toggle
+document.getElementById("pctTrendGroupToggle").addEventListener("click", evt => {
+  const btn = evt.target.closest(".chart-group-btn");
+  if (!btn || btn.classList.contains("active")) return;
+  document.querySelectorAll("#pctTrendGroupToggle .chart-group-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  _pctTrendGroupBy = btn.dataset.mode;
+  renderPctTrendChart();
+});
+
+document.getElementById("loadPctTrendBtn").addEventListener("click", loadPctTrendData);
+
+// Hook into job selection to show/hide panel
+const _origRenderJobSelector = renderJobSelector;
+renderJobSelector = function(jobs, ranges) {
+  _origRenderJobSelector(jobs, ranges);
+  showPctTrendPanel();
+};
 </script>
 </body>
 </html>
