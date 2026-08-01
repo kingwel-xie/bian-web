@@ -2264,6 +2264,7 @@ def api_analysis() -> Response:
 
     job_data: list[dict[str, Any]] = []
     max_rank = 0
+    tier_union: set[tuple[int, int]] = set()
 
     for job in candidates:
         payload = job.get("payload", {})
@@ -2286,6 +2287,12 @@ def api_analysis() -> Response:
             continue
 
         reward_mode = payload.get("rewardMode") or "rank"
+        if reward_mode == "rank":
+            for t in payload.get("rewardTiers") or []:
+                try:
+                    tier_union.add((int(t["rankMin"]), int(t["rankMax"])))
+                except (KeyError, TypeError, ValueError):
+                    continue
         for r in limited:
             if reward_mode != "rank":
                 continue
@@ -2299,7 +2306,23 @@ def api_analysis() -> Response:
             "rows": limited,
         })
 
-    ranges = _extend_ranges(max_rank)
+    sorted_tiers = sorted(tier_union, key=lambda t: (t[0], t[1]))
+    merged_tiers: list[tuple[int, int]] = []
+    for rmin, rmax in sorted_tiers:
+        if merged_tiers and rmin <= merged_tiers[-1][1]:
+            if rmax > merged_tiers[-1][1]:
+                merged_tiers[-1] = (merged_tiers[-1][0], rmax)
+        else:
+            merged_tiers.append((rmin, rmax))
+    ranges: list[tuple[int, int]] = []
+    cursor = 1
+    for rmin, rmax in merged_tiers:
+        if rmin > cursor:
+            ranges.append((cursor, rmin - 1))
+        ranges.append((rmin, rmax))
+        cursor = rmax + 1
+    if not ranges:
+        ranges = list(_ANALYSIS_RANGES)
 
     results: list[dict[str, Any]] = []
     needs_save = False

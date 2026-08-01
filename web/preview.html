@@ -34,6 +34,7 @@
   .add-team-btn { font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
   .add-team-btn:hover { background: #a0988a; }
   .chg-up { color: #c0392b; font-weight: 700; } .chg-down { color: #27ae60; font-weight: 700; } .chg-flat { color: #999; }
+  .chg-new { color: #c0392b; font-weight: 700; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .tl { text-align: left; }
   th.num { text-align: right; }
@@ -861,8 +862,8 @@ let page = 1;
       }
       if (rankChangeSort) {
         rows = [...rows].sort((a, b) => {
-          const da = (a._pr ?? a.rank) - a.rank;
-          const db = (b._pr ?? b.rank) - b.rank;
+          const da = (a._pr ?? Infinity) - a.rank;
+          const db = (b._pr ?? Infinity) - b.rank;
           return rankChangeSort === "up" ? da - db : db - da;
         });
       }
@@ -883,7 +884,7 @@ let page = 1;
         const nickHtml = teamName
           ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
           : `${escapeHtml(r.nickname || "—")}<sup class="add-team-btn" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</sup>`;
-        const chgHtml = r._pr == null ? "—"
+        const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
           : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
           : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
           : `<span class="chg-flat">-</span>`;
