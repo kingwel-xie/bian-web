@@ -272,11 +272,14 @@ function addCandidate(result, id, source) {
 
   const results = [];
   for (const activity of activities) {
-    const result = { name: activity.name, url: activity.url, title: null, candidates: [], events: [], errors: [] };
+    const result = { name: activity.name, url: activity.url, title: null, candidates: [], events: [], errors: [], apis: [] };
+    const apis = new Set();
     const page = await context.newPage();
 
     page.on('response', async (response) => {
       const url = response.url();
+      const bapiMatch = url.match(/binance\.com\/(bapi\/[a-z0-9_-]+)/i);
+      if (bapiMatch) apis.add(bapiMatch[1]);
       if (!url.includes('/growth-paas/')) return;
       const request = response.request();
       const reqBody = parseJson(request.postData() || '');
@@ -353,6 +356,7 @@ function addCandidate(result, id, source) {
     } finally {
       await page.close().catch(() => {});
     }
+    result.apis = Array.from(apis).sort();
     results.push(result);
   }
 
@@ -381,6 +385,8 @@ def discover_with_playwright(
     if not activities:
         return {}
     mode = os.environ.get("LEADERBOARD_DISCOVERY", "auto").strip().lower()
+    node_result: dict[str, dict[str, Any]] | None = None
+    node_reason: str | None = None
     if mode in {"auto", "node", "playwright"} and node_playwright_available():
         try:
             node_result = discover_with_node_playwright(activities, proxy, wait_ms, quiet)
@@ -390,11 +396,73 @@ def discover_with_playwright(
         except ScriptError as exc:
             if mode in {"node", "playwright"}:
                 raise
+            node_reason = str(exc)
             log(f"Node Playwright 发现失败，回退 playwright-cli：{exc}", quiet)
+    try:
+        find_pwcli()
+    except ScriptError:
+        raise ScriptError(build_discovery_failure(node_result, node_reason, pwcli_missing=True))
     pwcli_result = discover_with_pwcli(activities, proxy, wait_ms, quiet)
     if has_candidates(pwcli_result):
         return pwcli_result
-    raise ScriptError("Node Playwright 和 playwright-cli 均未能发现 resourceId，请手动指定 --resource-id 或提供 HAR 文件")
+    raise ScriptError(build_discovery_failure(node_result, node_reason, pwcli_missing=False))
+
+
+def _api_family(url: str) -> str | None:
+    low = url.lower()
+    for marker, label in (
+        ("/growth-paas/", "/growth-paas/"),
+        ("/bapi/futures/", "/bapi/futures/"),
+        ("/bapi/apex/", "/bapi/apex/"),
+        ("/bapi/", "/bapi/"),
+    ):
+        if marker in low:
+            return label
+    return None
+
+
+def build_discovery_failure(
+    node_result: dict[str, dict[str, Any]] | None,
+    node_reason: str | None,
+    pwcli_missing: bool,
+) -> str:
+    """Build an actionable error listing what held and what the page actually requested."""
+    lines: list[str] = ["自动发现未能获得 resourceId。"]
+    if node_result:
+        for item in node_result.values():
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name") or "?"
+            title = item.get("title")
+            candidates = item.get("candidates") or []
+            events = item.get("events") or []
+            errors = item.get("errors") or []
+            apis = item.get("apis") or []
+            if not apis:
+                seen: set[str] = set()
+                for ev in events:
+                    fam = _api_family(str(ev.get("url") or ""))
+                    if fam and fam not in seen:
+                        seen.add(fam)
+                apis = sorted(seen)
+            title_part = f"标题={title!r}" if title else "标题=?"
+            fam_part = "观测接口: " + ", ".join(apis) if apis else "未捕获任何 Binance 接口请求"
+            err_part = f"；页面错误 {len(errors)} 个" if errors else ""
+            lines.append(
+                f"- {name}: {title_part}；resourceId 候选 {len(candidates)} 个；{fam_part}{err_part}"
+            )
+    else:
+        lines.append(
+            f"- Node Playwright 未运行：{node_reason or 'node/playwright 不可用'}"
+        )
+    if pwcli_missing:
+        lines.append("（备用 playwright-cli 包装器未安装，无法回退打开页面。）")
+    lines.append(
+        "当前自动发现仅监听 Binance 的 /growth-paas/.../resource/* 接口"
+        "（trading-competition 等活动页）。若页面请求来自 /bapi/futures/、/bapi/apex/ 等其他接口"
+        "（如 futures-arena 合约大师竞技场），请手动提供 --resource-id 或 HAR 文件。"
+    )
+    return "\n".join(lines)
 
 
 def discover_with_node_playwright(

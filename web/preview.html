@@ -273,9 +273,11 @@
         <option value="500">500</option>
         <option value="0">全部</option>
       </select></span>
-      <button id="pagePrev" class="pager-btn" type="button">‹ 上一页</button>
+      <button id="pageFirst" class="pager-btn" type="button" title="首页">«</button>
+      <button id="pagePrev" class="pager-btn" type="button" title="上一页">‹</button>
       <span id="pagerPage">第 1 / 1 页</span>
-      <button id="pageNext" class="pager-btn" type="button">下一页 ›</button>
+      <button id="pageNext" class="pager-btn" type="button" title="下一页">›</button>
+      <button id="pageLast" class="pager-btn" type="button" title="末页">»</button>
       <span class="pager-sep">·</span>
       <span>跳至 <input id="pageJump" type="number" min="1" style="width:56px;height:26px;border:1px solid var(--line);border-radius:6px;background:#fffdf8;color:var(--ink);padding:0 6px;font-size:12px" /> 页</span>
     </div>
@@ -804,15 +806,22 @@ let page = 1;
       const pagerPage = document.getElementById("pagerPage");
       const prevBtn = document.getElementById("pagePrev");
       const nextBtn = document.getElementById("pageNext");
+      const firstBtn = document.getElementById("pageFirst");
+      const lastBtn = document.getElementById("pageLast");
       const sizeSel = document.getElementById("pageSize");
       info.textContent = `共 ${total} 行`;
       pagerPage.textContent = `第 ${totalPages === 0 ? 0 : page} / ${totalPages} 页`;
       prevBtn.disabled = page <= 1;
       nextBtn.disabled = page >= totalPages;
+      firstBtn.disabled = page <= 1;
+      lastBtn.disabled = page >= totalPages;
       sizeSel.value = String(pageSize);
     }
 
     function bindPager() {
+      document.getElementById("pageFirst").addEventListener("click", () => {
+        if (page > 1) { page = 1; renderRows(); }
+      });
       document.getElementById("pagePrev").addEventListener("click", () => {
         if (page > 1) { page--; renderRows(); }
       });
@@ -820,6 +829,11 @@ let page = 1;
         const rows = getFilteredSorted();
         const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
         if (page < totalPages) { page++; renderRows(); }
+      });
+      document.getElementById("pageLast").addEventListener("click", () => {
+        const rows = getFilteredSorted();
+        const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+        if (page < totalPages) { page = totalPages; renderRows(); }
       });
       document.getElementById("pageSize").addEventListener("change", (e) => {
         const v = parseInt(e.target.value, 10);

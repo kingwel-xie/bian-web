@@ -2951,17 +2951,19 @@ def api_job_preview(job_id: str) -> Response:
             return jsonify({"error": "快照文件路径缺失"}), 400
         json_path = Path(str(json_path_str))
     else:
-        if job.get("status") != "completed":
-            return jsonify({"error": "任务未完成"}), 400
         result = job.get("result")
         json_path_str = None
-        if isinstance(result, list) and result:
+        if job.get("status") == "completed" and isinstance(result, list) and result:
             candidate = result[0].get("json")
             if candidate and Path(str(candidate)).exists():
                 json_path_str = candidate
         if not json_path_str and snapshots:
-            json_path_str = snapshots[-1].get("json")
+            candidate = snapshots[-1].get("json")
+            if candidate and Path(str(candidate)).exists():
+                json_path_str = candidate
         if not json_path_str:
+            if job.get("status") != "completed":
+                return jsonify({"error": "任务未完成"}), 400
             return jsonify({
                 "error": None,
                 "noData": True,
