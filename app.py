@@ -1506,6 +1506,8 @@ def _extract_activity_tags(title: str) -> dict[str, list[str]]:
         if tkw in title and tkw not in seen:
             result["types"].append(tkw)
             seen.add(tkw)
+    if not result["types"]:
+        result["types"].append("其他")
     return result
 
 

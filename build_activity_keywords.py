@@ -43,7 +43,11 @@ TYPE_SEGMENTS = [
     r"交易竞赛", r"交易量锦标赛", r"邀请赛", r"交易者联盟",
     r"嘉年华", r"理财", r"Alpha", r"DeFi", r"币安学院",
     r"交易大赛", r"体验金", r"学习", r"测验",
+    r"新用户专享", r"币安广场",
 ]
+
+# 无论当前批次频次高低，始终纳入 typeKeywords（保证筛选选项存在）
+FORCED_TYPES = ["新用户专享", "币安广场"]
 
 
 def fetch_page(catalog_id: int, page: int) -> list[dict]:
@@ -113,6 +117,10 @@ def main() -> int:
 
     tokens = sorted(t for t, c in token_freq.items() if c >= 1)
     type_keywords = sorted(t for t, c in type_freq.items() if c >= 2 and t != "活动")
+    for _t in FORCED_TYPES:
+        if _t not in type_keywords:
+            type_keywords.append(_t)
+    type_keywords.sort()
 
     result = {
         "generatedAt": time.time(),
