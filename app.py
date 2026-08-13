@@ -1361,6 +1361,7 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
                     "timestamp": snapshot_ts,
                     "json": str(json_path),
                     "csv": str(item.get("csv", "")),
+                    "discovery": str(item.get("discovery", "")),
                     "rows": item.get("rows", 0),
                     "sum": item.get("sum"),
                 }
@@ -2770,7 +2771,7 @@ def api_delete_snapshot(job_id: str, snapshot_timestamp: str) -> Response:
 
         removed = snapshots.pop(idx)
         deleted_files: list[str] = []
-        for key in ("json", "csv"):
+        for key in ("json", "csv", "discovery"):
             fp = removed.get(key)
             if fp:
                 try:
@@ -2931,6 +2932,22 @@ def _build_preview_base(
             prev_stats = stats_list
     preview["prevStats"] = prev_stats
     return preview
+
+
+@app.get("/api/jobs/<job_id>/status")
+def api_job_status(job_id: str) -> Response:
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    return jsonify(
+        {
+            "id": job.get("id"),
+            "status": job.get("status"),
+            "progress": job.get("progress") or {},
+            "snapshots": len(job.get("snapshots") or []),
+        }
+    )
 
 
 @app.get("/api/jobs/<job_id>/preview")

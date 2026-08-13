@@ -303,6 +303,61 @@ function showToast(msg, ms) {
   document.body.appendChild(el);
   setTimeout(() => el.remove(), ms || 3000);
 }
+const _SCRAPE_POLL_TIMEOUT = 10 * 60 * 1000;
+function renderScrapingState(jobId, hint) {
+  document.title = "排行榜预览 — 抓取中";
+  const metaEl = document.getElementById("meta");
+  const setMeta = (html) => { if (metaEl) metaEl.innerHTML = html; };
+  setMeta(
+    `<span style="font-size:14px">⏳ 正在执行抓取，请稍候…${hint ? `<br><span style="color:#8a8171;font-size:12px">${escapeHtml(hint)}</span>` : ""}</span>` +
+    `<br><span id="scrapeProg" style="font-size:12px;color:#8a8171">正在等待任务启动…</span>`
+  );
+  document.getElementById("downloadLinks").innerHTML = "";
+  const _bar = document.getElementById("snapshotBar");
+  if (_bar) _bar.style.display = "none";
+  const _started = Date.now();
+  const _progEl = () => document.getElementById("scrapeProg");
+  const _finish = () => {
+    location.replace(location.pathname + "?job=" + encodeURIComponent(jobId || ""));
+  };
+  const _poll = async () => {
+    if (Date.now() - _started > _SCRAPE_POLL_TIMEOUT) {
+      setMeta(`<span style="font-size:14px">抓取超时，请前往主页查看任务状态。</span>`);
+      return;
+    }
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 10000);
+      const r2 = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/status", { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (!r2.ok) {
+        const d = await r2.json().catch(() => ({}));
+        setMeta(`<span style="font-size:14px">${escapeHtml((d && d.error) || "任务不存在")}</span>`);
+        return;
+      }
+      const data = await r2.json();
+      const status = data.status;
+      if (status === "queued" || status === "running") {
+        const prog = data.progress || {};
+        const label = prog.label || "正在抓取…";
+        const pct = typeof prog.percent === "number" ? prog.percent : null;
+        if (_progEl()) _progEl().textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "");
+        setTimeout(_poll, 2500);
+        return;
+      }
+      if (status === "completed") { _finish(); return; }
+      setMeta(
+        `<span style="font-size:14px">❌ 抓取失败，请前往主页查看日志。</span><br>` +
+        `<a href="#" id="scrapeRetry" style="font-size:13px">🔄 重新加载</a>`
+      );
+      const retryBtn = document.getElementById("scrapeRetry");
+      if (retryBtn) retryBtn.addEventListener("click", () => location.reload());
+    } catch {
+      setTimeout(_poll, 5000);
+    }
+  };
+  _poll();
+}
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
@@ -368,11 +423,17 @@ let page = 1;
                 url: preview.url,
               }),
             });
-            if (!resp.ok) throw new Error("HTTP " + resp.status);
-            const jobData = await resp.json();
-            const scrapeJobId = jobData?.job?.id;
-            if (scrapeJobId) location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
-            else showToast("抓取已开始，请前往主页查看。", 4000);
+            const errData = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              if (String(errData?.error || "").includes("正在抓取中")) {
+                renderScrapingState(jobId, "该活动已有抓取任务在运行。");
+              } else {
+                throw new Error(errData?.error || ("HTTP " + resp.status));
+              }
+              return;
+            }
+            const scrapeJobId = errData?.job?.id || jobId;
+            renderScrapingState(scrapeJobId, "正在拉取最新排行榜数据…");
           } catch (err) { showToast("抓取失败: " + err.message, 5000); }
         });
       }
@@ -536,6 +597,10 @@ let page = 1;
           });
           if (!resp.ok) {
             const errData = await resp.json().catch(() => ({}));
+            if (String(errData?.error || "").includes("正在抓取中")) {
+              renderScrapingState(jobId, "该活动已有抓取任务在运行。");
+              return;
+            }
             throw new Error(errData.error || `HTTP ${resp.status}`);
           }
           const jobData = await resp.json();
@@ -544,7 +609,7 @@ let page = 1;
           scrapeBtn.textContent = "⏳ 等待抓取结果...";
 
           const poll = async (startTime) => {
-            if (Date.now() - startTime > 120000) {
+            if (Date.now() - startTime > 300000) {
               scrapeBtn.textContent = "🔄 抓取";
               scrapeBtn.style.opacity = "";
               _scraping = false;
@@ -554,24 +619,44 @@ let page = 1;
             try {
               const ctrl = new AbortController();
               const tid = setTimeout(() => ctrl.abort(), 10000);
-              const r2 = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/preview", { signal: ctrl.signal });
+              const r2 = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/status", { signal: ctrl.signal });
               clearTimeout(tid);
-              if (r2.ok) {
-                const data = await r2.json();
-                const newCount = (data.snapshots || []).length;
-                if (newCount > _initialSnapCount) {
-                  location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
-                  return;
-                }
+              if (!r2.ok) { setTimeout(() => poll(startTime), 3000); return; }
+              const data = await r2.json();
+              const status = data.status;
+              if (status === "queued" || status === "running") {
+                const prog = data.progress || {};
+                const label = prog.label || "正在抓取…";
+                const pct = typeof prog.percent === "number" ? prog.percent : null;
+                scrapeBtn.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "") + "…";
+                setTimeout(() => poll(startTime), 3000);
+                return;
+              }
+              if (status === "failed") {
                 scrapeBtn.textContent = "🔄 抓取";
                 scrapeBtn.style.opacity = "";
                 _scraping = false;
-                showToast("数据无变化", 3000);
+                showToast("抓取失败，请前往主页查看日志。", 5000);
                 return;
               }
-              setTimeout(() => poll(startTime), 3000);
+              let newCount = _initialSnapCount;
+              try {
+                const pv = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/preview");
+                if (pv.ok) {
+                  const pdata = await pv.json();
+                  newCount = (pdata.snapshots || []).length;
+                }
+              } catch {}
+              if (newCount > _initialSnapCount) {
+                location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
+                return;
+              }
+              scrapeBtn.textContent = "🔄 抓取";
+              scrapeBtn.style.opacity = "";
+              _scraping = false;
+              showToast("数据无变化（抓取已完成）", 4000);
             } catch {
-              setTimeout(() => poll(startTime), 3000);
+              setTimeout(() => poll(startTime), 5000);
             }
           };
           poll(Date.now());
@@ -1767,7 +1852,11 @@ let page = 1;
       }
     });
   } catch (err) {
-    document.getElementById("meta").textContent = err.message;
+    if (String(err.message).includes("任务未完成")) {
+      renderScrapingState(jobId, "任务正在抓取中，完成后将自动刷新。");
+    } else {
+      document.getElementById("meta").textContent = err.message;
+    }
   }
 })();
 </script>
