@@ -31,8 +31,9 @@
   .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
   .row-market { background: #f5f0e6; }
   .row-prediction { background: #e8f0f5; }
-  .add-team-btn { font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
+  .add-team-btn { display: inline-flex; min-height: 0; font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
   .add-team-btn:hover { background: #a0988a; }
+  .add-team-btn:focus-visible, .pager-btn:focus-visible, .df-btn:focus-visible, .trend-tier-btn:focus-visible, .modal-close:focus-visible, .modal-close-btn:focus-visible, th[role="button"]:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
   .chg-up { color: #c0392b; font-weight: 700; } .chg-down { color: #27ae60; font-weight: 700; } .chg-flat { color: #999; }
   .chg-new { color: #c0392b; font-weight: 700; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -680,7 +681,10 @@ let page = 1;
             <button class="snap-delete" data-ts="${escapeHtml(s.timestamp)}">删除</button>
           </div>
         `).join("");
-        document.getElementById("snapshotModal").style.display = "flex";
+        const snapshotModal = document.getElementById("snapshotModal");
+        snapshotModal._opener = document.activeElement;
+        snapshotModal.style.display = "flex";
+        document.getElementById("snapModalClose").focus();
         body.querySelectorAll(".snap-delete").forEach(btn => {
           btn.addEventListener("click", () => {
             const ts = btn.dataset.ts;
@@ -764,7 +768,7 @@ let page = 1;
         const dr = _totalDelCache ? (s.sumDelta / _totalDelCache * 100).toFixed(2) + "%" : "—";
         return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmt(s.avgDelta, s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmt(s.medDelta, s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmt(s.q1Delta, s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmt(s.lastDelta, s.lastDeltaPct)}</td></tr>`;
       }).join("") + `
-        <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? fmtVolume(_totalDelCache) : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+         <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
     }
 
     function fmtVolume(v) {
@@ -982,7 +986,7 @@ let page = 1;
         const teamName = teamOfUser[r.nickname] || "";
         const nickHtml = teamName
           ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
-          : `${escapeHtml(r.nickname || "—")}<sup class="add-team-btn" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</sup>`;
+          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
         const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
           : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
           : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
@@ -1007,6 +1011,9 @@ let page = 1;
       document.getElementById("volumeSortIcon").innerHTML = volumeSort ? "▼" : "↕";
       document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
       document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
+      document.getElementById("volumeSort").setAttribute("aria-sort", volumeSort ? "descending" : "none");
+      document.querySelector(".sort-delta").setAttribute("aria-sort", deltaSort ? "descending" : "none");
+      document.getElementById("rankChangeSort").setAttribute("aria-sort", rankChangeSort === "up" ? "descending" : rankChangeSort === "down" ? "ascending" : "none");
     }
 
     function updateClearBtn() {
@@ -1033,7 +1040,15 @@ let page = 1;
       renderRows();
       updateSortIcons();
     });
-    document.getElementById("volumeSort").addEventListener("click", () => {
+    const bindSortable = (el, handler) => {
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.addEventListener("click", handler);
+      el.addEventListener("keydown", (evt) => {
+        if (evt.key === "Enter" || evt.key === " ") { evt.preventDefault(); handler(); }
+      });
+    };
+    bindSortable(document.getElementById("volumeSort"), () => {
       volumeSort = !volumeSort;
       deltaSort = false;
       rankChangeSort = "";
@@ -1041,7 +1056,7 @@ let page = 1;
       renderRows();
       updateSortIcons();
     });
-    document.querySelector(".sort-delta").addEventListener("click", () => {
+    bindSortable(document.querySelector(".sort-delta"), () => {
       deltaSort = !deltaSort;
       volumeSort = false;
       rankChangeSort = "";
@@ -1049,7 +1064,7 @@ let page = 1;
       renderRows();
       updateSortIcons();
     });
-    document.getElementById("rankChangeSort").addEventListener("click", () => {
+    bindSortable(document.getElementById("rankChangeSort"), () => {
       if (!rankChangeSort) rankChangeSort = "up";
       else if (rankChangeSort === "up") rankChangeSort = "down";
       else rankChangeSort = "";
@@ -1222,7 +1237,7 @@ let page = 1;
         const count = t.rankMax - t.rankMin + 1;
         const perPerson = count > 0 ? pool / count : 0;
         const usd = price != null ? perPerson * price : null;
-        parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${pool.toLocaleString("en-US")}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minFractionDigits:2,maxFractionDigits:2}) : "—"}</td></tr>`);
+        parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${pool.toLocaleString("en-US")}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
       }
       return parts.join("");
     }
@@ -1402,8 +1417,8 @@ let page = 1;
       if (_trendMode === "pct") {
         // --- Pct mode: selected tier's pct line, right axis 0-100 ---
         const tierLabel = labels[_trendTierIdx] || labels[0];
-        const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel)).filter(Boolean);
-        if (points.length < 2) { svg.innerHTML = ""; return; }
+        const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel) || null);
+        if (points.filter(Boolean).length < 2) { svg.innerHTML = ""; return; }
         const pctMax = 100, pctMin = 0, pctRange = 100;
         function xPos(i) { return PL + i / (snaps.length - 1) * CW; }
         function yLPos(v) { return PT + CH - (v - tMin) / tRange * CH; }
@@ -1443,21 +1458,23 @@ let page = 1;
         // selected tier's pct line
         const color = _pctPalette[_trendTierIdx % _pctPalette.length];
         const pts = points.map((p, i) => {
+          if (!p) return null;
           const v = p.pct;
           return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yPctPos(v)}` : null;
         }).filter(Boolean);
         if (pts.length >= 2) {
           html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
           for (let i = 0; i < points.length; i++) {
+            if (!points[i]) continue;
             const v = points[i].pct;
             if (v == null || !Number.isFinite(v)) continue;
             const cx = xPos(i), cy = yPctPos(v);
-            html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${color}" stroke="#fff" stroke-width="2"
-              onmouseenter="showTrendTip(event,'${escapeHtml(tierLabel)}: ${v.toFixed(2)}%')"
-              onmouseleave="hideTrendTip()"/>`;
+            html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${color}" stroke="#fff" stroke-width="2" tabindex="0"
+              data-tip="${escapeHtml(tierLabel + ": " + v.toFixed(2) + "%")}"/>`;
           }
         }
         svg.innerHTML = html;
+        bindTrendTips(svg);
 
         document.getElementById("trendLegend").innerHTML =
           '<span class="tl-item"><span class="tl-dot" style="background:#ccc;border-radius:0;height:2px"></span>总成交量(ref)</span>' +
@@ -1468,7 +1485,7 @@ let page = 1;
       if (_trendMode === "delta") {
         // --- Delta mode: per-snapshot change of avg/med/q1/last for selected tier ---
         const tierLabel = labels[_trendTierIdx] || labels[0];
-        const rawPoints = snaps.map(s => s.ranges.find(r => r.label === tierLabel)).filter(Boolean);
+        const rawPoints = snaps.map((s, index) => ({ point: s.ranges.find(r => r.label === tierLabel), index })).filter(item => item.point);
         if (rawPoints.length < 3) { svg.innerHTML = ""; return; }
 
         const stats = [
@@ -1488,23 +1505,23 @@ let page = 1;
         // Compute deltas: delta[i] = val[i+1] - val[i]
         const deltas = [];
         for (let i = 1; i < rawPoints.length; i++) {
-          const cur = rawPoints[i][_deltaStat];
-          const prev = rawPoints[i - 1][_deltaStat];
-          deltas.push((cur != null && prev != null && Number.isFinite(cur) && Number.isFinite(prev)) ? cur - prev : 0);
+          const cur = rawPoints[i].point[_deltaStat];
+          const prev = rawPoints[i - 1].point[_deltaStat];
+          deltas.push({ value: (cur != null && prev != null && Number.isFinite(cur) && Number.isFinite(prev)) ? cur - prev : 0, index: rawPoints[i].index });
         }
         if (deltas.length < 2) { svg.innerHTML = ""; return; }
-        const avgDelta = deltas.reduce((s, v) => s + v, 0) / deltas.length;
+        const avgDelta = deltas.reduce((s, v) => s + v.value, 0) / deltas.length;
         let dMin = 0, dMax = 0;
         for (const v of deltas) {
-          if (v < dMin) dMin = v;
-          if (v > dMax) dMax = v;
+          if (v.value < dMin) dMin = v.value;
+          if (v.value > dMax) dMax = v.value;
         }
         const dSpan = dMax - dMin || 1;
         const dPad = dSpan * 0.15;
         dMin -= dPad; dMax += dPad;
         const dRange = dMax - dMin || 1;
 
-        function xPos(i) { return PL + (i + 1) / (snaps.length - 1) * CW; }
+        function xPos(i) { return PL + i / (snaps.length - 1) * CW; }
         function yPos(v) { return PT + CH - (v - dMin) / dRange * CH; }
 
         let html = "";
@@ -1539,25 +1556,25 @@ let page = 1;
         }
 
         // Selected stat delta line
-        const pts = deltas.map((v, i) => {
-          if (!Number.isFinite(v)) return null;
-          return `${xPos(i)},${yPos(v)}`;
+        const pts = deltas.map(({ value, index }) => {
+          if (!Number.isFinite(value)) return null;
+          return `${xPos(index)},${yPos(value)}`;
         }).filter(Boolean);
         if (pts.length >= 2) {
           html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${sel.color}" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
           for (let i = 0; i < deltas.length; i++) {
-            const v = deltas[i];
+            const v = deltas[i].value;
             if (!Number.isFinite(v)) continue;
-            const cx = xPos(i), cy = yPos(v);
+            const cx = xPos(deltas[i].index), cy = yPos(v);
             const prefix = v >= 0 ? "+" : "";
-            const tsLabel = fmtSnapshotTs(timestamps[i + 1]).slice(5, _isUm ? 10 : 16);
-          html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${sel.color}" stroke="#fff" stroke-width="2"
-              onmouseenter="showTrendTip(event,'${escapeHtml(tsLabel)} | ${escapeHtml(sel.label)} delta: ${prefix}${fmtShort(v)}')"
-              onmouseleave="hideTrendTip()"/>`;
+            const tsLabel = fmtSnapshotTs(timestamps[deltas[i].index]).slice(5, _isUm ? 10 : 16);
+            html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${sel.color}" stroke="#fff" stroke-width="2" tabindex="0"
+              data-tip="${escapeHtml(tsLabel + " | " + sel.label + " delta: " + prefix + fmtShort(v))}"/>`;
           }
         }
 
         svg.innerHTML = html;
+        bindTrendTips(svg);
 
         document.getElementById("trendLegend").innerHTML =
           '<span class="tl-item"><span class="tl-dot" style="background:#bbb;border-radius:0;height:2px"></span>0 参考线</span>' +
@@ -1602,16 +1619,15 @@ let page = 1;
           const v = snaps[i].totalVol;
           if (v == null || !Number.isFinite(v)) continue;
           const cx = xPos(i), cy = yLPos(v);
-          html += `<circle cx="${cx}" cy="${cy}" r="6" fill="#4a90d9" stroke="#fff" stroke-width="2"
-            onmouseenter="showTrendTip(event,'总成交量: ${fmtShort(v)}')"
-            onmouseleave="hideTrendTip()"/>`;
+          html += `<circle cx="${cx}" cy="${cy}" r="6" fill="#4a90d9" stroke="#fff" stroke-width="2" tabindex="0"
+            data-tip="${escapeHtml("总成交量: " + fmtShort(v))}"/>`;
         }
       }
 
       // selected tier's stats (right axis)
       const tierLabel = labels[_trendTierIdx] || labels[0];
-      const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel)).filter(Boolean);
-      if (points.length >= 2) {
+      const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel) || null);
+      if (points.filter(Boolean).length >= 2) {
         const rightStats = [
           { key: "avg", label: "均价", color: "#c0392b" },
           { key: "med", label: "中位数", color: "#8e44ad" },
@@ -1636,24 +1652,26 @@ let page = 1;
           }
           for (const st of rightStats) {
             const pts = points.map((p, i) => {
+              if (!p) return null;
               const v = p[st.key];
               return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yRPos(v)}` : null;
             }).filter(Boolean);
             if (pts.length < 2) continue;
             html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${st.color}" stroke-width="2" stroke-linejoin="round" opacity=".85" stroke-dasharray="4,3"/>`;
             for (let i = 0; i < points.length; i++) {
+              if (!points[i]) continue;
               const v = points[i][st.key];
               if (v == null || !Number.isFinite(v)) continue;
               const cx = xPos(i), cy = yRPos(v);
-              html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${st.color}" stroke="#fff" stroke-width="2"
-                onmouseenter="showTrendTip(event,'${escapeHtml(st.label)}(${escapeHtml(tierLabel)}): ${fmtShort(v)}')"
-                onmouseleave="hideTrendTip()"/>`;
+              html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${st.color}" stroke="#fff" stroke-width="2" tabindex="0"
+                data-tip="${escapeHtml(st.label + "(" + tierLabel + "): " + fmtShort(v))}"/>`;
             }
           }
         }
       }
 
       svg.innerHTML = html;
+      bindTrendTips(svg);
 
       document.getElementById("trendLegend").innerHTML =
         '<span class="tl-item"><span class="tl-dot" style="background:#4a90d9"></span>总成交量</span>' +
@@ -1688,18 +1706,37 @@ let page = 1;
       _trendTipEl.style.display = "";
     };
     window.hideTrendTip = function() { if (_trendTipEl) _trendTipEl.style.display = "none"; };
+    function bindTrendTips(svg) {
+      svg.querySelectorAll("[data-tip]").forEach((el) => {
+        const show = (evt) => window.showTrendTip(evt, el.dataset.tip || "");
+        el.addEventListener("mouseenter", show);
+        el.addEventListener("focus", show);
+        el.addEventListener("mouseleave", window.hideTrendTip);
+        el.addEventListener("blur", window.hideTrendTip);
+      });
+    }
     loadTrend();
 
     // --- Collapsible panels ---
     localStorage.setItem("collapse_trendPanel", "1");
-    document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel) => {
+    document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel, index) => {
+      if (!panel.id) panel.id = "preview-panel-" + index;
       const h3 = panel.querySelector("h3");
       if (!h3) return;
       const key = "collapse_" + panel.id;
+      h3.setAttribute("role", "button");
+      h3.tabIndex = 0;
       if (localStorage.getItem(key) === "1") panel.classList.add("collapsed");
-      h3.addEventListener("click", () => {
+      h3.setAttribute("aria-expanded", String(!panel.classList.contains("collapsed")));
+      const togglePanel = () => {
         panel.classList.toggle("collapsed");
+        h3.setAttribute("aria-expanded", String(!panel.classList.contains("collapsed")));
         localStorage.setItem(key, panel.classList.contains("collapsed") ? "1" : "");
+      };
+      h3.addEventListener("click", (evt) => { if (evt.target === h3 || !evt.target.closest("button, input, select")) togglePanel(); });
+      h3.addEventListener("keydown", (evt) => {
+        if (evt.target !== h3) return;
+        if (evt.key === "Enter" || evt.key === " ") { evt.preventDefault(); togglePanel(); }
       });
     });
 
@@ -1846,11 +1883,46 @@ let page = 1;
           showToast("没有团队，请先在团队管理页面创建");
           return;
         }
+        pickerModal._opener = document.activeElement;
         pickerModal.style.display = "";
+        pickerTeamSelect.focus();
       } catch (err) {
         showToast("加载团队失败: " + err.message);
       }
     });
+
+    function installModalAccessibility(modal) {
+      if (!modal) return;
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      const title = modal.querySelector("h3");
+      if (title) {
+        if (!title.id) title.id = modal.id + "Title";
+        modal.setAttribute("aria-labelledby", title.id);
+      }
+      modal.querySelectorAll(".modal-close, .modal-close-btn").forEach(btn => {
+        if (!btn.getAttribute("aria-label")) btn.setAttribute("aria-label", btn.textContent.trim() || "关闭");
+      });
+      modal.addEventListener("keydown", evt => {
+        if (evt.key === "Escape") {
+          evt.preventDefault();
+          modal.querySelector(".modal-close, .modal-close-btn")?.click();
+          return;
+        }
+        if (evt.key !== "Tab") return;
+        const focusable = [...modal.querySelectorAll("button, input, select, [href], [tabindex]:not([tabindex='-1'])")]
+          .filter(el => !el.disabled && el.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (evt.shiftKey && document.activeElement === first) { evt.preventDefault(); last.focus(); }
+        else if (!evt.shiftKey && document.activeElement === last) { evt.preventDefault(); first.focus(); }
+      });
+      modal.addEventListener("click", () => {
+        if (modal.style.display === "none") modal._opener?.focus?.();
+      });
+    }
+    installModalAccessibility(document.getElementById("snapshotModal"));
+    installModalAccessibility(pickerModal);
   } catch (err) {
     if (String(err.message).includes("任务未完成")) {
       renderScrapingState(jobId, "任务正在抓取中，完成后将自动刷新。");
