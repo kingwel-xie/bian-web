@@ -1308,9 +1308,10 @@ let page = 1;
       if (useTotal) {
         computeTotalReward(price);
       }
-      const label = fromApi ? "" : (rewardPriceIsLive ? "实时" : "收盘");
+      const label = fromApi ? "实时" : (rewardPriceIsLive ? "实时" : "收盘");
+      const isLiveLabel = label === "实时";
       const labelHtml = label
-        ? (rewardPriceIsLive
+        ? (isLiveLabel
           ? '<span style="color:#c0392b;font-weight:700">(' + label + ')</span> '
           : '(' + label + ') ')
         : "";

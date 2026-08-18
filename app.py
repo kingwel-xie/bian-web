@@ -2355,12 +2355,12 @@ def api_analysis() -> Response:
 
         reward_token = (payload.get("rewardToken") or "").strip().upper()
         activity_end = payload.get("activityEnd")
-        # Determine if activity is still active (matches sort_key: 24h grace)
+        # Determine if activity is still active (no grace window: ended → closing price)
         is_active = False
         if activity_end:
             try:
                 end_dt = datetime.strptime(activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
-                is_active = end_dt + timedelta(hours=24) > datetime.now(timezone.utc).astimezone(BJ)
+                is_active = end_dt > datetime.now(timezone.utc).astimezone(BJ)
             except (ValueError, OSError):
                 pass
         if is_active:
@@ -3056,14 +3056,19 @@ def api_job_preview(job_id: str) -> Response:
         preview["teamSizes"] = team_sizes
         p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
         p_activity_end = payload.get("activityEnd", "")
-        preview["rewardPriceUsd"] = get_token_price(p_reward_token, p_activity_end)
-        preview["rewardPriceIsLive"] = False
+        price = get_token_price(p_reward_token, p_activity_end)
+        preview["rewardPriceUsd"] = price
+        p_is_live = False
         if p_activity_end:
             try:
                 p_end_dt = datetime.strptime(p_activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
-                preview["rewardPriceIsLive"] = p_end_dt + timedelta(hours=24) > datetime.now(timezone.utc).astimezone(BJ)
+                p_is_live = p_end_dt > datetime.now(timezone.utc).astimezone(BJ)
             except (ValueError, OSError):
                 pass
+        preview["rewardPriceIsLive"] = p_is_live
+        if not p_is_live and price is not None and price != job.get("rewardPriceUsd"):
+            job["rewardPriceUsd"] = price
+            update_job(job_id, rewardPriceUsd=price)
         return jsonify(preview)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
