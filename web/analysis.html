@@ -271,6 +271,44 @@ function tierPerPerson(tiers, label) {
   return count > 0 ? amt / count : null;
 }
 
+function lastTierIdx(j) {
+  const tiers = j.rewardTiers || [];
+  if (j.rewardMode !== "rank_last_volume" || !tiers.length) return -1;
+  let idx = 0;
+  for (let i = 1; i < tiers.length; i++) {
+    if (Number(tiers[i].rankMax) > Number(tiers[idx].rankMax)) idx = i;
+  }
+  return idx;
+}
+
+function rewardDenomInfo(j, label) {
+  const li = lastTierIdx(j);
+  if (li >= 0) {
+    const t = j.rewardTiers[li];
+    const parts = label.split("~").map(Number);
+    if (parts.length !== 2) return null;
+    if (t.rankMin === parts[0] && t.rankMax === parts[1]) {
+      const ltr = j.lastTierReward;
+      if (!ltr || ltr.per10k == null) return null;
+      return { kind: "rate", per10k: Number(ltr.per10k), tierVolume: ltr.tierVolume };
+    }
+  }
+  const pp = tierPerPerson(j.rewardTiers, label);
+  if (pp == null) return null;
+  return { kind: "pp", amt: pp };
+}
+
+function efficiencyForJobRange(j, label, statVal) {
+  const info = rewardDenomInfo(j, label);
+  if (!info || !(statVal > 0)) return null;
+  const price = j.rewardPriceUsd ?? 1;
+  let usd;
+  if (info.kind === "rate") usd = statVal * (info.per10k / 10000) * price;
+  else usd = info.amt * price;
+  if (!(usd > 0)) return null;
+  return statVal / usd;
+}
+
 function normalizedTierAllocation(tiers) {
   if (!tiers || !tiers.length) return null;
   const sorted = [...tiers].sort((a, b) => a.rankMin - b.rankMin);
@@ -434,6 +472,7 @@ function findSimilar() {
   const matching = allRankJobs.filter(j => {
     if (j.rewardPriceIsLive) return false;
     if (j.id === refJob.id) return false;
+    if ((j.rewardMode || "") !== (refJob.rewardMode || "")) return false;
     if (!tiersMatch(refTiers, j.rewardTiers)) return false;
     if ((j.rewardToken || "") !== refToken) return false;
     if (!perPersonSimilar(refTiers, j.rewardTiers, 1.5)) return false;
@@ -525,17 +564,27 @@ function renderTable(jobs, ranges) {
       const med = rdata ? rdata.med : 0;
       const q1 = rdata ? rdata.q1 : 0;
       const last = rdata ? rdata.last : 0;
-      const perPerson = tierPerPerson(j.rewardTiers, label);
+      const info = rewardDenomInfo(j, label);
       let ppStr = "—";
-      if (perPerson != null && perPerson > 0) {
+      let titleAttr = "";
+      if (info && info.kind === "rate") {
+        const tokStr = info.per10k.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:8});
+        const tok = escapeHtml(j.rewardToken || "");
         if (j.rewardPriceUsd != null) {
-          ppStr = "$" + (perPerson * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+          ppStr = "$" + (info.per10k * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + "/10k";
         } else {
-          ppStr = perPerson.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+          ppStr = tokStr + " " + tok + "/10k";
+        }
+        titleAttr = ` title="每万U奖励: ${tokStr} ${tok} · 档内总量: ${fmtVolume(info.tierVolume)}"`;
+      } else if (info && info.amt > 0) {
+        if (j.rewardPriceUsd != null) {
+          ppStr = "$" + (info.amt * j.rewardPriceUsd).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+        } else {
+          ppStr = info.amt.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
         }
       }
       const sep = ji < visible.length - 1 ? ' job-divider' : '';
-      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}">${ppStr}</td>`);
+      bodyParts.push(`<td class="num">${fmtVolume(total)}</td><td class="num">${pct}%</td><td class="num">${fmtVolume(avg)}</td><td class="num">${fmtVolume(med)}</td><td class="num">${fmtVolume(q1)}</td><td class="num">${fmtVolume(last)}</td><td class="num${sep}"${titleAttr}>${ppStr}</td>`);
     }
     bodyParts.push('</tr>');
   }
@@ -583,11 +632,10 @@ function renderEfficiencyChart(jobs, ranges) {
       for (let ji = 0; ji < visible.length; ji++) {
         const j = visible[ji];
         if (!j.ranges || !j.ranges[ri]) continue;
-        const pp = tierPerPerson(j.rewardTiers, label);
-        if (pp == null) continue;
-        const ppUsd = pp * (j.rewardPriceUsd ?? 1);
-        if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri][_chartStat] / ppUsd, tierLabel: label });
+        const statVal = j.ranges[ri][_chartStat];
+        const eff = efficiencyForJobRange(j, label, statVal);
+        if (eff == null) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff, tierLabel: label });
       }
       if (bars.length) groups.push({ label, bars, keyIdx: -1 });
     }
@@ -599,11 +647,10 @@ function renderEfficiencyChart(jobs, ranges) {
       for (let ri = 0; ri < ranges.length; ri++) {
         if (!j.ranges || !j.ranges[ri]) continue;
         const label = ranges[ri].label;
-        const pp = tierPerPerson(j.rewardTiers, label);
-        if (pp == null) continue;
-        const ppUsd = pp * (j.rewardPriceUsd ?? 1);
-        if (ppUsd <= 0) continue;
-        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff: j.ranges[ri][_chartStat] / ppUsd, tierLabel: label });
+        const statVal = j.ranges[ri][_chartStat];
+        const eff = efficiencyForJobRange(j, label, statVal);
+        if (eff == null) continue;
+        bars.push({ jobIdx: ji, tierIdx: ri, job: j, eff, tierLabel: label });
       }
       if (bars.length) {
         const name = j.name || j.resourceId || j.id;

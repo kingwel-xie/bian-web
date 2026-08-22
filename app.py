@@ -2391,6 +2391,13 @@ def api_analysis() -> Response:
                 "last": rs["last"],
             })
 
+        last_tier_reward = None
+        if reward_mode == "rank_last_volume":
+            try:
+                last_tier_reward = _compute_last_tier_rate(payload, _latest_job_snapshot_data(job))
+            except OSError:
+                last_tier_reward = None
+
         results.append({
             "id": job.get("id"),
             "name": job.get("name"),
@@ -2405,6 +2412,7 @@ def api_analysis() -> Response:
             "activityStart": payload.get("activityStart"),
             "activityEnd": payload.get("activityEnd"),
             "rewardMode": reward_mode,
+            "lastTierReward": last_tier_reward,
             "rewardTiers": [
                 {"rankMin": t["rankMin"], "rankMax": t["rankMax"], "amount": float(t.get("amount", 0))}
                 for t in reward_tiers
