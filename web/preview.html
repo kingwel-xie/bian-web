@@ -820,7 +820,7 @@ let page = 1;
     const rTiers = preview.rewardTiers || [];
     const rEligible = parseInt(preview.eligibleUsers) || 0;
     const ranges =
-      rMode === "rank" && rTiers.length > 0
+      (rMode === "rank" || rMode === "rank_last_volume") && rTiers.length > 0
         ? (() => {
       const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
             const result = [];
@@ -1229,15 +1229,30 @@ let page = 1;
     const rewardTotalBody = document.getElementById("rewardTotalBody");
     const useTotal = rewardMode === "total" && totalReward > 0 && eligibleUsers > 0;
     const useTiers = !useTotal && rewardTiers.length > 0;
+    const lastTierReward = rewardMode === "rank_last_volume" ? previewData.lastTierReward : null;
 
     function buildTierRows(price) {
       const parts = [];
-      for (const t of rewardTiers) {
+      for (let i = 0; i < rewardTiers.length; i++) {
+        const t = rewardTiers[i];
         const pool = parseFloat(t.amount) || 0;
         const count = t.rankMax - t.rankMin + 1;
-        const perPerson = count > 0 ? pool / count : 0;
-        const usd = price != null ? perPerson * price : null;
-        parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${pool.toLocaleString("en-US")}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+        const poolStr = pool.toLocaleString("en-US");
+        if (lastTierReward && i === lastTierReward.tierIndex) {
+          const per10k = lastTierReward.per10k != null ? lastTierReward.per10k : null;
+          const usd = per10k != null && price != null ? per10k * price : null;
+          const rateStr = per10k != null
+            ? `每万U ${per10k.toLocaleString("en-US", {maximumFractionDigits:4})}`
+            : "每万U —";
+          const tip = lastTierReward.tierVolume != null
+            ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
+            : "档内总量不足";
+          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}">${rateStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+        } else {
+          const perPerson = count > 0 ? pool / count : 0;
+          const usd = price != null ? perPerson * price : null;
+          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+        }
       }
       return parts.join("");
     }
@@ -1779,7 +1794,7 @@ let page = 1;
     const calcTierContainer = document.getElementById("calcTierInputs");
     _calcTiers = [];
     const calcRewardTiers = preview.rewardTiers || [];
-    const hasRewardTiers = (preview.rewardMode || "rank") === "rank" && calcRewardTiers.length > 0;
+    const hasRewardTiers = ((preview.rewardMode || "rank") === "rank" || preview.rewardMode === "rank_last_volume") && calcRewardTiers.length > 0;
     const initCurrent = _totalVolCache;
     const initPcts = projectTierPcts(initCurrent, _statsCache, _totalVolCache, _totalDelCache);
     if (hasRewardTiers) {

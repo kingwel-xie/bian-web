@@ -356,7 +356,7 @@ function renderAnalysis(data) {
   document.getElementById("loading").style.display = "none";
 
   // Only rank-mode jobs in main table
-  allRankJobs = rawJobs.filter(j => j.rewardMode === "rank");
+  allRankJobs = rawJobs.filter(j => j.rewardMode === "rank" || j.rewardMode === "rank_last_volume");
   if (!rawJobs.length) {
     document.getElementById("tableSection").style.display = "";
     document.getElementById("tableBody").innerHTML = '<tr><td colspan="100" class="empty">没有数据。</td></tr>';

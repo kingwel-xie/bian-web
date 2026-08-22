@@ -255,7 +255,8 @@ function openEditModal(job) {
   document.getElementById("editRewardToken").value = p.rewardToken || document.getElementById("editToken").value || "";
   const rewardMode = p.rewardMode || "rank";
   document.getElementById("editRewardMode").value = rewardMode;
-  document.getElementById("rewardRankFields").style.display = rewardMode === "rank" ? "" : "none";
+  const isRankLike = rewardMode === "rank" || rewardMode === "rank_last_volume";
+  document.getElementById("rewardRankFields").style.display = isRankLike ? "" : "none";
   document.getElementById("rewardTotalFields").style.display = rewardMode === "total" ? "" : "none";
   const rowsEl = document.getElementById("editTierRows");
   rowsEl.innerHTML = "";
@@ -342,7 +343,7 @@ document.querySelectorAll("#editTotalReward, #editEligibleUsers").forEach(el => 
 
 document.getElementById("editRewardMode").addEventListener("change", () => {
   const mode = document.getElementById("editRewardMode").value;
-  document.getElementById("rewardRankFields").style.display = mode === "rank" ? "" : "none";
+  document.getElementById("rewardRankFields").style.display = (mode === "rank" || mode === "rank_last_volume") ? "" : "none";
   document.getElementById("rewardTotalFields").style.display = mode === "total" ? "" : "none";
 });
 
@@ -369,7 +370,7 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   const rewardMode = document.getElementById("editRewardMode").value;
   const topVal = parseInt(document.getElementById("editTop").value, 10);
   const body = { market, token, symbol, name: name || undefined, rewardToken: rewardToken || undefined, rewardMode, activityStart, activityEnd, top: topVal > 0 ? topVal : undefined };
-  if (rewardMode === "rank") {
+  if (rewardMode === "rank" || rewardMode === "rank_last_volume") {
     const rewardTiers = [];
     document.querySelectorAll("#editTierRows .tier-row").forEach(row => {
       const minEl = row.querySelector(".tier-min");

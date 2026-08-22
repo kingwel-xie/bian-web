@@ -2290,14 +2290,14 @@ def api_analysis() -> Response:
             continue
 
         reward_mode = payload.get("rewardMode") or "rank"
-        if reward_mode == "rank":
+        if reward_mode in ("rank", "rank_last_volume"):
             for t in payload.get("rewardTiers") or []:
                 try:
                     tier_union.add((int(t["rankMin"]), int(t["rankMax"])))
                 except (KeyError, TypeError, ValueError):
                     continue
         for r in limited:
-            if reward_mode != "rank":
+            if reward_mode not in ("rank", "rank_last_volume"):
                 continue
             seq = int(r.get("sequence") or 0)
             if seq > max_rank:
@@ -2535,7 +2535,7 @@ def api_completed_growth() -> Response:
 
         reward_mode = payload.get("rewardMode") or "rank"
         for r in cur_limited:
-            if reward_mode != "rank":
+            if reward_mode not in ("rank", "rank_last_volume"):
                 continue
             seq = int(r.get("sequence") or 0)
             if seq > max_rank:
@@ -2680,7 +2680,7 @@ def api_update_job_params(job_id: str) -> Response:
                     p.pop("rewardToken", None)
                 p.pop("rewardAmount", None)
                 reward_mode = body.get("rewardMode")
-                if reward_mode in ("rank", "total"):
+                if reward_mode in ("rank", "total", "rank_last_volume"):
                     p["rewardMode"] = reward_mode
                 else:
                     p.pop("rewardMode", None)
@@ -2853,6 +2853,115 @@ def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int]]:
     return team_map, team_sizes
 
 
+def _last_tier_index(tiers: list) -> int:
+    best = -1
+    best_max = -1
+    for i, t in enumerate(tiers):
+        if not isinstance(t, dict):
+            continue
+        try:
+            rmax = int(t.get("rankMax", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if rmax > best_max:
+            best_max = rmax
+            best = i
+    return best
+
+
+def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
+    """Compute per-10k-volume reward rate for the last tier (rank_last_volume mode).
+
+    tierVolume = meta.eligibleTradingVolume - sum(volume of all rows outside the
+    last tier range, including unconfigured ranks such as 1~5 before the first tier).
+    per10k = lastTierPool / (tierVolume / 10000).
+    """
+    tiers = payload.get("rewardTiers") or []
+    if not isinstance(tiers, list):
+        return None
+    valid_tiers = [t for t in tiers if isinstance(t, dict)]
+    last_idx = _last_tier_index(valid_tiers)
+    if last_idx < 0:
+        return None
+    last = valid_tiers[last_idx]
+    try:
+        pool = float(last.get("amount", 0) or 0)
+        last_min = int(last.get("rankMin", 0) or 0)
+        last_max = int(last.get("rankMax", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if pool <= 0 or last_min < 1 or last_max < last_min:
+        return None
+
+    rows = data.get("rows") if isinstance(data, dict) else []
+    if not isinstance(rows, list):
+        rows = []
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+
+    def _tier_bounds(t: dict) -> tuple[int, int] | None:
+        try:
+            return int(t.get("rankMin", 0) or 0), int(t.get("rankMax", 0) or 0)
+        except (TypeError, ValueError):
+            return None
+
+    other_bounds = [
+        b for b in (_tier_bounds(t) for i, t in enumerate(valid_tiers) if i != last_idx)
+        if b is not None and b[0] >= 1 and b[1] >= b[0]
+    ]
+
+    other_volume = 0.0
+    rows_volume = 0.0
+    for r in rows:
+        try:
+            grade = float(r.get("grade", 0) or 0)
+            seq = int(r.get("sequence") or 0)
+        except (TypeError, ValueError):
+            continue
+        rows_volume += grade
+        # Anything outside the last tier range is excluded from the base:
+        # unconfigured prefix ranks (e.g. 1~5), other configured tiers, gaps,
+        # and ranks beyond the last tier's upper bound.
+        if seq < last_min or seq > last_max:
+            other_volume += grade
+            continue
+        if any(rmin <= seq <= rmax for rmin, rmax in other_bounds):
+            other_volume += grade
+
+    eligible_volume = decimal_float(meta.get("eligibleTradingVolume"))
+    base_volume = float(eligible_volume) if eligible_volume is not None else rows_volume
+    tier_volume = base_volume - other_volume
+    result = {
+        "tierIndex": last_idx,
+        "rankMin": last_min,
+        "rankMax": last_max,
+        "pool": pool,
+        "eligibleTradingVolume": eligible_volume,
+        "otherTiersVolume": round(other_volume, 2),
+        "tierVolume": round(tier_volume, 2) if tier_volume > 0 else None,
+        "per10k": round(pool / (tier_volume / 10000.0), 8) if tier_volume > 0 else None,
+    }
+    return result
+
+
+def _latest_job_snapshot_data(job: dict) -> dict:
+    """Load latest snapshot data (completed result preferred, else last snapshot)."""
+    candidates: list[str] = []
+    result = job.get("result")
+    if job.get("status") == "completed" and isinstance(result, list) and result:
+        candidate = result[0].get("json")
+        if candidate:
+            candidates.append(str(candidate))
+    for snap in reversed(job.get("snapshots") or []):
+        candidate = snap.get("json")
+        if candidate:
+            candidates.append(str(candidate))
+    for c in candidates:
+        path = Path(c)
+        if path.exists():
+            return read_json(path, {})
+    return {}
+
+
 def _build_preview_base(
     json_path: Path,
     prev_json_path: Path | None,
@@ -2873,6 +2982,10 @@ def _build_preview_base(
     preview["rewardAmount"] = payload.get("rewardAmount", "")
     preview["rewardTiers"] = payload.get("rewardTiers")
     preview["rewardMode"] = payload.get("rewardMode")
+    if payload.get("rewardMode") == "rank_last_volume":
+        preview["lastTierReward"] = _compute_last_tier_rate(payload, read_json(json_path, {}))
+    else:
+        preview["lastTierReward"] = None
     preview["totalReward"] = payload.get("totalReward")
     preview["eligibleUsers"] = payload.get("eligibleUsers")
     if preview.get("rewardTiers"):
@@ -2898,7 +3011,7 @@ def _build_preview_base(
             r_mode = payload.get("rewardMode") or "rank"
             r_tiers = payload.get("rewardTiers") or []
             r_eligible = int(payload.get("eligibleUsers") or 0)
-            if r_mode == "rank" and r_tiers:
+            if r_mode in ("rank", "rank_last_volume") and r_tiers:
                 sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
                 ranges = []
                 cursor = 1
@@ -3092,7 +3205,7 @@ def api_job_trend(job_id: str) -> Response:
     r_mode = payload.get("rewardMode") or "rank"
     r_tiers = payload.get("rewardTiers") or []
     r_eligible = int(payload.get("eligibleUsers") or 0)
-    if r_mode == "rank" and r_tiers:
+    if r_mode in ("rank", "rank_last_volume") and r_tiers:
         sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
         ranges: list[tuple[str, int, int]] = []
         cursor = 1
@@ -3778,7 +3891,7 @@ def api_rewards_ended_jobs() -> Response:
         if end_dt >= now_bj:
             continue
         reward_mode = payload.get("rewardMode", "rank")
-        if reward_mode == "rank":
+        if reward_mode in ("rank", "rank_last_volume"):
             reward_tiers = payload.get("rewardTiers") or []
             if not isinstance(reward_tiers, list) or not reward_tiers:
                 continue
@@ -3857,6 +3970,26 @@ def api_rewards_total_candidates() -> Response:
         "totalVolume": total_volume,
         "rewardToken": (payload.get("rewardToken") or "").strip().upper(),
     })
+
+
+@app.get("/api/rewards/last-tier-rate")
+def api_rewards_last_tier_rate() -> Response:
+    job_id = request.args.get("jobId", "").strip()
+    if not job_id:
+        return jsonify({"error": "缺少 jobId"}), 400
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    payload = job.get("payload") or {}
+    if payload.get("rewardMode") != "rank_last_volume":
+        return jsonify({"error": "非末档按量奖励任务"}), 400
+    data = _latest_job_snapshot_data(job)
+    rate = _compute_last_tier_rate(payload, data)
+    if not rate:
+        return jsonify({"error": "任务无分档配置或奖池无效"}), 400
+    rate["rewardToken"] = (payload.get("rewardToken") or "").strip().upper()
+    return jsonify(rate)
 
 
 @app.route("/api/rewards", methods=["GET", "PUT"])
@@ -3983,12 +4116,16 @@ def api_rewards() -> Response:
         if not isinstance(tiers_in, list):
             return jsonify({"error": "缺少 tiers"}), 400
         reward_tiers = payload.get("rewardTiers") or []
+        is_last_vol = reward_mode == "rank_last_volume"
+        last_idx = _last_tier_index(reward_tiers) if is_last_vol else -1
+        if is_last_vol and last_idx < 0:
+            return jsonify({"error": "任务无分档配置"}), 400
         for t in tiers_in:
             ti = t.get("tierIndex")
             count = int(t.get("count", 0))
             if count <= 0 or ti is None:
                 continue
-            if ti < 0 or ti >= len(reward_tiers):
+            if ti < 0 or ti >= len(reward_tiers) or ti == last_idx:
                 continue
             tier_info = reward_tiers[ti]
             for _ in range(count):
@@ -4001,6 +4138,34 @@ def api_rewards() -> Response:
                     "rankMin": tier_info.get("rankMin"),
                     "rankMax": tier_info.get("rankMax"),
                     "amount": tier_info.get("amount", "0"),
+                    "createdAt": now,
+                    "paid": False,
+                    "paidAt": None,
+                })
+        if is_last_vol:
+            last_volume_raw = body.get("lastTierVolume")
+            try:
+                last_volume = float(last_volume_raw) if last_volume_raw not in (None, "") else 0.0
+            except (TypeError, ValueError):
+                last_volume = 0.0
+            if last_volume > 0:
+                rate = _compute_last_tier_rate(payload, _latest_job_snapshot_data(job))
+                per10k = (rate or {}).get("per10k")
+                if not per10k:
+                    return jsonify({"error": "无法计算末档每万U奖励（档内总量不足或快照数据缺失）"}), 400
+                last_tier = reward_tiers[last_idx]
+                amount = round(per10k * last_volume / 10000.0, 4)
+                db["records"].append({
+                    "id": uuid.uuid4().hex[:12],
+                    "jobId": job_id,
+                    "jobName": job_name,
+                    "rewardToken": reward_token,
+                    "rewardMode": "rank_last_volume",
+                    "tierIndex": last_idx,
+                    "rankMin": last_tier.get("rankMin"),
+                    "rankMax": last_tier.get("rankMax"),
+                    "volume": last_volume,
+                    "amount": str(amount),
                     "createdAt": now,
                     "paid": False,
                     "paidAt": None,
@@ -4131,7 +4296,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
 
     max_tier_rank = None
     reward_mode = payload.get("rewardMode") or "rank"
-    if reward_mode == "rank":
+    if reward_mode in ("rank", "rank_last_volume"):
         tiers = payload.get("rewardTiers") or []
         if tiers:
             max_tier_rank = max(t.get("rankMax", 0) for t in tiers if isinstance(t, dict))

@@ -289,18 +289,36 @@ function renderJobs() {
     } else {
       const tierInfo = jRecords.tierInfo || {};
       const tiers = jRecords.rewardTiers || [];
+      const isLastVol = jRecords.rewardMode === "rank_last_volume";
+      let lastIdx = -1;
+      let lastVolSum = 0;
+      if (isLastVol) {
+        for (let i = 0; i < tiers.length; i++) {
+          if (lastIdx < 0 || (tiers[i].rankMax || 0) > (tiers[lastIdx].rankMax || 0)) lastIdx = i;
+        }
+        for (const r of jRecords.records || []) {
+          if (r.rewardMode === "rank_last_volume") lastVolSum += parseFloat(r.amount) || 0;
+        }
+      }
       let badges = "";
       for (let i = 0; i < tiers.length; i++) {
         const t = tiers[i];
         const cnt = (tierInfo[i] && tierInfo[i].count) || 0;
         if (!cnt) continue;
         const amt = parseFloat(t.amount) || 0;
-        const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
-        const perPerson = tierCount > 0 ? amt / tierCount : 0;
+        let perPerson, totalTok;
+        if (isLastVol && i === lastIdx) {
+          totalTok = lastVolSum;
+          perPerson = cnt > 0 ? lastVolSum / cnt : 0;
+        } else {
+          const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
+          perPerson = tierCount > 0 ? amt / tierCount : 0;
+          totalTok = perPerson * cnt;
+        }
         const usdVal = price != null ? perPerson * price : null;
-        const totalUsdVal = usdVal != null ? usdVal * cnt : null;
+        const totalUsdVal = price != null && totalTok > 0 ? totalTok * price : null;
         if (totalUsdVal != null) totalUSD += totalUsdVal;
-        totalTokens += perPerson * cnt;
+        totalTokens += totalTok;
         const c = _badgeColors[i % _badgeColors.length];
         const tip = perPerson.toFixed(4) + " " + escapeHtml(jRecords.rewardToken || "");
         badges += '<span class="badge" style="background:' + c.bg + ';border-color:' + c.border + ';color:' + c.text + '" title="' + tip + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
@@ -378,6 +396,9 @@ function renderJobs() {
     for (const r of recs) {
       let usdVal = 0, tokVal = 0;
       if (r.rewardMode === "total") {
+        tokVal = parseFloat(r.amount) || 0;
+        usdVal = price != null ? tokVal * price : 0;
+      } else if (r.rewardMode === "rank_last_volume") {
         tokVal = parseFloat(r.amount) || 0;
         usdVal = price != null ? tokVal * price : 0;
       } else if (r.rankMin != null && r.rankMax != null) {
@@ -531,6 +552,19 @@ function renderJobs() {
 searchInput.addEventListener("input", renderJobs);
 
 // --- Modal ---
+let _modalRate = null;
+let _modalLastVolume = "";
+
+async function loadLastTierRate(jobId) {
+  try {
+    const resp = await fetch("/api/rewards/last-tier-rate?jobId=" + encodeURIComponent(jobId));
+    if (!resp.ok) throw new Error("加载失败");
+    _modalRate = await resp.json();
+  } catch (e) {
+    _modalRate = null;
+  }
+}
+
 async function loadEndedJobs() {
   try {
     const resp = await fetch("/api/rewards/ended-jobs");
@@ -538,7 +572,7 @@ async function loadEndedJobs() {
     _endedJobs = data.jobs || [];
     modalJobSelect.innerHTML = '<option value="">— 选择已结束任务 —</option>' +
       _endedJobs.map(j => {
-        const modeTag = j.rewardMode === "total" ? " [总量]" : "";
+        const modeTag = j.rewardMode === "total" ? " [总量]" : j.rewardMode === "rank_last_volume" ? " [末档按量]" : "";
         return '<option value="' + escapeHtml(j.id) + '">' + escapeHtml(j.jobName || j.name || "") + modeTag + "</option>";
       }).join("");
   } catch (e) {
@@ -553,6 +587,8 @@ async function openModal(jobId, jobData) {
   _modalTiers = {};
   _totalCandidates = null;
   _totalSearchText = "";
+  _modalRate = null;
+  _modalLastVolume = "";
   modalConfirmBtn.disabled = false;
   modalMsg.textContent = "";
   modalCostInput.style.display = "";
@@ -568,6 +604,11 @@ async function openModal(jobId, jobData) {
       const ti = jobData.tierInfo || {};
       for (const k in ti) _modalTiers[parseInt(k)] = ti[k].count || 0;
       modalCostInput.value = jobData.cost || 0;
+      if (jobData.rewardMode === "rank_last_volume") {
+        const rec = (jobData.records || []).find(r => r.rewardMode === "rank_last_volume");
+        _modalLastVolume = rec && rec.volume != null ? String(rec.volume) : "";
+        await loadLastTierRate(jobId);
+      }
       renderModalTiers();
     }
   } else {
@@ -713,12 +754,30 @@ function renderModalTiers() {
     modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">该任务无分档配置</div>';
     return;
   }
+  const isLastVol = _modalJob.rewardMode === "rank_last_volume";
+  let lastIdx = -1;
+  if (isLastVol) {
+    for (let i = 0; i < tiers.length; i++) {
+      if (lastIdx < 0 || (tiers[i].rankMax || 0) > (tiers[lastIdx].rankMax || 0)) lastIdx = i;
+    }
+  }
   let html = "";
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i];
-    const count = _modalTiers[i] || 0;
     const label = t.rankMin + "~" + t.rankMax + "名";
     const amt = t.amount || "0";
+    if (isLastVol && i === lastIdx) {
+      const rateTxt = _modalRate && _modalRate.per10k != null ? Number(_modalRate.per10k).toLocaleString("en-US", {maximumFractionDigits:4}) : null;
+      const sub = rateTxt
+        ? escapeHtml(token) + " · 每万U奖励 " + rateTxt
+        : escapeHtml(token) + " · 每万U奖励 —";
+      html += '<div class="tier-card" style="flex-wrap:wrap">' +
+        '<span class="tier-label">' + escapeHtml(label) + " · " + escapeHtml(amt) + ' <span class="sub">' + sub + '</span></span>' +
+        '<input id="lastTierVolumeInput" type="text" inputmode="decimal" placeholder="成交量" value="' + escapeHtml(_modalLastVolume || "") + '" style="width:140px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px" />' +
+        "</div>";
+      continue;
+    }
+    const count = _modalTiers[i] || 0;
     const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
     const perPerson = tierCount > 0 ? (parseFloat(amt) / tierCount).toFixed(4) : "0";
     html += '<div class="tier-card">' +
@@ -728,6 +787,7 @@ function renderModalTiers() {
       '<button class="tier-btn" data-ti="' + i + '" data-dir="1">+</button>' +
       "</div>";
   }
+  if (isLastVol) html += '<div class="total-footer" id="lastTierFooter"></div>';
   modalTierArea.innerHTML = html;
   modalTierArea.querySelectorAll(".tier-btn").forEach(btn => {
     btn.addEventListener("click", function() {
@@ -741,6 +801,26 @@ function renderModalTiers() {
       if (el) el.textContent = newCount;
     });
   });
+  const lvInput = document.getElementById("lastTierVolumeInput");
+  if (lvInput) {
+    lvInput.addEventListener("blur", function() {
+      const v = this.value.trim();
+      if (v) this.value = v.replace(/,/g, "");
+      updateLastTierFooter();
+    });
+    lvInput.addEventListener("input", updateLastTierFooter);
+    updateLastTierFooter();
+  }
+}
+
+function updateLastTierFooter() {
+  const el = document.getElementById("lastTierFooter");
+  const input = document.getElementById("lastTierVolumeInput");
+  if (!el || !input || !_modalJob) return;
+  const v = parseFloat((input.value || "").replace(/,/g, ""));
+  if (!_modalRate || _modalRate.per10k == null || !Number.isFinite(v) || v <= 0) { el.textContent = ""; return; }
+  const amount = _modalRate.per10k * v / 10000;
+  el.innerHTML = "应发奖励: <span class='ok'>" + amount.toFixed(4) + " " + escapeHtml(_modalJob.rewardToken || "") + "</span>";
 }
 
 modalJobSelect.addEventListener("change", async function() {
@@ -751,6 +831,8 @@ modalJobSelect.addEventListener("change", async function() {
   modalTitleEl.textContent = "添加奖励 — " + escapeHtml(_modalJob.jobName || _modalJob.name || "");
   _modalTiers = {};
   _totalCandidates = null;
+  _modalRate = null;
+  _modalLastVolume = "";
   modalCostInput.value = 0;
   if (_modalJob.rewardMode === "total") {
     await loadTotalCandidates(id);
@@ -760,6 +842,11 @@ modalJobSelect.addEventListener("change", async function() {
       const data = await resp.json();
       for (const ti in (data.tiers || {})) _modalTiers[parseInt(ti)] = data.tiers[ti];
       modalCostInput.value = data.cost || 0;
+      if (_modalJob.rewardMode === "rank_last_volume") {
+        const rec = (data.records || []).find(r => r.rewardMode === "rank_last_volume");
+        _modalLastVolume = rec && rec.volume != null ? String(rec.volume) : "";
+        await loadLastTierRate(id);
+      }
     } catch (e) { _modalTiers = {}; }
   }
   renderModalTiers();
@@ -782,6 +869,16 @@ async function modalSubmit() {
     }
     if (!users.length) { modalMsg.textContent = "请至少选择一个用户"; return; }
     body = { jobId: _modalJob.id, rewardMode: "total", users, totalVolume: _totalCandidates.totalVolume, cost: parseFloat(modalCostInput.value) || 0 };
+  } else if (_modalJob.rewardMode === "rank_last_volume") {
+    const tiers = [];
+    for (const ti in _modalTiers) {
+      const count = _modalTiers[ti];
+      if (count > 0) tiers.push({ tierIndex: parseInt(ti), count });
+    }
+    body = { jobId: _modalJob.id, rewardMode: "rank_last_volume", tiers, cost: parseFloat(modalCostInput.value) || 0 };
+    const lvRaw = document.getElementById("lastTierVolumeInput");
+    const lv = lvRaw ? parseFloat((lvRaw.value || "").replace(/,/g, "")) : NaN;
+    if (Number.isFinite(lv) && lv > 0) body.lastTierVolume = lv;
   } else {
     const tiers = [];
     for (const ti in _modalTiers) {
