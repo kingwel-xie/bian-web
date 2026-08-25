@@ -3102,19 +3102,39 @@ def api_job_preview(job_id: str) -> Response:
             if candidate and Path(str(candidate)).exists():
                 json_path_str = candidate
         if not json_path_str:
-            if job.get("status") != "completed":
-                return jsonify({"error": "任务未完成"}), 400
+            p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
+            p_activity_end = payload.get("activityEnd", "")
+            p_price = get_token_price(p_reward_token, p_activity_end)
+            p_is_live = False
+            if p_activity_end:
+                try:
+                    p_end_dt = datetime.strptime(p_activity_end, "%Y-%m-%d %H:%M").replace(tzinfo=BJ)
+                    p_is_live = p_end_dt > datetime.now(timezone.utc).astimezone(BJ)
+                except (ValueError, OSError):
+                    pass
             return jsonify({
                 "error": None,
                 "noData": True,
                 "rows": [],
                 "snapshots": [],
+                "status": job.get("status"),
                 "taskName": job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", ""),
                 "resourceId": payload.get("resourceId", ""),
                 "market": payload.get("market", "").upper(),
                 "symbol": payload.get("symbol", []),
                 "token": payload.get("token", ""),
                 "url": payload.get("url", ""),
+                "activityStart": payload.get("activityStart"),
+                "activityEnd": payload.get("activityEnd"),
+                "rewardToken": payload.get("rewardToken", ""),
+                "rewardAmount": payload.get("rewardAmount", ""),
+                "rewardMode": payload.get("rewardMode"),
+                "rewardTiers": payload.get("rewardTiers"),
+                "totalReward": payload.get("totalReward"),
+                "eligibleUsers": payload.get("eligibleUsers"),
+                "rewardPriceUsd": p_price,
+                "rewardPriceIsLive": p_is_live,
+                "lastTierReward": None,
             }), 200
         json_path = Path(str(json_path_str))
 

@@ -117,6 +117,9 @@
   .trend-chart-wrap { width:100%; overflow-x:auto; }
   .trend-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--muted); }
   .trend-legend .tl-item { display:inline-flex; align-items:center; gap:4px; }
+  .trend-legend button.tl-item { cursor:pointer; padding:2px 6px; border:1px solid transparent; border-radius:4px; background:transparent; font:inherit; color:inherit; }
+  .trend-legend button.tl-item:hover { background:#f5f0e8; }
+  .trend-legend button.tl-item.tl-hidden { opacity:.45; text-decoration:line-through; }
   .trend-legend .tl-dot { width:10px; height:10px; border-radius:2px; display:inline-block; flex-shrink:0; }
 </style>
 </head>
@@ -370,6 +373,15 @@ let _totalDelCache = 0;
 let _trendData = null;
 let _trendTierIdx = -1;
 let _trendMode = "volume";
+let _trendHidden = new Set();
+let _trendEmphasize = null;
+const TREND_SERIES = {
+  total: { label: "总成交量", color: "#4a90d9", shape: "circle", dash: false },
+  avg:   { label: "均价",     color: "#c0392b", shape: "diamond", dash: true },
+  med:   { label: "中位数",   color: "#8e44ad", shape: "square", dash: true },
+  q1:    { label: "Q1",       color: "#e67e22", shape: "triangle", dash: true },
+  last:  { label: "末位",     color: "#7f8c8d", shape: "plus", dash: true },
+};
 let _deltaStat = "avg"; // "avg" | "med" | "q1" | "last"
 let _calcTiers = [];
 const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9","#f39c12","#16a085","#e67e22","#7f8c8d"];
@@ -377,6 +389,131 @@ const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9"
 let pageSize = parseInt(localStorage.getItem("previewPageSize") || "100", 10);
 if (![50, 100, 200, 500, 0].includes(pageSize)) pageSize = 100;
 let page = 1;
+
+function renderRewardPanel(data, rows) {
+    const rewardToken = (data.rewardToken || "").trim().toUpperCase();
+    const rewardTiers = data.rewardTiers || [];
+    const rewardPriceUsd = data.rewardPriceUsd != null ? parseFloat(data.rewardPriceUsd) : null;
+    const rewardPriceIsLive = data.rewardPriceIsLive === true;
+    const rewardAmount = parseFloat(data.rewardAmount) || 0;
+    const rewardMode = data.rewardMode || "rank";
+    const totalReward = parseFloat(data.totalReward) || 0;
+    const eligibleUsers = parseInt(data.eligibleUsers) || 0;
+    const rewardPanel = document.getElementById("rewardPanel");
+    const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
+    const rewardPanelToken = document.getElementById("rewardPanelToken");
+    const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
+    const rewardTiersBody = document.getElementById("rewardTiersBody");
+    const rewardTiersTable = document.getElementById("rewardTiersTable");
+    const rewardTotalBody = document.getElementById("rewardTotalBody");
+    const useTotal = rewardMode === "total" && totalReward > 0 && eligibleUsers > 0;
+    const useTiers = !useTotal && rewardTiers.length > 0;
+    const lastTierReward = rewardMode === "rank_last_volume" ? data.lastTierReward : null;
+
+    function buildTierRows(price) {
+      const parts = [];
+      for (let i = 0; i < rewardTiers.length; i++) {
+        const t = rewardTiers[i];
+        const pool = parseFloat(t.amount) || 0;
+        const count = t.rankMax - t.rankMin + 1;
+        const poolStr = pool.toLocaleString("en-US");
+        if (lastTierReward && i === lastTierReward.tierIndex) {
+          const per10k = lastTierReward.per10k != null ? lastTierReward.per10k : null;
+          const usd = per10k != null && price != null ? per10k * price : null;
+          const rateStr = per10k != null
+            ? `每万U ${per10k.toLocaleString("en-US", {maximumFractionDigits:4})}`
+            : "每万U —";
+          const tip = lastTierReward.tierVolume != null
+            ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
+            : "档内总量不足";
+          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}">${rateStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+        } else {
+          const perPerson = count > 0 ? pool / count : 0;
+          const usd = price != null ? perPerson * price : null;
+          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+        }
+      }
+      return parts.join("");
+    }
+
+    function computeTotalReward(price) {
+      const sorted = [...rows].sort((a, b) => (a.rank || 999999) - (b.rank || 999999));
+      const top = sorted.slice(0, eligibleUsers);
+      let totalVolume = 0;
+      for (const r of top) {
+        const v = r._g || 0;
+        totalVolume += v;
+      }
+      const volumePer10K = totalVolume / 10_000;
+      const perM = volumePer10K > 0 ? totalReward / volumePer10K : 0;
+      const nf = (v, d) => (v != null ? Number(v).toLocaleString("en-US", {minimumFractionDigits:0, maximumFractionDigits:d}) : "—");
+      const fmtVolume = (v) => {
+        if (!Number.isFinite(v)) return "—";
+        if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
+        if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
+        if (v >= 1000) return (v / 1000).toFixed(2) + "K";
+        return v.toFixed(2);
+      };
+      document.getElementById("rewardPoolDisplay").textContent = nf(totalReward, 2) + " " + rewardToken;
+      document.getElementById("rewardEligibleDisplay").textContent = nf(eligibleUsers, 0);
+      document.getElementById("rewardVolumeDisplay").textContent = fmtVolume(totalVolume);
+      document.getElementById("rewardPerMDisplay").innerHTML = (perM > 0 ? nf(perM, 4) : "—") + " " + rewardToken + (price != null ? ` (≈ $${nf(perM * price, 2)})` : "");
+    }
+
+    async function updateReward(forceApi) {
+      const hasReward = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
+      if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
+      rewardPanel.style.display = "";
+      rewardPanelToken.textContent = rewardToken;
+      rewardTokenDisplay.textContent = rewardToken;
+      rewardTiersTable.style.display = useTiers ? "" : "none";
+      rewardTotalBody.style.display = useTotal ? "" : "none";
+      if (useTiers) {
+        rewardTiersBody.innerHTML = buildTierRows(null);
+      }
+      if (useTotal) {
+        computeTotalReward(null);
+      }
+      let price;
+      let fromApi = false;
+      if (forceApi) {
+        price = null;
+      } else {
+        price = rewardPriceUsd;
+      }
+      if (price == null) {
+        rewardPriceDisplay.textContent = "加载中...";
+        const symbol = rewardToken + "USDT";
+        try {
+          const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
+          const tick = await resp.json();
+          if (!resp.ok || tick.error) throw new Error(tick.error || "请求失败");
+          price = parseFloat(tick.price);
+          fromApi = true;
+        } catch (err) {
+          rewardPriceDisplay.textContent = "—";
+          return;
+        }
+      }
+      if (useTiers) {
+        rewardTiersBody.innerHTML = buildTierRows(price);
+      }
+      if (useTotal) {
+        computeTotalReward(price);
+      }
+      const label = fromApi ? "实时" : (rewardPriceIsLive ? "实时" : "收盘");
+      const isLiveLabel = label === "实时";
+      const labelHtml = label
+        ? (isLiveLabel
+          ? '<span style="color:#c0392b;font-weight:700">(' + label + ')</span> '
+          : '(' + label + ') ')
+        : "";
+      rewardPriceDisplay.innerHTML = labelHtml + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+    }
+
+    document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
+    if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
+}
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -403,13 +540,21 @@ let page = 1;
 
     const allRows = preview.rows || [];
     if (preview.noData) {
-      document.title = "排行榜预览 — 无数据";
-      document.getElementById("meta").innerHTML = `<span style="font-size:14px">没有快照数据。请在主页重新抓取，或上传快照文件。</span>`;
+      const ndHeading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || "排行榜预览";
+      document.title = ndHeading + " — 排行榜预览";
+      const ndUrl = preview.url;
+      document.getElementById("title").innerHTML = `${escapeHtml(ndHeading)}${ndUrl ? ` <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
+      const ndActS = preview.activityStart, ndActE = preview.activityEnd;
+      document.getElementById("actTime").textContent = ndActS || ndActE ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "";
+      const ndMsg = preview.status && preview.status !== "completed" ? "任务进行中，暂无快照数据。" : "没有快照数据。请在主页重新抓取，或上传快照文件。";
+      document.getElementById("meta").innerHTML = `<span style="font-size:14px">${ndMsg}</span>`;
       document.getElementById("downloadLinks").innerHTML = preview.resourceId
         ? `<a href="#" id="scrapeBtn">🔄 抓取</a>`
         : "";
       const bar = document.getElementById("snapshotBar");
       bar.style.display = "none";
+      for (const id of ["tableSection", "trendPanel", "calcToolPanel"]) { const el = document.getElementById(id); if (el) el.style.display = "none"; }
+      renderRewardPanel(preview, []);
       const scrapeBtn = document.getElementById("scrapeBtn");
       if (scrapeBtn) {
         scrapeBtn.addEventListener("click", async () => {
@@ -1211,130 +1356,7 @@ let page = 1;
 
     loadDeltaBtn.addEventListener("click", loadDeltaAnalysis);
     deltaSymbolInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadDeltaAnalysis(); });
-    // --- Reward calculation ---
-    const rewardToken = (previewData.rewardToken || "").trim().toUpperCase();
-    const rewardTiers = previewData.rewardTiers || [];
-    const rewardPriceUsd = previewData.rewardPriceUsd != null ? parseFloat(previewData.rewardPriceUsd) : null;
-    const rewardPriceIsLive = previewData.rewardPriceIsLive === true;
-    const rewardAmount = parseFloat(previewData.rewardAmount) || 0;
-    const rewardMode = previewData.rewardMode || "rank";
-    const totalReward = parseFloat(previewData.totalReward) || 0;
-    const eligibleUsers = parseInt(previewData.eligibleUsers) || 0;
-    const rewardPanel = document.getElementById("rewardPanel");
-    const rewardTokenDisplay = document.getElementById("rewardTokenDisplay");
-    const rewardPanelToken = document.getElementById("rewardPanelToken");
-    const rewardPriceDisplay = document.getElementById("rewardPriceDisplay");
-    const rewardTiersBody = document.getElementById("rewardTiersBody");
-    const rewardTiersTable = document.getElementById("rewardTiersTable");
-    const rewardTotalBody = document.getElementById("rewardTotalBody");
-    const useTotal = rewardMode === "total" && totalReward > 0 && eligibleUsers > 0;
-    const useTiers = !useTotal && rewardTiers.length > 0;
-    const lastTierReward = rewardMode === "rank_last_volume" ? previewData.lastTierReward : null;
-
-    function buildTierRows(price) {
-      const parts = [];
-      for (let i = 0; i < rewardTiers.length; i++) {
-        const t = rewardTiers[i];
-        const pool = parseFloat(t.amount) || 0;
-        const count = t.rankMax - t.rankMin + 1;
-        const poolStr = pool.toLocaleString("en-US");
-        if (lastTierReward && i === lastTierReward.tierIndex) {
-          const per10k = lastTierReward.per10k != null ? lastTierReward.per10k : null;
-          const usd = per10k != null && price != null ? per10k * price : null;
-          const rateStr = per10k != null
-            ? `每万U ${per10k.toLocaleString("en-US", {maximumFractionDigits:4})}`
-            : "每万U —";
-          const tip = lastTierReward.tierVolume != null
-            ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
-            : "档内总量不足";
-          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}">${rateStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
-        } else {
-          const perPerson = count > 0 ? pool / count : 0;
-          const usd = price != null ? perPerson * price : null;
-          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num">${perPerson.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:4})}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
-        }
-      }
-      return parts.join("");
-    }
-
-    function computeTotalReward(price) {
-      // Sum grade of top eligibleUsers rows
-      const sorted = [...allRows].sort((a, b) => (a.rank || 999999) - (b.rank || 999999));
-      const top = sorted.slice(0, eligibleUsers);
-      let totalVolume = 0;
-      for (const r of top) {
-        const v = r._g || 0;
-        totalVolume += v;
-      }
-      const volumePer10K = totalVolume / 10_000;
-      const perM = volumePer10K > 0 ? totalReward / volumePer10K : 0;
-      const nf = (v, d) => (v != null ? Number(v).toLocaleString("en-US", {minimumFractionDigits:0, maximumFractionDigits:d}) : "—");
-      const fmtVolume = (v) => {
-        if (!Number.isFinite(v)) return "—";
-        if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
-        if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
-        if (v >= 1000) return (v / 1000).toFixed(2) + "K";
-        return v.toFixed(2);
-      };
-      document.getElementById("rewardPoolDisplay").textContent = nf(totalReward, 2) + " " + rewardToken;
-      document.getElementById("rewardEligibleDisplay").textContent = nf(eligibleUsers, 0);
-      document.getElementById("rewardVolumeDisplay").textContent = fmtVolume(totalVolume);
-      document.getElementById("rewardPerMDisplay").innerHTML = (perM > 0 ? nf(perM, 4) : "—") + " " + rewardToken + (price != null ? ` (≈ $${nf(perM * price, 2)})` : "");
-    }
-
-    async function updateReward(forceApi) {
-      const hasReward = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
-      if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
-      rewardPanel.style.display = "";
-      rewardPanelToken.textContent = rewardToken;
-      rewardTokenDisplay.textContent = rewardToken;
-      rewardTiersTable.style.display = useTiers ? "" : "none";
-      rewardTotalBody.style.display = useTotal ? "" : "none";
-      if (useTiers) {
-        rewardTiersBody.innerHTML = buildTierRows(null);
-      }
-      if (useTotal) {
-        computeTotalReward(null);
-      }
-      let price;
-      let fromApi = false;
-      if (forceApi) {
-        price = null;
-      } else {
-        price = rewardPriceUsd;
-      }
-      if (price == null) {
-        rewardPriceDisplay.textContent = "加载中...";
-        const symbol = rewardToken + "USDT";
-        try {
-          const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
-          const data = await resp.json();
-          if (!resp.ok || data.error) throw new Error(data.error || "请求失败");
-          price = parseFloat(data.price);
-          fromApi = true;
-        } catch (err) {
-          rewardPriceDisplay.textContent = "—";
-          return;
-        }
-      }
-      if (useTiers) {
-        rewardTiersBody.innerHTML = buildTierRows(price);
-      }
-      if (useTotal) {
-        computeTotalReward(price);
-      }
-      const label = fromApi ? "实时" : (rewardPriceIsLive ? "实时" : "收盘");
-      const isLiveLabel = label === "实时";
-      const labelHtml = label
-        ? (isLiveLabel
-          ? '<span style="color:#c0392b;font-weight:700">(' + label + ')</span> '
-          : '(' + label + ') ')
-        : "";
-      rewardPriceDisplay.innerHTML = labelHtml + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
-    }
-
-    document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
-    if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
+    renderRewardPanel(preview, allRows);
 
     // --- Trend chart ---
     const _activityEnd = preview.activityEnd;
@@ -1399,6 +1421,23 @@ let page = 1;
         renderTrendChart();
       });
       renderTrendChart();
+    }
+    function trendMarker(kind, cx, cy, color, tip, key) {
+      const s = 6;
+      const a = ` data-tip="${tip}" tabindex="0" data-key="${key}"`;
+      if (kind === "circle") return `<circle cx="${cx}" cy="${cy}" r="${s}" fill="${color}" stroke="#fff" stroke-width="2"${a}/>`;
+      if (kind === "diamond") return `<polygon points="${cx},${cy-s-2} ${cx+s+2},${cy} ${cx},${cy+s+2} ${cx-s-2},${cy}" fill="${color}" stroke="#fff" stroke-width="2"${a}/>`;
+      if (kind === "square") return `<rect x="${cx-s}" y="${cy-s}" width="${s*2}" height="${s*2}" fill="${color}" stroke="#fff" stroke-width="2"${a}/>`;
+      if (kind === "triangle") return `<polygon points="${cx},${cy-s-2} ${cx+s+2},${cy+s-1} ${cx-s-2},${cy+s-1}" fill="${color}" stroke="#fff" stroke-width="2"${a}/>`;
+      if (kind === "plus") return `<g${a}><line x1="${cx-s}" y1="${cy}" x2="${cx+s}" y2="${cy}" stroke="${color}" stroke-width="3.5" stroke-linecap="round"/><line x1="${cx}" y1="${cy-s}" x2="${cx}" y2="${cy+s}" stroke="${color}" stroke-width="3.5" stroke-linecap="round"/></g>`;
+      return "";
+    }
+    function applyTrendEmphasize(key) {
+      const svg = document.getElementById("trendSvg");
+      if (!svg) return;
+      svg.querySelectorAll("[data-key]").forEach(el => {
+        el.style.opacity = key && el.dataset.key !== key ? "0.12" : "";
+      });
     }
     function renderTrendChart() {
       const svg = document.getElementById("trendSvg");
@@ -1623,20 +1662,21 @@ let page = 1;
         html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === snaps.length - 1 ? 'end' : 'middle'}" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
       }
 
-      // total volume line (left axis)
-      const tPts = snaps.map((s, i) => {
-        const v = s.totalVol;
-        if (v == null || !Number.isFinite(v)) return null;
-        return `${xPos(i)},${yLPos(v)}`;
-      }).filter(Boolean);
-      if (tPts.length >= 2) {
-        html += `<polyline points="${tPts.join(" ")}" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linejoin="round" opacity=".85"/>`;
-        for (let i = 0; i < snaps.length; i++) {
-          const v = snaps[i].totalVol;
-          if (v == null || !Number.isFinite(v)) continue;
-          const cx = xPos(i), cy = yLPos(v);
-          html += `<circle cx="${cx}" cy="${cy}" r="6" fill="#4a90d9" stroke="#fff" stroke-width="2" tabindex="0"
-            data-tip="${escapeHtml("总成交量: " + fmtShort(v))}"/>`;
+      // total volume line (left axis, key "total")
+      if (!_trendHidden.has("total")) {
+        const tPts = snaps.map((s, i) => {
+          const v = s.totalVol;
+          if (v == null || !Number.isFinite(v)) return null;
+          return `${xPos(i)},${yLPos(v)}`;
+        }).filter(Boolean);
+        if (tPts.length >= 2) {
+          html += `<polyline points="${tPts.join(" ")}" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linejoin="round" opacity=".85" data-key="total"/>`;
+          for (let i = 0; i < snaps.length; i++) {
+            const v = snaps[i].totalVol;
+            if (v == null || !Number.isFinite(v)) continue;
+            const cx = xPos(i), cy = yLPos(v);
+            html += trendMarker("circle", cx, cy, "#4a90d9", escapeHtml("总成交量: " + fmtShort(v)), "total");
+          }
         }
       }
 
@@ -1667,20 +1707,20 @@ let page = 1;
             html += `<text x="${W - PR + 6}" y="${PT + gi / 4 * CH + 4}" text-anchor="start" font-size="10" fill="#999">${fmtShort(rv)}</text>`;
           }
           for (const st of rightStats) {
+            if (_trendHidden.has(st.key)) continue;
             const pts = points.map((p, i) => {
               if (!p) return null;
               const v = p[st.key];
               return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yRPos(v)}` : null;
             }).filter(Boolean);
             if (pts.length < 2) continue;
-            html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${st.color}" stroke-width="2" stroke-linejoin="round" opacity=".85" stroke-dasharray="4,3"/>`;
+            html += `<polyline points="${pts.join(" ")}" fill="none" stroke="${st.color}" stroke-width="2" stroke-linejoin="round" opacity=".85" stroke-dasharray="4,3" data-key="${st.key}"/>`;
             for (let i = 0; i < points.length; i++) {
               if (!points[i]) continue;
               const v = points[i][st.key];
               if (v == null || !Number.isFinite(v)) continue;
               const cx = xPos(i), cy = yRPos(v);
-              html += `<circle cx="${cx}" cy="${cy}" r="6" fill="${st.color}" stroke="#fff" stroke-width="2" tabindex="0"
-                data-tip="${escapeHtml(st.label + "(" + tierLabel + "): " + fmtShort(v))}"/>`;
+              html += trendMarker(TREND_SERIES[st.key].shape, cx, cy, st.color, escapeHtml(st.label + "(" + tierLabel + "): " + fmtShort(v)), st.key);
             }
           }
         }
@@ -1689,16 +1729,27 @@ let page = 1;
       svg.innerHTML = html;
       bindTrendTips(svg);
 
-      document.getElementById("trendLegend").innerHTML =
-        '<span class="tl-item"><span class="tl-dot" style="background:#4a90d9"></span>总成交量</span>' +
-        (points.length >= 2 ? [
-          { key: "avg", label: "均价", color: "#c0392b" },
-          { key: "med", label: "中位数", color: "#8e44ad" },
-          { key: "q1", label: "Q1", color: "#e67e22" },
-          { key: "last", label: "末位", color: "#7f8c8d" },
-        ].map(st =>
-          `<span class="tl-item"><span class="tl-dot" style="border-top:2px dashed ${st.color};background:transparent"></span>${st.label}</span>`
-        ).join("") : "");
+      const legendEl = document.getElementById("trendLegend");
+      const legendKeys = points.length >= 2
+        ? ["total", "avg", "med", "q1", "last"]
+        : ["total"];
+      legendEl.innerHTML = legendKeys.map(k => {
+        const cfg = TREND_SERIES[k];
+        const hidden = _trendHidden.has(k);
+        const dotStyle = cfg.dash
+          ? `border-top:2px dashed ${cfg.color};background:transparent`
+          : `background:${cfg.color}`;
+        return `<button type="button" class="tl-item${hidden ? " tl-hidden" : ""}" data-key="${k}"><span class="tl-dot" style="${dotStyle}"></span>${escapeHtml(cfg.label)}</button>`;
+      }).join("");
+      legendEl.querySelectorAll(".tl-item").forEach(btn => {
+        const k = btn.dataset.key;
+        btn.addEventListener("click", () => {
+          if (_trendHidden.has(k)) _trendHidden.delete(k); else _trendHidden.add(k);
+          renderTrendChart();
+        });
+        btn.addEventListener("mouseenter", () => applyTrendEmphasize(k));
+        btn.addEventListener("mouseleave", () => applyTrendEmphasize(null));
+      });
     }
     function fmtShort(v) {
       if (!Number.isFinite(v)) return "—";
