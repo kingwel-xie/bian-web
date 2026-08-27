@@ -17,6 +17,9 @@
   .team-name { border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); min-width: 60px; max-width: 200px; }
   .team-name:focus { outline: none; border-bottom: 1px solid var(--accent-2); }
   .team-count { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .maddog-toggle { border: 0; background: transparent; cursor: pointer; font-size: 15px; padding: 0 2px; color: #ccc; line-height: 1; }
+  .maddog-toggle:hover { color: #e67e22; }
+  .maddog-toggle.active { color: #e67e22; font-weight: 700; }
   .member-wrap { overflow-x: auto; }
   .member-table { border-collapse: collapse; font-size: 12px; width: 100%; }
   .member-table th { font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 18px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
@@ -31,8 +34,13 @@
   .weight-input:focus { border-color: var(--accent-2); outline: none; }
   .maddog-input { width: 88px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; text-align: center; background: #fff; }
   .maddog-input:focus { border-color: var(--accent-2); outline: none; }
-  .member-table .md-col { width: 90px; }
+  .member-table .md-col { width: 112px; }
   .del-btn { border: 0; background: transparent; color: #bbb; cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
+  .member-table .ck-col { width: 30px; text-align: center; }
+  .member-table input[type="checkbox"] { width: auto; height: auto; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+  .bulk-del-btn { border: 1px solid var(--line); border-radius: 4px; background: #eee7d9; color: var(--ink); padding: 2px 10px; cursor: pointer; font-size: 11px; font-weight: 600; line-height: 20px; }
+  .bulk-del-btn:hover:not(:disabled) { background: #fde8e8; color: var(--bad); }
+  .bulk-del-btn:disabled { opacity: .4; cursor: default; }
   .del-btn:hover { color: var(--bad); }
   .merge-btn { border: 0; background: transparent; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; }
   .merge-btn:hover { background: var(--accent-2); color: #fff; }
@@ -101,6 +109,21 @@ function msg(text, isOk) {
 
 let _expandedTeams = new Set();
 let _teamSort = {};
+let _selected = {};
+function memberKey(m) { return (m.nickname || "").trim().toLowerCase(); }
+function getSel(ti) { if (!_selected[ti]) _selected[ti] = new Set(); return _selected[ti]; }
+function updateSelUi(ti) {
+  const card = document.querySelector(`.team-card[data-ti="${ti}"]`);
+  if (!card) return;
+  const members = (_teamsData[ti] || {}).members || [];
+  const sel = getSel(ti);
+  let count = 0, all = members.length > 0;
+  for (const m of members) { if (sel.has(memberKey(m))) count++; else all = false; }
+  const btn = card.querySelector(".bulk-del-btn");
+  if (btn) { btn.textContent = `删除选中(${count})`; btn.disabled = count === 0; }
+  const allCk = card.querySelector(".ck-all");
+  if (allCk) allCk.checked = all;
+}
 function loadDb() {
   const content = document.getElementById("content");
   fetch("/api/teams").then(r => r.json()).then(data => {
@@ -129,26 +152,36 @@ function loadDb() {
     }
     content.innerHTML = teams.map((team, ti) => {
       const members = team.members || [];
-      const sortDir = _teamSort[ti];
+      const s = _teamSort[ti];
       let sortedMembers = members;
-      if (sortDir === "desc") sortedMembers = [...members].sort((a, b) => (Number(b.weight) || 1) - (Number(a.weight) || 1));
-      else if (sortDir === "asc") sortedMembers = [...members].sort((a, b) => (Number(a.weight) || 1) - (Number(b.weight) || 1));
-      const sortInd = sortDir === "asc" ? "▲" : sortDir === "desc" ? "▼" : "";
-      return `<div class="team-card${_expandedTeams.has(ti) ? "" : " collapsed"}">
+      if (s && s.dir) {
+        const key = s.col === "maddog" ? (m => Number(m.madDog) || 0) : (m => Number(m.weight) || 1);
+        sortedMembers = [...members].sort((a, b) => key(b) - key(a));
+        if (s.dir === "asc") sortedMembers.reverse();
+      }
+      const ind = col => (s && s.col === col) ? (s.dir === "asc" ? "▲" : s.dir === "desc" ? "▼" : "") : "";
+      const wInd = ind("weight"), mdInd = ind("maddog");
+      const sel = getSel(ti);
+      const selCount = members.filter(m => sel.has(memberKey(m))).length;
+      const allSel = members.length > 0 && members.every(m => sel.has(memberKey(m)));
+      return `<div class="team-card${_expandedTeams.has(ti) ? "" : " collapsed"}" data-ti="${ti}">
         <div class="team-hd">
           <button class="team-toggle" data-ti="${ti}" title="展开/折叠"></button>
           <input class="team-name" value="${escapeHtml(team.name || "")}" data-ti="${ti}" />
            <span class="team-count">${members.length} 人</span>
+           <button class="maddog-toggle${team.madDog ? " active" : ""}" data-ti="${ti}" title="标记为 MadDog 团队（preview 星标/步进器激活）">★</button>
            ${teams.length > 1 ? `<button class="merge-btn" data-ti="${ti}">合并</button>` : ""}
+           <button class="bulk-del-btn" data-ti="${ti}"${selCount === 0 ? " disabled" : ""}>删除选中(${selCount})</button>
            <button class="del-team-btn" data-ti="${ti}" title="删除团队">🗑</button>
         </div>
         <div class="member-wrap">
           <table class="member-table">
             <thead>
-              <tr><th>昵称</th><th class="uid-col">User ID</th><th class="w-col num sortable" data-ti="${ti}">权重<span class="sort-ind">${sortInd}</span></th><th class="md-col num">MadDog</th><th class="del-col">操作</th></tr>
+              <tr><th class="ck-col"><input type="checkbox" class="ck-all" data-ti="${ti}" ${allSel ? "checked" : ""}></th><th>昵称</th><th class="uid-col">User ID</th><th class="w-col num sortable" data-ti="${ti}" data-col="weight">权重<span class="sort-ind">${wInd}</span></th><th class="md-col num sortable" data-ti="${ti}" data-col="maddog">MadDog<span class="sort-ind">${mdInd}</span></th><th class="del-col">操作</th></tr>
             </thead>
             <tbody>
               ${sortedMembers.map((m, mi) => `<tr>
+                <td class="ck-col"><input type="checkbox" class="ck-member" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" ${sel.has(memberKey(m)) ? "checked" : ""}></td>
                 <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
                 <td class="uid-col" title="${escapeHtml(m.userId || "")}">${escapeHtml(m.userId || "")}</td>
                 <td class="num"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
@@ -158,6 +191,7 @@ function loadDb() {
             </tbody>
             <tfoot>
               <tr class="add-row">
+                <td></td>
                 <td><input class="add-nick-${ti}" placeholder="昵称" /></td>
                 <td><input class="add-uid-${ti}" placeholder="User ID" /></td>
                 <td class="num"><button class="add-btn" data-ti="${ti}">+ 添加</button></td>
@@ -254,13 +288,78 @@ function loadDb() {
       });
     });
 
-    // weight column sort
+    // column sort
     content.querySelectorAll("th.sortable").forEach(el => {
       el.addEventListener("click", function() {
         const ti = parseInt(this.dataset.ti);
+        const col = this.dataset.col;
         const cur = _teamSort[ti];
-        _teamSort[ti] = cur === "desc" ? "asc" : cur === "asc" ? undefined : "desc";
+        let dir = "desc";
+        if (cur && cur.col === col) {
+          dir = cur.dir === "desc" ? "asc" : cur.dir === "asc" ? undefined : "desc";
+        }
+        if (dir === undefined) delete _teamSort[ti];
+        else _teamSort[ti] = {col, dir};
         loadDb();
+      });
+    });
+
+    // member checkbox
+    content.querySelectorAll(".ck-member").forEach(el => {
+      el.addEventListener("change", function() {
+        const ti = parseInt(this.dataset.ti);
+        const k = decodeURIComponent(this.dataset.nick).trim().toLowerCase();
+        const sel = getSel(ti);
+        if (this.checked) sel.add(k); else sel.delete(k);
+        updateSelUi(ti);
+      });
+    });
+
+    // select-all
+    content.querySelectorAll(".ck-all").forEach(el => {
+      el.addEventListener("change", function() {
+        const ti = parseInt(this.dataset.ti);
+        const members = (_teamsData[ti] || {}).members || [];
+        const sel = getSel(ti);
+        if (this.checked) { for (const m of members) sel.add(memberKey(m)); }
+        else { sel.clear(); }
+        const card = document.querySelector(`.team-card[data-ti="${ti}"]`);
+        if (card) card.querySelectorAll(".ck-member").forEach(ck => { ck.checked = this.checked; });
+        updateSelUi(ti);
+      });
+    });
+
+    // bulk delete
+    content.querySelectorAll(".bulk-del-btn").forEach(el => {
+      el.addEventListener("click", function() {
+        const ti = parseInt(this.dataset.ti);
+        const members = (_teamsData[ti] || {}).members || [];
+        const sel = getSel(ti);
+        const nicks = members.filter(m => sel.has(memberKey(m))).map(m => m.nickname);
+        if (!nicks.length) return;
+        if (!confirm(`确定删除选中的 ${nicks.length} 个成员吗？此操作不可恢复。`)) return;
+        fetch("/api/teams/members", {
+          method: "DELETE",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({teamIndex: ti, nicknames: nicks}),
+        }).then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error); }))
+          .then(() => { _selected[ti] = new Set(); loadDb(); msg("已删除选中成员", true); })
+          .catch(err => msg("错误: " + err.message, false));
+      });
+    });
+
+    // maddog team toggle
+    content.querySelectorAll(".maddog-toggle").forEach(el => {
+      el.addEventListener("click", function() {
+        const ti = parseInt(this.dataset.ti);
+        const cur = !!((_teamsData[ti] || {}).madDog);
+        fetch("/api/teams/team/maddog", {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({teamIndex: ti, madDog: !cur}),
+        }).then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error); }))
+          .then(() => loadDb())
+          .catch(err => msg("错误: " + err.message, false));
       });
     });
 

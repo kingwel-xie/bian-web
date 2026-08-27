@@ -29,6 +29,10 @@
   .col-score { width: 12%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
   .rank { font-weight: 900; }
   .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
+  .maddog-stars { font-size: 11px; color: #e67e22; font-weight: 700; margin-left: 3px; vertical-align: super; letter-spacing: -1px; }
+  .md-step { display: inline-flex; min-height: 0; font-size: 11px; font-weight: 700; margin-left: 2px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 4px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; opacity: 0; transition: opacity .1s; }
+  tr:hover .md-step { opacity: 1; }
+  .md-step:hover { background: #a0988a; }
   .row-market { background: #f5f0e6; }
   .row-prediction { background: #e8f0f5; }
   .add-team-btn { display: inline-flex; min-height: 0; font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
@@ -999,6 +1003,8 @@ function renderRewardPanel(data, rows) {
     let deltaSort = false;
     let volumeSort = false;
     let teamOfUser = (preview.teamMap || {});
+    let madDogOf = (preview.madDogMap || {});
+    let madDogTeamOf = (preview.madDogTeamIndex || {});
 
     // populate team filter
     const teamFilterEl = document.getElementById("teamFilter");
@@ -1129,9 +1135,19 @@ function renderRewardPanel(data, rows) {
       updatePager(total, totalPages);
       document.getElementById("rows").innerHTML = pageRows.length ? pageRows.map(r => {
         const teamName = teamOfUser[r.nickname] || "";
-        const nickHtml = teamName
-          ? `${escapeHtml(r.nickname || "—")}<sup class="team-tag">${escapeHtml(teamName)}</sup>`
-          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
+        const mdv = madDogOf[r.nickname];
+        const isMD = mdv != null;
+        const md = mdv || 0;
+        const starsHtml = md > 0 ? `<sup class="maddog-stars" title="MadDog ${md}">${"★".repeat(md)}</sup>` : "";
+        const stepperHtml = isMD
+          ? `<button type="button" class="md-step md-minus" data-nick="${escapeHtml(r.nickname)}" title="MadDog -1">−</button><button type="button" class="md-step md-plus" data-nick="${escapeHtml(r.nickname)}" title="MadDog +1">+</button>`
+          : "";
+        const tagHtml = teamName ? `<sup class="team-tag">${escapeHtml(teamName)}</sup>` : "";
+        const nickHtml = isMD
+          ? `${escapeHtml(r.nickname || "—")}${tagHtml}${starsHtml}${stepperHtml}`
+          : teamName
+            ? `${escapeHtml(r.nickname || "—")}${tagHtml}`
+            : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
         const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
           : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
           : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
@@ -1955,6 +1971,28 @@ function renderRewardPanel(data, rows) {
         pickerTeamSelect.focus();
       } catch (err) {
         showToast("加载团队失败: " + err.message);
+      }
+    });
+
+    document.getElementById("rows").addEventListener("click", async evt => {
+      const step = evt.target.closest(".md-step");
+      if (!step) return;
+      const nick = step.dataset.nick;
+      const ti = madDogTeamOf[nick];
+      if (ti == null) return;
+      let md = madDogOf[nick] || 0;
+      md = step.classList.contains("md-plus") ? md + 1 : Math.max(0, md - 1);
+      try {
+        const resp = await fetch("/api/teams/member/maddog", {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({teamIndex: ti, nickname: nick, madDog: md}),
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        madDogOf[nick] = md;
+        renderRows();
+      } catch (err) {
+        showToast("更新失败: " + err.message);
       }
     });
 

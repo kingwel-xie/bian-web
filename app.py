@@ -2901,24 +2901,39 @@ def api_kill_job(job_id: str) -> Response:
     return jsonify({"success": True})
 
 
-def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int]]:
+def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int], dict[str, int], dict[str, int]]:
     team_db = load_teams_db()
     team_lookup: dict[str, str] = {}
     team_sizes: dict[str, int] = {}
-    for team in team_db.get("teams") or []:
+    maddog_lookup: dict[str, int] = {}
+    maddog_team_lookup: dict[str, int] = {}
+    for ti, team in enumerate(team_db.get("teams") or []):
         team_name = team.get("name", "")
         team_sizes[team_name] = len(team.get("members") or [])
         for m in team.get("members") or []:
             key = (m.get("nickname") or "").strip()
             if key and key not in team_lookup:
                 team_lookup[key] = team_name
+        if not team.get("madDog"):
+            continue
+        for m in team.get("members") or []:
+            key = (m.get("nickname") or "").strip()
+            if key and key not in maddog_lookup:
+                maddog_lookup[key] = int(m.get("madDog") or 0)
+                maddog_team_lookup[key] = ti
     team_map: dict[str, str] = {}
+    maddog_map: dict[str, int] = {}
+    maddog_team_idx: dict[str, int] = {}
     for row in rows:
         nick = row.get("nickname") or ""
-        team_name = team_lookup.get(nickname_value({"nickName": nick}))
+        nv = nickname_value({"nickName": nick})
+        team_name = team_lookup.get(nv)
         if team_name:
             team_map[nick] = team_name
-    return team_map, team_sizes
+        if nv in maddog_lookup:
+            maddog_map[nick] = maddog_lookup[nv]
+            maddog_team_idx[nick] = maddog_team_lookup[nv]
+    return team_map, team_sizes, maddog_map, maddog_team_idx
 
 
 def _last_tier_index(tiers: list) -> int:
@@ -3252,9 +3267,11 @@ def api_job_preview(job_id: str) -> Response:
             _cache_put(_preview_cache, cache_key, base, _PREVIEW_CACHE_MAX)
         preview = dict(base)
 
-        team_map, team_sizes = _build_team_map(preview.get("rows") or [])
+        team_map, team_sizes, maddog_map, maddog_team_idx = _build_team_map(preview.get("rows") or [])
         preview["teamMap"] = team_map
         preview["teamSizes"] = team_sizes
+        preview["madDogMap"] = maddog_map
+        preview["madDogTeamIndex"] = maddog_team_idx
         p_reward_token = (payload.get("rewardToken", "") or "").strip().upper()
         p_activity_end = payload.get("activityEnd", "")
         price = get_token_price(p_reward_token, p_activity_end)
@@ -3846,6 +3863,21 @@ def api_rename_team() -> Response:
     return jsonify({"db": db})
 
 
+@app.put("/api/teams/team/maddog")
+def api_set_team_maddog() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    flag = bool(body.get("madDog", False))
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    teams[team_idx]["madDog"] = flag
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
 @app.delete("/api/teams/team")
 def api_delete_team() -> Response:
     db = load_teams_db()
@@ -3878,6 +3910,28 @@ def api_delete_member() -> Response:
                 m for m in (team.get("members") or [])
                 if _team_member_key(m) != nickname
             ]
+    db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    save_teams_db(db)
+    return jsonify({"db": db})
+
+
+@app.delete("/api/teams/members")
+def api_delete_members_bulk() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = body.get("teamIndex")
+    nicks: set[str] = set()
+    for n in body.get("nicknames") or []:
+        s = str(n or "").strip().lower()
+        if s:
+            nicks.add(s)
+    teams = db.get("teams") or []
+    if team_idx is not None and 0 <= team_idx < len(teams):
+        members = teams[team_idx].get("members") or []
+        teams[team_idx]["members"] = [m for m in members if _team_member_key(m) not in nicks]
+    else:
+        for team in teams:
+            team["members"] = [m for m in (team.get("members") or []) if _team_member_key(m) not in nicks]
     db["updatedAt"] = datetime.now(timezone.utc).isoformat()
     save_teams_db(db)
     return jsonify({"db": db})
