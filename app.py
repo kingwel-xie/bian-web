@@ -1682,6 +1682,42 @@ def _has_today_data(job: dict[str, Any]) -> bool:
 
 MAX_RETRIES = 6
 
+SPOT_HOURLY_BEFORE_HOURS = 4
+SPOT_HOURLY_AFTER_HOURS = 3
+SPOT_HOURLY_MINUTE = 40
+
+
+def _spot_hourly_candidates(now_bj: datetime) -> list[dict[str, Any]]:
+    """SPOT scrape jobs whose activityEnd window [end-before, end+after] contains now_bj.
+
+    Skips jobs currently running/queued (e.g. the daily 12:39 scrape still in flight)
+    to avoid duplicate data.
+    """
+    candidates: list[dict[str, Any]] = []
+    for j in load_jobs():
+        if j.get("status") in ("running", "queued"):
+            continue
+        payload = j.get("payload") or {}
+        if payload.get("mode") == "workflow":
+            continue
+        if (payload.get("market") or "").lower() != "spot":
+            continue
+        end_str = payload.get("activityEnd", "")
+        if not end_str:
+            continue
+        try:
+            clean = end_str.strip().replace("T", " ")
+            if clean.count(":") == 1:
+                clean += ":00"
+            end_dt = datetime.strptime(clean[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BJ)
+        except Exception:
+            continue
+        start_win = end_dt - timedelta(hours=SPOT_HOURLY_BEFORE_HOURS)
+        end_win = end_dt + timedelta(hours=SPOT_HOURLY_AFTER_HOURS)
+        if start_win <= now_bj <= end_win:
+            candidates.append(j)
+    return candidates
+
 
 def daily_scrape_loop() -> None:
     """Background thread: daily scrape at 12:39, retry 1h later if no today's data (max 6 retries)."""
@@ -1749,6 +1785,30 @@ def daily_scrape_loop() -> None:
                     state["retry_time"] = None
         except Exception as exc:
             print(f"[daily_scrape] error: {exc}", file=sys.stderr)
+        time.sleep(30)
+
+
+def spot_hourly_scrape_loop() -> None:
+    """Background thread: scrape SPOT jobs at :40 of each hour while now is within
+    [activityEnd - 4h, activityEnd + 3h]. Skips jobs already running/queued (daily)."""
+    last_fire_key: str | None = None
+    while True:
+        try:
+            now_bj = datetime.now(BJ)
+            if now_bj.minute == SPOT_HOURLY_MINUTE:
+                fire_key = now_bj.strftime("%Y-%m-%d %H:") + f"{SPOT_HOURLY_MINUTE:02d}"
+                if fire_key != last_fire_key:
+                    last_fire_key = fire_key
+                    cands = _spot_hourly_candidates(now_bj)
+                    if cands:
+                        print(f"[spot_hourly] {fire_key} — {len(cands)} spot job(s) in window")
+                        for j in cands:
+                            try:
+                                create_job(j["payload"], source="schedule:spot-hourly")
+                            except ScriptError as e:
+                                print(f"  skip {j.get('id', '')}: {e}")
+        except Exception as exc:
+            print(f"[spot_hourly] error: {exc}", file=sys.stderr)
         time.sleep(30)
 
 
@@ -3686,6 +3746,7 @@ def _team_item(member: dict, weight: int = 1) -> dict:
         "nickname": str(member.get("nickname") or ""),
         "userId": str(member.get("userId") or ""),
         "weight": weight,
+        "madDog": int(member.get("madDog") or 0),
     }
 
 
@@ -3856,6 +3917,25 @@ def api_update_member_weight() -> Response:
     return jsonify({"error": "成员不存在"}), 404
 
 
+@app.put("/api/teams/member/maddog")
+def api_update_member_maddog() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    nickname = str(body.get("nickname") or "").strip().lower()
+    new_val = int(body.get("madDog", 0))
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    for m in (teams[team_idx].get("members") or []):
+        if _team_member_key(m) == nickname:
+            m["madDog"] = new_val
+            db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_teams_db(db)
+            return jsonify({"db": db})
+    return jsonify({"error": "成员不存在"}), 404
+
+
 @app.post("/api/teams/merge")
 def api_merge_teams() -> Response:
     db = load_teams_db()
@@ -3880,6 +3960,9 @@ def api_merge_teams() -> Response:
         if key in target_map:
             target_map[key]["weight"] = max(
                 target_map[key].get("weight", 1), m.get("weight", 1)
+            )
+            target_map[key]["madDog"] = max(
+                int(target_map[key].get("madDog") or 0), int(m.get("madDog") or 0)
             )
         else:
             target_members.append(dict(m))
@@ -4708,6 +4791,7 @@ def main() -> None:
         save_jobs(jobs)
     threading.Thread(target=scheduler_loop, daemon=True).start()
     threading.Thread(target=daily_scrape_loop, daemon=True).start()
+    threading.Thread(target=spot_hourly_scrape_loop, daemon=True).start()
     threading.Thread(target=sync_activities_loop, daemon=True).start()
     host = os.environ.get("WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("WEB_PORT", "48234"))
