@@ -1300,7 +1300,7 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
     stderr_chunks: list[str] = []
 
     def read_stream(stream, chunks, is_stderr=False):
-        for raw in iter(lambda: stream.read(4096), b""):
+        for raw in iter(lambda: stream.read1(4096), b""):
             text = raw.decode("utf-8", errors="replace")
             chunks.append(text)
             if is_stderr:
