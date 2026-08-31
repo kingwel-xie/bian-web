@@ -1236,17 +1236,6 @@ def progress_from_stderr(stderr_text: str, status: str = "running", top: int = 1
     }
     if "使用连接方式" in stderr_text:
         progress.update({"stage": "connectivity", "label": "检测 Binance 连接", "percent": 8})
-    if "使用 Node Playwright" in stderr_text or "打开活动页面并监听" in stderr_text:
-        progress.update({"stage": "discovery", "label": "打开活动页发现 resourceId", "percent": 18})
-    if "候选 resourceId" in stderr_text:
-        progress.update({"stage": "discovery", "label": "已发现候选 resourceId", "percent": 30})
-        id_match = re.search(r"候选 resourceId=\[([^\]]*)\]", stderr_text)
-        if id_match:
-            ids = [x.strip() for x in id_match.group(1).split(",") if x.strip()]
-            if ids:
-                progress["candidateResourceIds"] = ids
-    if "测试 resourceId" in stderr_text:
-        progress.update({"stage": "validate", "label": "测试排行榜 resourceId", "percent": 38})
 
     matches = list(re.finditer(r"resourceId=(\d+)\s+第\s+(\d+)/(\d+)\s+页：(\d+)\s+条", stderr_text))
     if matches:
@@ -1255,7 +1244,7 @@ def progress_from_stderr(stderr_text: str, status: str = "running", top: int = 1
         page = int(match.group(2))
         total_pages = int(match.group(3))
         page_rows = int(match.group(4))
-        percent = 40 + round((page / max(total_pages, 1)) * 55)
+        percent = 8 + round((page / max(total_pages, 1)) * 87)
         progress.update(
             {
                 "stage": "fetching",
