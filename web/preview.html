@@ -314,6 +314,73 @@ function showToast(msg, ms) {
   setTimeout(() => el.remove(), ms || 3000);
 }
 const _SCRAPE_POLL_TIMEOUT = 10 * 60 * 1000;
+const _SSE_FALLBACK_MS = 30 * 1000;
+// 抓取进度：优先 SSE (/api/jobs/events) 推送，30s 轮询兜底（含完成/失败检测，SSE 只推 running/queued）。
+function watchScrapeJob(jobId, handlers, timeoutMs) {
+  const limit = timeoutMs || _SCRAPE_POLL_TIMEOUT;
+  const _started = Date.now();
+  let _stopped = false;
+  let _seenRunning = false;
+  let _es = null;
+  let _fb = null;
+
+  const stop = (fn) => {
+    if (_stopped) return;
+    _stopped = true;
+    if (_es) { _es.close(); _es = null; }
+    if (_fb) { clearInterval(_fb); _fb = null; }
+    if (fn) fn();
+  };
+
+  function _expiredCheck() {
+    if (Date.now() - _started <= limit) return false;
+    stop(() => handlers.onTimeout && handlers.onTimeout());
+    return true;
+  }
+
+  function _apply(data) {
+    const st = data && data.status;
+    if (st === "queued" || st === "running") {
+      _seenRunning = true;
+      if (handlers.onProgress) handlers.onProgress(data);
+      return;
+    }
+    stop(() => {
+      if (st === "completed") { if (handlers.onDone) handlers.onDone(); }
+      else if (handlers.onFailed) handlers.onFailed(data);
+    });
+  }
+
+  async function _pollStatus() {
+    if (_stopped || _expiredCheck()) return;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/status", { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (r.ok) _apply(await r.json());
+    } catch { clearTimeout(tid); }
+  }
+
+  try { _es = new EventSource("/api/jobs/events"); } catch { _es = null; }
+  if (_es) {
+    _es.onmessage = (ev) => {
+      let jobs = [];
+      try { jobs = JSON.parse(ev.data) || []; } catch (e) { console.warn("SSE parse error:", e); return; }
+      if (_stopped) return;
+      const hit = jobs.find((j) => String(j && j.id) === String(jobId));
+      if (hit) {
+        _apply(hit);
+      } else if (_seenRunning) {
+        _pollStatus(); // 从 running 列表消失 → 立即确认终态
+      }
+    };
+    _es.onerror = () => { /* 浏览器自动重连，兜底轮询保证进度 */ };
+  }
+  _fb = setInterval(_pollStatus, _SSE_FALLBACK_MS);
+  _pollStatus(); // 立即取一次，快速显示 label 并抓住已结束任务
+}
+
 function renderScrapingState(jobId, hint) {
   document.title = "排行榜预览 — 抓取中";
   const metaEl = document.getElementById("meta");
@@ -322,51 +389,34 @@ function renderScrapingState(jobId, hint) {
     `<span style="font-size:14px">⏳ 正在执行抓取，请稍候…${hint ? `<br><span style="color:#8a8171;font-size:12px">${escapeHtml(hint)}</span>` : ""}</span>` +
     `<br><span id="scrapeProg" style="font-size:12px;color:#8a8171">正在等待任务启动…</span>`
   );
-  document.getElementById("downloadLinks").innerHTML = "";
+  const _dl = document.getElementById("downloadLinks");
+  if (_dl) _dl.innerHTML = "";
   const _bar = document.getElementById("snapshotBar");
   if (_bar) _bar.style.display = "none";
-  const _started = Date.now();
-  const _progEl = () => document.getElementById("scrapeProg");
   const _finish = () => {
     location.replace(location.pathname + "?job=" + encodeURIComponent(jobId || ""));
   };
-  const _poll = async () => {
-    if (Date.now() - _started > _SCRAPE_POLL_TIMEOUT) {
-      setMeta(`<span style="font-size:14px">抓取超时，请前往主页查看任务状态。</span>`);
-      return;
-    }
-    try {
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 10000);
-      const r2 = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/status", { signal: ctrl.signal });
-      clearTimeout(tid);
-      if (!r2.ok) {
-        const d = await r2.json().catch(() => ({}));
-        setMeta(`<span style="font-size:14px">${escapeHtml((d && d.error) || "任务不存在")}</span>`);
-        return;
-      }
-      const data = await r2.json();
-      const status = data.status;
-      if (status === "queued" || status === "running") {
-        const prog = data.progress || {};
-        const label = prog.label || "正在抓取…";
-        const pct = typeof prog.percent === "number" ? prog.percent : null;
-        if (_progEl()) _progEl().textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "");
-        setTimeout(_poll, 2500);
-        return;
-      }
-      if (status === "completed") { _finish(); return; }
+  watchScrapeJob(jobId, {
+    onProgress: (data) => {
+      const prog = (data && data.progress) || {};
+      const label = prog.label || "正在抓取…";
+      const pct = typeof prog.percent === "number" ? prog.percent : null;
+      const el = document.getElementById("scrapeProg");
+      if (el) el.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "");
+    },
+    onDone: _finish,
+    onFailed: () => {
       setMeta(
         `<span style="font-size:14px">❌ 抓取失败，请前往主页查看日志。</span><br>` +
         `<a href="#" id="scrapeRetry" style="font-size:13px">🔄 重新加载</a>`
       );
       const retryBtn = document.getElementById("scrapeRetry");
       if (retryBtn) retryBtn.addEventListener("click", () => location.reload());
-    } catch {
-      setTimeout(_poll, 5000);
-    }
-  };
-  _poll();
+    },
+    onTimeout: () => {
+      setMeta(`<span style="font-size:14px">抓取超时，请前往主页查看任务状态。</span>`);
+    },
+  });
 }
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
@@ -759,38 +809,14 @@ function renderRewardPanel(data, rows) {
           const scrapeJobId = jobData?.job?.id;
           if (!scrapeJobId) throw new Error("后端未返回 job id");
           scrapeBtn.textContent = "⏳ 等待抓取结果...";
-
-          const poll = async (startTime) => {
-            if (Date.now() - startTime > 300000) {
-              scrapeBtn.textContent = "🔄 抓取";
-              scrapeBtn.style.opacity = "";
-              _scraping = false;
-              showToast("抓取超时，请前往主页查看。", 4000);
-              return;
-            }
-            try {
-              const ctrl = new AbortController();
-              const tid = setTimeout(() => ctrl.abort(), 10000);
-              const r2 = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/status", { signal: ctrl.signal });
-              clearTimeout(tid);
-              if (!r2.ok) { setTimeout(() => poll(startTime), 3000); return; }
-              const data = await r2.json();
-              const status = data.status;
-              if (status === "queued" || status === "running") {
-                const prog = data.progress || {};
-                const label = prog.label || "正在抓取…";
-                const pct = typeof prog.percent === "number" ? prog.percent : null;
-                scrapeBtn.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "") + "…";
-                setTimeout(() => poll(startTime), 3000);
-                return;
-              }
-              if (status === "failed") {
-                scrapeBtn.textContent = "🔄 抓取";
-                scrapeBtn.style.opacity = "";
-                _scraping = false;
-                showToast("抓取失败，请前往主页查看日志。", 5000);
-                return;
-              }
+          watchScrapeJob(scrapeJobId, {
+            onProgress: (data) => {
+              const prog = (data && data.progress) || {};
+              const label = prog.label || "正在抓取…";
+              const pct = typeof prog.percent === "number" ? prog.percent : null;
+              scrapeBtn.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "") + "…";
+            },
+            onDone: async () => {
               let newCount = _initialSnapCount;
               try {
                 const pv = await fetch("/api/jobs/" + encodeURIComponent(scrapeJobId) + "/preview");
@@ -807,11 +833,20 @@ function renderRewardPanel(data, rows) {
               scrapeBtn.style.opacity = "";
               _scraping = false;
               showToast("数据无变化（抓取已完成）", 4000);
-            } catch {
-              setTimeout(() => poll(startTime), 5000);
-            }
-          };
-          poll(Date.now());
+            },
+            onFailed: () => {
+              scrapeBtn.textContent = "🔄 抓取";
+              scrapeBtn.style.opacity = "";
+              _scraping = false;
+              showToast("抓取失败，请前往主页查看日志。", 5000);
+            },
+            onTimeout: () => {
+              scrapeBtn.textContent = "🔄 抓取";
+              scrapeBtn.style.opacity = "";
+              _scraping = false;
+              showToast("抓取超时，请前往主页查看。", 4000);
+            },
+          }, 5 * 60 * 1000);
         } catch (err) {
           scrapeBtn.textContent = "🔄 抓取";
           scrapeBtn.style.opacity = "";
