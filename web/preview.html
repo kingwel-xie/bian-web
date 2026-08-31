@@ -33,6 +33,8 @@
   .md-step { display: inline-flex; min-height: 0; font-size: 11px; font-weight: 700; margin-left: 2px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 4px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; opacity: 0; transition: opacity .1s; }
   tr:hover .md-step { opacity: 1; }
   .md-step:hover { background: #a0988a; }
+  .table-wrap thead th { position: sticky; top: 0; background: #eee7d9; z-index: 2; box-shadow: 0 1px 0 var(--line); }
+  .vspacer td { padding: 0; border: 0; line-height: 0; }
   .row-market { background: #f5f0e6; }
   .row-prediction { background: #e8f0f5; }
   .add-team-btn { display: inline-flex; min-height: 0; font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
@@ -1005,6 +1007,13 @@ function renderRewardPanel(data, rows) {
     let teamOfUser = (preview.teamMap || {});
     let madDogOf = (preview.madDogMap || {});
     let madDogTeamOf = (preview.madDogTeamIndex || {});
+    let _vRows = null, _dirtyRows = true, _vRowH = 0, _vRowMeasured = false;
+    const _vWrap = document.querySelector(".table-wrap");
+    function getRows() {
+      if (_dirtyRows || !_vRows) { _vRows = getFilteredSorted(); _dirtyRows = false; _vRowMeasured = false; }
+      return _vRows;
+    }
+    function resetScroll() { if (_vWrap) _vWrap.scrollTop = 0; }
 
     // populate team filter
     const teamFilterEl = document.getElementById("teamFilter");
@@ -1066,12 +1075,12 @@ function renderRewardPanel(data, rows) {
         if (page > 1) { page--; renderRows(); }
       });
       document.getElementById("pageNext").addEventListener("click", () => {
-        const rows = getFilteredSorted();
+        const rows = getRows();
         const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
         if (page < totalPages) { page++; renderRows(); }
       });
       document.getElementById("pageLast").addEventListener("click", () => {
-        const rows = getFilteredSorted();
+        const rows = getRows();
         const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
         if (page < totalPages) { page = totalPages; renderRows(); }
       });
@@ -1080,11 +1089,13 @@ function renderRewardPanel(data, rows) {
         pageSize = Number.isFinite(v) && v >= 0 ? v : 100;
         localStorage.setItem("previewPageSize", String(pageSize));
         page = 1;
+        _dirtyRows = true;
+        resetScroll();
         renderRows();
       });
       document.getElementById("pageJump").addEventListener("change", (e) => {
         const val = parseInt(e.target.value, 10);
-        const rows = getFilteredSorted();
+        const rows = getRows();
         const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
         if (Number.isFinite(val) && val >= 1) {
           page = Math.min(val, totalPages);
@@ -1124,35 +1135,26 @@ function renderRewardPanel(data, rows) {
       return rows;
     }
 
-    function renderRows() {
-      const rows = getFilteredSorted();
-      const total = rows.length;
-      const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-      if (page > totalPages) page = totalPages;
-      if (page < 1) page = 1;
-      const start = pageSize > 0 ? (page - 1) * pageSize : 0;
-      const pageRows = pageSize > 0 ? rows.slice(start, start + pageSize) : rows;
-      updatePager(total, totalPages);
-      document.getElementById("rows").innerHTML = pageRows.length ? pageRows.map(r => {
-        const teamName = teamOfUser[r.nickname] || "";
-        const mdv = madDogOf[r.nickname];
-        const isMD = mdv != null;
-        const md = mdv || 0;
-        const starsHtml = md > 0 ? `<sup class="maddog-stars" title="MadDog ${md}">${"★".repeat(md)}</sup>` : "";
-        const stepperHtml = isMD
-          ? `<button type="button" class="md-step md-minus" data-nick="${escapeHtml(r.nickname)}" title="MadDog -1">−</button><button type="button" class="md-step md-plus" data-nick="${escapeHtml(r.nickname)}" title="MadDog +1">+</button>`
-          : "";
-        const tagHtml = teamName ? `<sup class="team-tag">${escapeHtml(teamName)}</sup>` : "";
-        const nickHtml = isMD
-          ? `${escapeHtml(r.nickname || "—")}${tagHtml}${starsHtml}${stepperHtml}`
-          : teamName
-            ? `${escapeHtml(r.nickname || "—")}${tagHtml}`
-            : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
-        const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
-          : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
-          : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
-          : `<span class="chg-flat">-</span>`;
-        return `<tr><td>${escapeHtml(r.rank)}</td>
+    function rowHtml(r) {
+      const teamName = teamOfUser[r.nickname] || "";
+      const mdv = madDogOf[r.nickname];
+      const isMD = mdv != null;
+      const md = mdv || 0;
+      const starsHtml = md > 0 ? `<sup class="maddog-stars" title="MadDog ${md}">${"★".repeat(md)}</sup>` : "";
+      const stepperHtml = isMD
+        ? `<button type="button" class="md-step md-minus" data-nick="${escapeHtml(r.nickname)}" title="MadDog -1">−</button><button type="button" class="md-step md-plus" data-nick="${escapeHtml(r.nickname)}" title="MadDog +1">+</button>`
+        : "";
+      const tagHtml = teamName ? `<sup class="team-tag">${escapeHtml(teamName)}</sup>` : "";
+      const nickHtml = isMD
+        ? `${escapeHtml(r.nickname || "—")}${tagHtml}${starsHtml}${stepperHtml}`
+        : teamName
+          ? `${escapeHtml(r.nickname || "—")}${tagHtml}`
+          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
+      const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
+        : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
+        : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
+        : `<span class="chg-flat">-</span>`;
+      return `<tr><td>${escapeHtml(r.rank)}</td>
         <td class="tl">${nickHtml}</td>
         <td class="tl">${escapeHtml(r.userId || "—")}</td>
         <td class="num">${fmtNumber(r._g)}</td>
@@ -1160,7 +1162,46 @@ function renderRewardPanel(data, rows) {
         <td class="num">${r._dg ? fmtNumber(r._dg) : "—"}</td>
         <td class="num">${chgHtml}</td>
         <td class="num">${escapeHtml(r.region || "—")}</td></tr>`;
-      }).join("") : `<tr><td colspan="8" class="empty">${qOrTeamFilterActive() ? "没有匹配。" : "没有数据。"}</td></tr>`;
+    }
+
+    function renderRows() {
+      const rows = getRows();
+      if (pageSize === 0) renderVirtual(rows);
+      else renderPaged(rows);
+    }
+
+    function renderPaged(rows) {
+      const total = rows.length;
+      const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+      if (page > totalPages) page = totalPages;
+      if (page < 1) page = 1;
+      const start = pageSize > 0 ? (page - 1) * pageSize : 0;
+      const pageRows = pageSize > 0 ? rows.slice(start, start + pageSize) : rows;
+      updatePager(total, totalPages);
+      document.getElementById("rows").innerHTML = pageRows.length ? pageRows.map(rowHtml).join("") : `<tr><td colspan="8" class="empty">${qOrTeamFilterActive() ? "没有匹配。" : "没有数据。"}</td></tr>`;
+    }
+
+    function renderVirtual(rows) {
+      const rowsEl = document.getElementById("rows");
+      const total = rows.length;
+      if (!total) { updatePager(0, 1); rowsEl.innerHTML = `<tr><td colspan="8" class="empty">${qOrTeamFilterActive() ? "没有匹配。" : "没有数据。"}</td></tr>`; return; }
+      if (!_vRowH) _vRowH = 31;
+      const rowH = _vRowH;
+      const viewH = _vWrap ? _vWrap.clientHeight : 600;
+      const scrollTop = _vWrap ? _vWrap.scrollTop : 0;
+      const buffer = 8;
+      let start = Math.max(0, Math.floor(scrollTop / rowH) - buffer);
+      let end = Math.min(total, Math.ceil((scrollTop + viewH) / rowH) + buffer);
+      const parts = [];
+      if (start > 0) parts.push(`<tr class="vspacer" style="height:${start * rowH}px"><td colspan="8"></td></tr>`);
+      for (let i = start; i < end; i++) parts.push(rowHtml(rows[i]));
+      if (end < total) parts.push(`<tr class="vspacer" style="height:${(total - end) * rowH}px"><td colspan="8"></td></tr>`);
+      rowsEl.innerHTML = parts.join("");
+      if (!_vRowMeasured) {
+        const sample = rowsEl.querySelector("tr:not(.vspacer)");
+        if (sample && sample.offsetHeight) { _vRowH = sample.offsetHeight; _vRowMeasured = true; renderVirtual(rows); }
+      }
+      updatePager(total, 1);
     }
 
     function qOrTeamFilterActive() {
@@ -1182,22 +1223,34 @@ function renderRewardPanel(data, rows) {
       document.getElementById("searchClearBtn").style.display = q ? "inline" : "none";
     }
 
-    const render = debounce(() => { page = 1; renderRows(); updateSortIcons(); }, 150);
+    const render = debounce(() => { _dirtyRows = true; page = 1; resetScroll(); renderRows(); updateSortIcons(); }, 150);
     renderRows();
     updateSortIcons();
     bindPager();
+    if (_vWrap) {
+      let _vRaf = 0;
+      _vWrap.addEventListener("scroll", () => {
+        if (pageSize !== 0) return;
+        if (_vRaf) cancelAnimationFrame(_vRaf);
+        _vRaf = requestAnimationFrame(() => { _vRaf = 0; if (!_dirtyRows) renderVirtual(getRows()); });
+      });
+    }
 
     document.getElementById("searchInput").addEventListener("input", () => { updateClearBtn(); render(); });
     document.getElementById("searchClearBtn").addEventListener("click", () => {
       document.getElementById("searchInput").value = "";
       updateClearBtn();
+      _dirtyRows = true;
       page = 1;
+      resetScroll();
       renderRows();
       updateSortIcons();
     });
     teamFilterEl.addEventListener("change", () => {
       teamFilter = teamFilterEl.value;
+      _dirtyRows = true;
       page = 1;
+      resetScroll();
       renderRows();
       updateSortIcons();
     });
@@ -1213,7 +1266,9 @@ function renderRewardPanel(data, rows) {
       volumeSort = !volumeSort;
       deltaSort = false;
       rankChangeSort = "";
+      _dirtyRows = true;
       page = 1;
+      resetScroll();
       renderRows();
       updateSortIcons();
     });
@@ -1221,7 +1276,9 @@ function renderRewardPanel(data, rows) {
       deltaSort = !deltaSort;
       volumeSort = false;
       rankChangeSort = "";
+      _dirtyRows = true;
       page = 1;
+      resetScroll();
       renderRows();
       updateSortIcons();
     });
@@ -1231,7 +1288,9 @@ function renderRewardPanel(data, rows) {
       else rankChangeSort = "";
       deltaSort = false;
       volumeSort = false;
+      _dirtyRows = true;
       page = 1;
+      resetScroll();
       renderRows();
       updateSortIcons();
     });

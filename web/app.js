@@ -13,6 +13,9 @@ const state = {
   discoveredActivityStart: null,
   discoveredTop: 1000,
   pollTimer: null,
+  eventSource: null,
+  fallbackTimer: null,
+  runningIds: null,
   editingJobId: null,
   page: 1,
   perPage: 20,
@@ -407,50 +410,69 @@ function lastLine(text) {
   return lines[lines.length - 1] || "";
 }
 
-function renderJobs(jobs) {
-  const { page, totalPages, total } = state;
-  $("#jobCount").textContent = `${total}`;
-  const jl = $("#jobList");
+function applyJobSnapshot(jobs) {
   const now = Date.now();
-  jl.innerHTML = jobs.map((job) => {
-    const payload = job.payload || {};
-    const progress = job.progress || {};
-    const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
-    const topValue = payload.top || 1000;
-    const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
-    const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
-    const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
-    const statusZh = { completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
-    const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
-    const url = normalizeTaskUrl(payload.url);
-    const officialUrl = withDomain(url, DOMAIN.OFFICIAL);
-    const mirrorUrl = withDomain(url, DOMAIN.MIRROR);
-    const jobName = job.name || payload.name || payload.resourceId || job.id;
-    const rid = payload.resourceId ? String(payload.resourceId) : "";
-    const displayName = rid ? `${jobName}  [${rid}]` : jobName;
-    const activityEnd = payload.activityEnd;
-    const activityStart = payload.activityStart;
-    const endDate = activityEnd ? new Date(activityEnd.replace(" ", "T") + "+08:00") : null;
-    const isExpired = endDate && endDate <= new Date(now - 86400000);
-    const expiredClass = isExpired ? " expired" : "";
-    const snapshotTs = job.latestSnapshot;
-    const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
-    // countdown
-    let countdownText = "", countdownCls = "job-countdown";
-    if (endDate) {
-      const diff = endDate - now;
-      if (diff > 0) {
-        if (diff <= 864e5) countdownCls += " urgent";
-        const d = Math.floor(diff / 864e5);
-        const h = Math.floor((diff % 864e5) / 36e5);
-        const m = Math.floor((diff % 36e5) / 6e4);
-        countdownText = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
-      } else if (diff > -864e5) {
-        countdownText = "已结束";
-        countdownCls += " ended";
-      }
+  const cur = new Set();
+  let needRefresh = false;
+  for (const job of (jobs || [])) {
+    cur.add(job.id);
+    const card = document.querySelector(`.job[data-job-id="${CSS.escape(job.id)}"]`);
+    if (card) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = renderJobCard(job, now).trim();
+      const fresh = tmp.firstElementChild;
+      if (fresh) card.replaceWith(fresh);
+    } else {
+      needRefresh = true;
     }
-    return `
+  }
+  if (state.runningIds) {
+    for (const id of state.runningIds) {
+      if (!cur.has(id)) { needRefresh = true; break; }
+    }
+  }
+  state.runningIds = cur;
+  if (needRefresh) loadJobs(state.page);
+}
+
+function renderJobCard(job, now) {
+  const payload = job.payload || {};
+  const progress = job.progress || {};
+  const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+  const topValue = payload.top || 1000;
+  const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
+  const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
+  const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
+  const statusZh = { completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
+  const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
+  const url = normalizeTaskUrl(payload.url);
+  const officialUrl = withDomain(url, DOMAIN.OFFICIAL);
+  const mirrorUrl = withDomain(url, DOMAIN.MIRROR);
+  const jobName = job.name || payload.name || payload.resourceId || job.id;
+  const rid = payload.resourceId ? String(payload.resourceId) : "";
+  const displayName = rid ? `${jobName}  [${rid}]` : jobName;
+  const activityEnd = payload.activityEnd;
+  const activityStart = payload.activityStart;
+  const endDate = activityEnd ? new Date(activityEnd.replace(" ", "T") + "+08:00") : null;
+  const isExpired = endDate && endDate <= new Date(now - 86400000);
+  const expiredClass = isExpired ? " expired" : "";
+  const snapshotTs = job.latestSnapshot;
+  const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
+  let countdownText = "", countdownCls = "job-countdown";
+  if (endDate) {
+    const diff = endDate - now;
+    if (diff > 0) {
+      if (diff <= 864e5) countdownCls += " urgent";
+      const d = Math.floor(diff / 864e5);
+      const h = Math.floor((diff % 864e5) / 36e5);
+      const m = Math.floor((diff % 36e5) / 6e4);
+      countdownText = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
+    } else if (diff > -864e5) {
+      countdownText = "已结束";
+      countdownCls += " ended";
+    }
+  }
+  return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div>
           <strong>
@@ -481,7 +503,14 @@ function renderJobs(jobs) {
           ${job.stderr ? `<details class="stderr"><summary>详情</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
       </article>
     `;
-  }).join("") || `<div class="empty box">没有任务。</div>`;
+}
+
+function renderJobs(jobs) {
+  const { page, totalPages, total } = state;
+  $("#jobCount").textContent = `${total}`;
+  const jl = $("#jobList");
+  const now = Date.now();
+  jl.innerHTML = jobs.map((job) => renderJobCard(job, now)).join("") || `<div class="empty box">没有任务。</div>`;
 
   renderPagination();
 }
@@ -726,23 +755,37 @@ async function boot() {
     $("#jobList").innerHTML = `<div class="empty box">${escapeHtml(error.message)}</div>`;
   }
   loadSuggestions();
-  state.pollTimer = setInterval(() => {
-    loadJobs(state.page).catch((error) => {
-      console.warn("loadJobs poll error:", error);
-    });
-  }, 5000);
+
+  function openEventStream() {
+    if (state.eventSource) return;
+    const es = new EventSource("/api/jobs/events");
+    es.onmessage = (ev) => {
+      try { applyJobSnapshot(JSON.parse(ev.data)); } catch (e) { console.warn("SSE parse error:", e); }
+    };
+    es.onerror = () => { /* browser auto-reconnects */ };
+    state.eventSource = es;
+  }
+  function closeEventStream() {
+    if (state.eventSource) { state.eventSource.close(); state.eventSource = null; }
+  }
+  function startFallback() {
+    if (state.fallbackTimer) return;
+    state.fallbackTimer = setInterval(() => { loadJobs(state.page).catch(() => {}); }, 30000);
+  }
+  function stopFallback() {
+    if (state.fallbackTimer) { clearInterval(state.fallbackTimer); state.fallbackTimer = null; }
+  }
+  openEventStream();
+  startFallback();
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      clearInterval(state.pollTimer);
-      state.pollTimer = null;
-    } else if (!state.pollTimer) {
-      loadJobs(state.page).catch(err => console.warn("poll resume error:", err));
-      state.pollTimer = setInterval(() => {
-        loadJobs(state.page).catch((error) => {
-          console.warn("loadJobs poll error:", error);
-        });
-      }, 5000);
+      closeEventStream();
+      stopFallback();
+    } else {
+      loadJobs(state.page).catch(err => console.warn("resume error:", err));
+      openEventStream();
+      startFallback();
     }
   });
 }

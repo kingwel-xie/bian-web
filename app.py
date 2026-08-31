@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from flask import Flask, Response, jsonify, request, send_from_directory, session, redirect, url_for
+from flask import Flask, Response, jsonify, request, send_from_directory, session, redirect, url_for, stream_with_context
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -923,12 +923,11 @@ def preview_delta_by_nickname(
         for row in rows:
             nickname = nickname_value(row)
             if nickname:
-                mapped[nickname] = {
-                    "deltaGrade": decimal_text(
-                        to_decimal(row.get("grade")) or Decimal("0")
-                    ),
-                    "prevRank": None,
-                }
+                try:
+                    g = float(row.get("grade") or 0)
+                except (TypeError, ValueError):
+                    g = 0.0
+                mapped[nickname] = {"deltaGrade": g, "prevRank": None}
         return mapped
 
     previous_path = delta_payload.get("previousSnapshot")
@@ -946,13 +945,17 @@ def preview_delta_by_nickname(
         nickname = nickname_value(row)
         if not nickname:
             continue
-        current_grade = to_decimal(row.get("grade")) or Decimal("0")
+        try:
+            current_grade = float(row.get("grade") or 0)
+        except (TypeError, ValueError):
+            current_grade = 0.0
         prev = previous.get(nickname)
-        previous_grade = to_decimal(prev.get("grade")) if prev else Decimal("0")
-        if previous_grade is None:
-            previous_grade = Decimal("0")
+        try:
+            previous_grade = float(prev.get("grade") or 0) if prev else 0.0
+        except (TypeError, ValueError):
+            previous_grade = 0.0
         mapped[nickname] = {
-            "deltaGrade": decimal_text(current_grade - previous_grade),
+            "deltaGrade": current_grade - previous_grade,
             "prevRank": prev.get("sequence") if prev else None,
         }
     return mapped
@@ -974,11 +977,8 @@ def compact_leaderboard_rows(
                 "userId": row.get("userId"),
                 "grade": row.get("grade"),
                 "tradingVolume": row.get("tradingVolume"),
-                "deltaGrade": decimal_float(
-                    delta_row.get("deltaGrade") if delta_row else None
-                ),
+                "deltaGrade": delta_row.get("deltaGrade") if delta_row else None,
                 "prevRank": delta_row.get("prevRank") if delta_row else None,
-                "tradingVolume": row.get("tradingVolume"),
                 "region": row.get("region"),
             }
         )
@@ -2083,6 +2083,50 @@ def api_ticker(symbol: str) -> Response:
     return jsonify({"error": "; ".join(errors)}), 400
 
 
+def _job_summary(job: dict) -> dict:
+    payload = job.get("payload") or {}
+    progress = job.get("progress") or {}
+    current = {
+        "id": job.get("id"),
+        "name": job.get("name") or payload.get("name"),
+        "status": job.get("status"),
+        "progress": {
+            "stage": progress.get("stage"),
+            "label": progress.get("label"),
+            "percent": progress.get("percent", 0),
+            "rowsFetched": progress.get("rowsFetched"),
+            "currentPage": progress.get("currentPage"),
+            "totalPages": progress.get("totalPages"),
+        },
+        "createdAt": job.get("createdAt"),
+        "startedAt": job.get("startedAt"),
+        "finishedAt": job.get("finishedAt"),
+        "updatedAt": job.get("updatedAt"),
+        "payload": {
+            "market": payload.get("market"),
+            "token": payload.get("token"),
+            "symbol": payload.get("symbol"),
+            "resourceId": payload.get("resourceId"),
+            "url": payload.get("url"),
+            "rewardToken": payload.get("rewardToken"),
+            "rewardAmount": payload.get("rewardAmount"),
+            "rewardTiers": payload.get("rewardTiers"),
+            "rewardMode": payload.get("rewardMode"),
+            "totalReward": payload.get("totalReward"),
+            "eligibleUsers": payload.get("eligibleUsers"),
+            "activityEnd": payload.get("activityEnd"),
+            "activityStart": payload.get("activityStart"),
+            "top": payload.get("top"),
+        },
+        "snapshotCount": len(job.get("snapshots") or []),
+        "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
+    }
+    stderr_text = job.get("stderr") or ""
+    if stderr_text:
+        current["stderr"] = stderr_text[-900:]
+    return current
+
+
 @app.get("/api/jobs")
 def api_jobs() -> Response:
     page = request.args.get("page", 1, type=int)
@@ -2143,46 +2187,7 @@ def api_jobs() -> Response:
 
     jobs = []
     for job in page_jobs:
-        payload = job.get("payload") or {}
-        current = {
-            "id": job.get("id"),
-            "name": job.get("name") or payload.get("name"),
-            "status": job.get("status"),
-            "progress": {
-                "stage": job.get("progress", {}).get("stage"),
-                "label": job.get("progress", {}).get("label"),
-                "percent": job.get("progress", {}).get("percent", 0),
-                "rowsFetched": job.get("progress", {}).get("rowsFetched"),
-                "currentPage": job.get("progress", {}).get("currentPage"),
-                "totalPages": job.get("progress", {}).get("totalPages"),
-            },
-            "createdAt": job.get("createdAt"),
-            "startedAt": job.get("startedAt"),
-            "finishedAt": job.get("finishedAt"),
-            "updatedAt": job.get("updatedAt"),
-            "payload": {
-                "market": payload.get("market"),
-                "token": payload.get("token"),
-                "symbol": payload.get("symbol"),
-                "resourceId": payload.get("resourceId"),
-                "url": payload.get("url"),
-                "rewardToken": payload.get("rewardToken"),
-                "rewardAmount": payload.get("rewardAmount"),
-                "rewardTiers": payload.get("rewardTiers"),
-                "rewardMode": payload.get("rewardMode"),
-                "totalReward": payload.get("totalReward"),
-                "eligibleUsers": payload.get("eligibleUsers"),
-                "activityEnd": payload.get("activityEnd"),
-                "activityStart": payload.get("activityStart"),
-                "top": payload.get("top"),
-            },
-            "snapshotCount": len(job.get("snapshots") or []),
-            "latestSnapshot": (job.get("snapshots") or [{}])[-1].get("timestamp") if job.get("snapshots") else None,
-        }
-        stderr_text = job.get("stderr") or ""
-        if stderr_text:
-            current["stderr"] = stderr_text[-900:]
-        jobs.append(current)
+        jobs.append(_job_summary(job))
 
     return jsonify({
         "jobs": jobs,
@@ -2193,6 +2198,42 @@ def api_jobs() -> Response:
             "totalPages": total_pages,
         },
     })
+
+
+@app.get("/api/jobs/events")
+def api_jobs_events() -> Response:
+    """Server-Sent Events stream of running/queued job summaries.
+
+    Pushes a snapshot whenever the running-job set changes (status/progress),
+    otherwise a keepalive comment. ~2s cadence.
+    """
+    def gen():
+        last = None
+        while True:
+            try:
+                jobs = [
+                    _job_summary(j)
+                    for j in load_jobs()
+                    if j.get("status") in ("running", "queued")
+                ]
+            except Exception:
+                break
+            payload = json.dumps(jobs, default=str, ensure_ascii=False)
+            try:
+                if payload != last:
+                    last = payload
+                    yield f"data: {payload}\n\n"
+                else:
+                    yield ": ping\n\n"
+            except Exception:
+                break
+            time.sleep(2)
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(stream_with_context(gen()), mimetype="text/event-stream", headers=headers)
 
 
 _ANALYSIS_RANGES = [(1, 5), (6, 20), (21, 50), (51, 200), (201, 1000)]

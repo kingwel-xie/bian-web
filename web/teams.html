@@ -34,6 +34,7 @@
   .weight-input:focus { border-color: var(--accent-2); outline: none; }
   .maddog-input { width: 88px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; text-align: center; background: #fff; }
   .maddog-input:focus { border-color: var(--accent-2); outline: none; }
+  .member-table td.ic { padding-left: 4px; padding-right: 4px; }
   .member-table .md-col { width: 112px; }
   .del-btn { border: 0; background: transparent; color: #bbb; cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
   .member-table .ck-col { width: 30px; text-align: center; }
@@ -184,8 +185,8 @@ function loadDb() {
                 <td class="ck-col"><input type="checkbox" class="ck-member" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" ${sel.has(memberKey(m)) ? "checked" : ""}></td>
                 <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
                 <td class="uid-col" title="${escapeHtml(m.userId || "")}">${escapeHtml(m.userId || "")}</td>
-                <td class="num"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
-                <td class="num"><input class="maddog-input" type="number" min="0" value="${m.madDog || 0}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
+                <td class="num ic"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
+                <td class="num ic"><input class="maddog-input" type="number" min="0" value="${m.madDog || 0}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
                 <td class="del-col"><button class="del-btn" title="删除" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}">×</button></td>
               </tr>`).join("")}
             </tbody>
@@ -195,7 +196,7 @@ function loadDb() {
                 <td><input class="add-nick-${ti}" placeholder="昵称" /></td>
                 <td><input class="add-uid-${ti}" placeholder="User ID" /></td>
                 <td class="num"><button class="add-btn" data-ti="${ti}">+ 添加</button></td>
-                <td class="num"><input class="add-md-${ti}" type="number" min="0" placeholder="0" /></td>
+                <td class="num ic"><input class="add-md-${ti}" type="number" min="0" placeholder="0" /></td>
                 <td></td>
               </tr>
             </tfoot>
