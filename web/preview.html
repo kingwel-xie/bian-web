@@ -446,7 +446,7 @@ let pageSize = parseInt(localStorage.getItem("previewPageSize") || "100", 10);
 if (![50, 100, 200, 500, 0].includes(pageSize)) pageSize = 100;
 let page = 1;
 
-function renderRewardPanel(data, rows) {
+function renderRewardPanel(data, rows, forceShow) {
     const rewardToken = (data.rewardToken || "").trim().toUpperCase();
     const rewardTiers = data.rewardTiers || [];
     const rewardPriceUsd = data.rewardPriceUsd != null ? parseFloat(data.rewardPriceUsd) : null;
@@ -517,8 +517,10 @@ function renderRewardPanel(data, rows) {
     }
 
     async function updateReward(forceApi) {
-      const hasReward = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
-      if (!rewardToken || !hasReward) { rewardPanel.style.display = "none"; return; }
+      const hasConfig = useTotal || rewardTiers.length > 0 || rewardAmount > 0;
+      const hasValue = useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0);
+      const hasReward = forceShow ? (rewardToken && hasConfig) : (rewardToken && hasValue);
+      if (!hasReward) { rewardPanel.style.display = "none"; return; }
       rewardPanel.style.display = "";
       rewardPanelToken.textContent = rewardToken;
       rewardTokenDisplay.textContent = rewardToken;
@@ -610,7 +612,7 @@ function renderRewardPanel(data, rows) {
       const bar = document.getElementById("snapshotBar");
       bar.style.display = "none";
       for (const id of ["tableSection", "trendPanel", "calcToolPanel"]) { const el = document.getElementById(id); if (el) el.style.display = "none"; }
-      renderRewardPanel(preview, []);
+      renderRewardPanel(preview, [], true);
       const scrapeBtn = document.getElementById("scrapeBtn");
       if (scrapeBtn) {
         scrapeBtn.addEventListener("click", async () => {
