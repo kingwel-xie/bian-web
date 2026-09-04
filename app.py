@@ -1454,12 +1454,56 @@ def save_teams_db(db: dict[str, Any]) -> None:
     write_json(TEAMS_FILE, db)
 
 
+_rewards_migrated = False
+
+def _migrate_rewards_team(db: dict[str, Any]) -> None:
+    """One-time migration: add team field to records, migrate costs to composite key."""
+    global _rewards_migrated
+    if _rewards_migrated:
+        return
+    _rewards_migrated = True
+    changed = False
+    default_team = "3773"
+    for r in db.get("records", []):
+        if "team" not in r:
+            r["team"] = default_team
+            changed = True
+    costs = db.get("costs", {})
+    new_costs: dict[str, Any] = {}
+    for k, v in costs.items():
+        if ":" in k:
+            new_costs[k] = v
+        else:
+            new_costs[f"{k}:{default_team}"] = v
+            changed = True
+    if changed:
+        db["costs"] = new_costs
+        save_rewards_db(db)
+
+
 def load_rewards_db() -> dict[str, Any]:
-    return read_json(REWARDS_FILE, {"records": []})
+    db = read_json(REWARDS_FILE, {"records": []})
+    _migrate_rewards_team(db)
+    return db
 
 
 def save_rewards_db(db: dict[str, Any]) -> None:
     write_json(REWARDS_FILE, db)
+
+
+def _cost_key(job_id: str, team: str = "") -> str:
+    team = (team or "").strip()
+    return job_id if not team else f"{job_id}:{team}"
+
+
+def _set_cost(db: dict[str, Any], job_id: str, team: str, value: float) -> None:
+    c = dict(db.get("costs", {}) or {})
+    c[_cost_key(job_id, team)] = value
+    db["costs"] = c
+
+
+def _get_cost(db: dict[str, Any], job_id: str, team: str = "") -> float:
+    return float(db.get("costs", {}).get(_cost_key(job_id, team), 0) or 0)
 
 
 ACTIVITY_KEYWORDS_FILE = STATE_DIR / "activity_keywords.json"
@@ -2966,6 +3010,19 @@ def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int], dict[st
     return team_map, team_sizes, maddog_map, maddog_team_idx
 
 
+def _team_name_by_nick() -> dict[str, str]:
+    """Map normalized nickname -> team name, from the global teams db."""
+    team_db = load_teams_db()
+    lookup: dict[str, str] = {}
+    for team in team_db.get("teams") or []:
+        team_name = team.get("name", "")
+        for m in team.get("members") or []:
+            key = (m.get("nickname") or "").strip()
+            if key and key not in lookup:
+                lookup[key] = team_name
+    return lookup
+
+
 def _last_tier_index(tiers: list) -> int:
     best = -1
     best_max = -1
@@ -4194,16 +4251,21 @@ def api_rewards() -> Response:
         db = load_rewards_db()
         records = db.get("records", [])
         if job_id:
-            records = [r for r in records if r.get("jobId") == job_id]
+            team = request.args.get("team", "").strip()
+            if team:
+                records = [r for r in records if r.get("jobId") == job_id and (r.get("team") or "") == team]
+            else:
+                records = [r for r in records if r.get("jobId") == job_id]
             tiers: dict[int, int] = {}
             for r in records:
                 ti = r.get("tierIndex", 0)
                 tiers[ti] = tiers.get(ti, 0) + 1
-            return jsonify({"tiers": tiers, "records": records, "cost": db.get("costs", {}).get(job_id, 0)})
+            return jsonify({"tiers": tiers, "records": records, "cost": _get_cost(db, job_id, team)})
         jobs_map = {j.get("id"): j for j in load_jobs()}
         grouped: dict[str, Any] = {}
         for r in records:
             jid = r.get("jobId", "")
+            team = r.get("team") or ""
             if not jid:
                 continue
             if jid not in grouped:
@@ -4229,28 +4291,92 @@ def api_rewards() -> Response:
                     "resourceId": p.get("resourceId", ""),
                     "tierInfo": {},
                     "records": [],
+                    "teamGroups": {},
                 }
+            g = grouped[jid]
+            team_key = team or ("default")
+            if team_key not in g["teamGroups"]:
+                g["teamGroups"][team_key] = {
+                    "team": team,
+                    "records": [],
+                    "tierInfo": {},
+                }
+            tg = g["teamGroups"][team_key]
             if r.get("rewardMode") == "total":
-                grouped[jid]["records"].append(r)
+                tg["records"].append(r)
             else:
                 ti = r.get("tierIndex", 0)
-                if ti not in grouped[jid]["tierInfo"]:
-                    grouped[jid]["tierInfo"][ti] = {"count": 0}
-                grouped[jid]["tierInfo"][ti]["count"] += 1
-                grouped[jid]["records"].append(r)
+                if ti not in tg["tierInfo"]:
+                    tg["tierInfo"][ti] = {"count": 0}
+                tg["tierInfo"][ti]["count"] += 1
+                tg["records"].append(r)
+            # legacy: keep top-level records too
+            g["records"].append(r)
         for jid, g in grouped.items():
-            recs = g.get("records", [])
-            g["totalRecords"] = len(recs)
-            g["paidRecords"] = sum(1 for r in recs if r.get("paid"))
-            paid_at_list = [r["paidAt"] for r in recs if r.get("paidAt")]
+            recs_all = g.get("records", [])
+            g["totalRecords"] = len(recs_all)
+            g["paidRecords"] = sum(1 for r in recs_all if r.get("paid"))
+            paid_at_list = [r["paidAt"] for r in recs_all if r.get("paidAt")]
             g["allPaid"] = g["totalRecords"] > 0 and g["paidRecords"] == g["totalRecords"]
             g["paidAt"] = max(paid_at_list) if paid_at_list else None
-            g["cost"] = db.get("costs", {}).get(jid, 0)
+            g["cost"] = sum(_get_cost(db, jid, tg.get("team") or "") for tg in g["teamGroups"].values()) or _get_cost(db, jid)
+            total_amt = 0.0
+            total_vol = 0.0
+            team_groups = {}
+            for team_key, tg in g["teamGroups"].items():
+                trecs = tg.get("records", [])
+                tg["totalRecords"] = len(trecs)
+                tg["paidRecords"] = sum(1 for r in trecs if r.get("paid"))
+                t_paid_at = [r["paidAt"] for r in trecs if r.get("paidAt")]
+                tg["allPaid"] = tg["totalRecords"] > 0 and tg["paidRecords"] == tg["totalRecords"]
+                tg["paidAt"] = max(t_paid_at) if t_paid_at else None
+                team_key_for_cost = tg.get("team") or ""
+                tg["cost"] = _get_cost(db, jid, team_key_for_cost)
+                t_vol = sum(float(r.get("volume") or r.get("grade") or 0) for r in trecs)
+                t_amt = 0.0
+                grp_mode = g.get("rewardMode")
+                if grp_mode == "total":
+                    t_amt = sum(float(r.get("amount") or 0) for r in trecs)
+                elif grp_mode == "rank_last_volume":
+                    glast_idx = -1
+                    gtiers = g.get("rewardTiers") or []
+                    for i, gt in enumerate(gtiers):
+                        if glast_idx < 0 or (gt.get("rankMax") or 0) > (gtiers[glast_idx].get("rankMax") or 0):
+                            glast_idx = i
+                    for r in trecs:
+                        if r.get("tierIndex") == glast_idx:
+                            t_amt += float(r.get("amount") or 0)
+                    for ti, info in tg.get("tierInfo", {}).items():
+                        if ti == glast_idx:
+                            continue
+                        cnt = (info or {}).get("count") or 0
+                        if cnt <= 0 or ti >= len(gtiers):
+                            continue
+                        gt = gtiers[ti]
+                        amt = float(gt.get("amount") or 0)
+                        tier_count = (gt.get("rankMax") or 0) - (gt.get("rankMin") or 0) + 1
+                        per_person = (amt / tier_count) if tier_count > 0 else 0
+                        t_amt += per_person * cnt
+                else:
+                    gtiers = g.get("rewardTiers") or []
+                    for ti, info in tg.get("tierInfo", {}).items():
+                        cnt = (info or {}).get("count") or 0
+                        if cnt <= 0 or ti >= len(gtiers):
+                            continue
+                        gt = gtiers[ti]
+                        amt = float(gt.get("amount") or 0)
+                        tier_count = (gt.get("rankMax") or 0) - (gt.get("rankMin") or 0) + 1
+                        per_person = (amt / tier_count) if tier_count > 0 else 0
+                        t_amt += per_person * cnt
+                tg["totalAmount"] = t_amt
+                tg["totalVolume"] = t_vol
+                total_amt += t_amt
+                total_vol += t_vol
+                team_groups[team_key] = tg
+            g["teamGroups"] = team_groups
+            g["totalAmount"] = total_amt
             if g.get("rewardMode") == "total":
-                total_vol = sum(float(r.get("volume") or r.get("grade") or 0) for r in recs)
-                total_amt = sum(float(r.get("amount") or 0) for r in recs)
                 g["totalVolume"] = total_vol
-                g["totalAmount"] = total_amt
         return jsonify({"jobs": grouped})
 
     body = request.get_json(force=True) or {}
@@ -4270,8 +4396,12 @@ def api_rewards() -> Response:
     job_name = job.get("name") or payload.get("name", "")
     reward_token = payload.get("rewardToken", "")
 
+    team = str(body.get("team") or "").strip()
+    if not team:
+        return jsonify({"error": "缺少 team"}), 400
+
     db = load_rewards_db()
-    db["records"] = [r for r in db.get("records", []) if r.get("jobId") != job_id]
+    db["records"] = [r for r in db.get("records", []) if not (r.get("jobId") == job_id and (r.get("team") or "") == team)]
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -4292,6 +4422,7 @@ def api_rewards() -> Response:
                 "id": uuid.uuid4().hex[:12],
                 "jobId": job_id,
                 "jobName": job_name,
+                "team": team,
                 "rewardToken": reward_token,
                 "rewardMode": "total",
                 "nickname": nickname,
@@ -4315,6 +4446,10 @@ def api_rewards() -> Response:
         last_idx = _last_tier_index(reward_tiers) if is_last_vol else -1
         if is_last_vol and last_idx < 0:
             return jsonify({"error": "任务无分档配置"}), 400
+        rows_data = _latest_job_snapshot_data(job)
+        rows = rows_data.get("rows") or [] if not is_last_vol else []
+        team_name_by_nick = _team_name_by_nick() if not is_last_vol else {}
+        tier_counts: dict[int, int] = {}
         for t in tiers_in:
             ti = t.get("tierIndex")
             count = int(t.get("count", 0))
@@ -4322,21 +4457,72 @@ def api_rewards() -> Response:
                 continue
             if ti < 0 or ti >= len(reward_tiers) or ti == last_idx:
                 continue
-            tier_info = reward_tiers[ti]
-            for _ in range(count):
-                db["records"].append({
-                    "id": uuid.uuid4().hex[:12],
-                    "jobId": job_id,
-                    "jobName": job_name,
-                    "rewardToken": reward_token,
-                    "tierIndex": ti,
-                    "rankMin": tier_info.get("rankMin"),
-                    "rankMax": tier_info.get("rankMax"),
-                    "amount": tier_info.get("amount", "0"),
-                    "createdAt": now,
-                    "paid": False,
-                    "paidAt": None,
-                })
+            tier_counts[ti] = count
+        if is_last_vol:
+            for ti, count in tier_counts.items():
+                tier_info = reward_tiers[ti]
+                for _ in range(count):
+                    db["records"].append({
+                        "id": uuid.uuid4().hex[:12],
+                        "jobId": job_id,
+                        "jobName": job_name,
+                        "team": team,
+                        "rewardToken": reward_token,
+                        "tierIndex": ti,
+                        "rankMin": tier_info.get("rankMin"),
+                        "rankMax": tier_info.get("rankMax"),
+                        "amount": tier_info.get("amount", "0"),
+                        "createdAt": now,
+                        "paid": False,
+                        "paidAt": None,
+                    })
+        else:
+            for ti, count in tier_counts.items():
+                try:
+                    rank_min = int(reward_tiers[ti].get("rankMin"))
+                except (TypeError, ValueError):
+                    rank_min = None
+                try:
+                    rank_max = int(reward_tiers[ti].get("rankMax"))
+                except (TypeError, ValueError):
+                    rank_max = None
+                assigned = 0
+                for row in rows:
+                    if assigned >= count:
+                        break
+                    rank_val = row.get("rank")
+                    if rank_val is None:
+                        rank_val = row.get("sequence")
+                    try:
+                        rank = int(rank_val)
+                    except (TypeError, ValueError):
+                        continue
+                    if rank_min is not None and rank < rank_min:
+                        continue
+                    if rank_max is not None and rank > rank_max:
+                        continue
+                    nick = (row.get("nickname") or row.get("nickName") or "").strip()
+                    if not nick or team_name_by_nick.get(nick) != team:
+                        continue
+                    db["records"].append({
+                        "id": uuid.uuid4().hex[:12],
+                        "jobId": job_id,
+                        "jobName": job_name,
+                        "team": team,
+                        "rewardToken": reward_token,
+                        "tierIndex": ti,
+                        "rankMin": reward_tiers[ti].get("rankMin"),
+                        "rankMax": reward_tiers[ti].get("rankMax"),
+                        "amount": reward_tiers[ti].get("amount", "0"),
+                        "nickname": nick,
+                        "userId": row.get("userId", ""),
+                        "grade": row.get("grade") or 0,
+                        "volume": row.get("tradingVolume") or row.get("grade") or 0,
+                        "createdAt": now,
+                        "paid": False,
+                        "paidAt": None,
+                    })
+                    assigned += 1
         if is_last_vol:
             last_volume_raw = body.get("lastTierVolume")
             try:
@@ -4354,6 +4540,7 @@ def api_rewards() -> Response:
                     "id": uuid.uuid4().hex[:12],
                     "jobId": job_id,
                     "jobName": job_name,
+                    "team": team,
                     "rewardToken": reward_token,
                     "rewardMode": "rank_last_volume",
                     "tierIndex": last_idx,
@@ -4373,9 +4560,7 @@ def api_rewards() -> Response:
             cost = float(cost)
         except (TypeError, ValueError):
             cost = 0
-        c = db.get("costs", {})
-        c[job_id] = cost
-        db["costs"] = c
+        _set_cost(db, job_id, team, cost)
     save_rewards_db(db)
 
     if reward_mode == "total":
@@ -4405,7 +4590,15 @@ def api_delete_reward(record_id: str) -> Response:
 @app.post("/api/rewards/<job_id>/toggle-paid")
 def api_toggle_paid(job_id: str) -> Response:
     db = load_rewards_db()
-    records = [r for r in db.get("records", []) if r.get("jobId") == job_id]
+    body = request.get_json(silent=True) or {}
+    team = str(body.get("team") or "").strip()
+    records = []
+    if team:
+        for r in db.get("records", []):
+            if r.get("jobId") == job_id and (r.get("team") or "") == team:
+                records.append(r)
+    else:
+        records = [r for r in db.get("records", []) if r.get("jobId") == job_id]
     if not records:
         return jsonify({"error": "无记录"}), 404
     any_unpaid = any(not r.get("paid") for r in records)

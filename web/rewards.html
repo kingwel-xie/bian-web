@@ -18,8 +18,24 @@
   .job-actions .edit-job-btn:hover { border-color:var(--accent-2); background:rgba(74,124,140,0.12); color:var(--accent-2); }
   .job-actions .tog-paid-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:28px; border-radius:999px; color:var(--ink); font-weight:600; }
   .job-actions .tog-paid-btn:hover { border-color:var(--good); background:rgba(39,174,96,0.12); color:var(--good); }
-  .badge { position:relative; display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600; padding:2px 10px; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--accent); white-space:nowrap; }
+  .badge { position:relative; display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 12px; border-radius:999px; background:var(--panel); border:1px solid var(--line); color:var(--accent); white-space:nowrap; margin:0 10px 10px 0; }
   .badge-count { position:absolute; top:-7px; right:-7px; font-size:9px; font-weight:700; background:var(--accent-2); color:#fff; border-radius:999px; padding:0 5px; line-height:15px; min-width:15px; text-align:center; pointer-events:none; }
+  .team-group { grid-column:1/-1; border:1px solid var(--line); border-radius:6px; background:var(--panel); padding:6px 10px; margin:2px 0; }
+  .team-group.t-paid { opacity:.7; }
+  .team-hd { display:flex; align-items:center; gap:8px; }
+  .team-toggle { background:none; border:none; cursor:pointer; font-size:12px; color:var(--muted); padding:0 2px; line-height:1; width:18px; text-align:left; }
+  .team-name { font-weight:700; font-size:13px; color:var(--accent-2); }
+  .team-meta { font-size:11px; color:var(--muted); margin-left:auto; }
+  .team-body { padding:6px 0 2px 26px; }
+  .team-actions { display:flex; gap:6px; flex-wrap:wrap; padding:2px 0 0 26px; }
+  .team-actions .edit-job-btn,
+  .team-actions .del-team-btn,
+  .team-actions .tog-paid-btn,
+  .job-actions .add-team-btn { border:1px solid var(--line); background:#eee7d9; cursor:pointer; font-size:12px; padding:0 10px; min-height:24px; border-radius:999px; color:var(--ink); font-weight:600; }
+  .team-actions .edit-job-btn:hover { border-color:var(--accent-2); background:rgba(74,124,140,0.12); color:var(--accent-2); }
+  .team-actions .del-team-btn:hover { border-color:var(--bad); background:rgba(196,81,69,0.12); color:var(--bad); }
+  .team-actions .tog-paid-btn:hover, .job-actions .add-team-btn:hover { border-color:var(--good); background:rgba(39,174,96,0.12); color:var(--good); }
+  .total-bar.total-all { margin-top:4px; }
   .job-body { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   .total-bar { grid-column:1/-1; display:flex; gap:14px; align-items:baseline; padding:6px 0 0; border-top:1px solid var(--line); margin-top:2px; font-size:12px; color:var(--accent); }
   .total-bar .total-amt { font-weight:700; }
@@ -134,7 +150,7 @@
       <div class="filter-bar">
         <button id="openAddModalBtn" type="button" class="mini" style="background:var(--accent-2);color:#fff;border:0;border-radius:999px;line-height:1">+ 添加奖励</button>
         <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" style="margin-left:8px" />
-        <span id="statsSummary" style="margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap"></span>
+        <a id="statsSummary" href="javascript:void(0)" style="margin-left:auto;margin-right:24px;font-size:13px;color:var(--accent);white-space:nowrap;border-bottom:1px dashed var(--line)">奖励详细</a>
       </div>
       <div id="jobList" class="job-list"></div>
       <div id="msg" class="msg"></div>
@@ -151,6 +167,9 @@
     <div class="modal-body">
       <select id="modalJobSelect" class="modal-job-select">
         <option value="">— 选择已结束任务 —</option>
+      </select>
+      <select id="modalTeamSelect" class="modal-job-select" style="margin-top:8px">
+        <option value="">— 选择团队 —</option>
       </select>
       <div id="modalTierArea"></div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:0 2px">
@@ -174,6 +193,11 @@
       <button class="modal-close-btn" id="statsModalCloseBtn">&times;</button>
     </div>
     <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <select id="statsTeamSelect" class="modal-job-select" style="flex:1;min-width:0">
+          <option value="">全部团队</option>
+        </select>
+      </div>
       <div id="statsSummaryBar" style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;align-items:center;margin-bottom:10px"></div>
       <div id="statsTableWrap" style="max-height:360px;overflow-y:auto;border:1px solid var(--line);border-radius:6px">
         <table id="statsTable" class="stats-table">
@@ -199,6 +223,7 @@ const modalCloseBtn = document.getElementById("modalCloseBtn");
 const modalCancelBtn = document.getElementById("modalCancelBtn");
 const modalConfirmBtn = document.getElementById("modalConfirmBtn");
 const modalJobSelect = document.getElementById("modalJobSelect");
+const modalTeamSelect = document.getElementById("modalTeamSelect");
 const modalTierArea = document.getElementById("modalTierArea");
 const modalMsg = document.getElementById("modalMsg");
 const modalTitleEl = addModal.querySelector("h3");
@@ -206,10 +231,17 @@ const modalCostInput = document.getElementById("modalCostInput");
 
 let _endedJobs = [];
 let _modalJob = null;
+let _modalTeam = "";
+let _modalIsEdit = false;
 let _modalTiers = {};
 let _allRecords = {};
 let _totalCandidates = null;
 let _totalSearchText = "";
+let _totalRows = [];
+let _totalRowsTotalVolume = "";
+let _teamsCache = [];
+let _statsJobDetails = [];
+let _statsTeamDetail = {};
 
 function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 const _badgeColors = [
@@ -270,82 +302,150 @@ function renderJobs() {
     const token = (jRecords.rewardToken || "").toUpperCase();
     const price = token === "USDT" ? 1 : jRecords.rewardPriceUsd;
     const isTotal = jRecords.rewardMode === "total";
-    let bodyHtml = "";
+    const tiers = jRecords.rewardTiers || [];
+    const isLastVol = jRecords.rewardMode === "rank_last_volume";
+    let lastIdx = -1;
+    if (isLastVol) {
+      for (let i = 0; i < tiers.length; i++) {
+        if (lastIdx < 0 || (tiers[i].rankMax || 0) > (tiers[lastIdx].rankMax || 0)) lastIdx = i;
+      }
+    }
     let totalUSD = 0;
     let totalTokens = 0;
-    if (isTotal) {
-      const totalVol = jRecords.totalVolume || 0;
-      const totalAmt = jRecords.totalAmount || 0;
-      jRecords._totalTokens = totalAmt;
-      jRecords._totalUSD = 0;
-      if (price != null && price > 0) jRecords._totalUSD = totalAmt * price;
-      jRecords._price = price;
-      bodyHtml = '<div style="font-size:12px;color:var(--muted);padding:4px 0;display:flex;gap:14px;flex-wrap:wrap">' +
-        '<span>总量奖励</span>' +
-        '<span>已发 <b style="color:var(--accent)">' + (jRecords.paidRecords || 0) + '</b> / <b>' + (jRecords.totalRecords || 0) + '</b> 人</span>' +
-        (totalVol > 0 ? '<span>总交易量: <b>' + Number(totalVol).toLocaleString() + '</b></span>' : "") +
-        (totalAmt > 0 ? '<span>总奖励: <b>' + totalAmt.toFixed(4) + " " + escapeHtml(token) + '</b></span>' : "") +
-        '</div>';
-    } else {
-      const tierInfo = jRecords.tierInfo || {};
-      const tiers = jRecords.rewardTiers || [];
-      const isLastVol = jRecords.rewardMode === "rank_last_volume";
-      let lastIdx = -1;
+    let totalCost = parseFloat(jRecords.cost) || 0;
+    jRecords._price = price;
+
+    let teamsHtml = "";
+    const teamGroups = jRecords.teamGroups || {};
+    const teamKeys = Object.keys(teamGroups);
+    function teamBadges(tg) {
+      const tInfo = tg.tierInfo || {};
       let lastVolSum = 0;
+      let lastVolumeSum = 0;
       if (isLastVol) {
-        for (let i = 0; i < tiers.length; i++) {
-          if (lastIdx < 0 || (tiers[i].rankMax || 0) > (tiers[lastIdx].rankMax || 0)) lastIdx = i;
-        }
-        for (const r of jRecords.records || []) {
-          if (r.rewardMode === "rank_last_volume") lastVolSum += parseFloat(r.amount) || 0;
+        for (const r of tg.records || []) {
+          if (r.rewardMode === "rank_last_volume") {
+            lastVolSum += parseFloat(r.amount) || 0;
+            lastVolumeSum += parseFloat(r.volume || r.grade) || 0;
+          }
         }
       }
       let badges = "";
       for (let i = 0; i < tiers.length; i++) {
         const t = tiers[i];
-        const cnt = (tierInfo[i] && tierInfo[i].count) || 0;
-        if (!cnt) continue;
-        const amt = parseFloat(t.amount) || 0;
-        let perPerson, totalTok;
+        const cnt = (tInfo[i] && tInfo[i].count) || 0;
         if (isLastVol && i === lastIdx) {
-          totalTok = lastVolSum;
-          perPerson = cnt > 0 ? lastVolSum / cnt : 0;
+          if (lastVolSum <= 0) continue;
+          const perPerson = cnt > 0 ? lastVolSum / cnt : 0;
+          totalTokens += lastVolSum;
+          const uVal = price != null ? lastVolSum * price : null;
+          if (uVal != null) totalUSD += uVal;
+          const c = _badgeColors[i % _badgeColors.length];
+          badges += '<span class="badge" style="background:#eef0f3;border-color:#9aa4af;color:#5a6570" title="成交量 ' + lastVolumeSum.toFixed(2) + ' · 奖励 ' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">末位<sup class="badge-count">' + cnt + "</sup></span>";
         } else {
+          if (!cnt) continue;
+          const amt = parseFloat(t.amount) || 0;
           const tierCount = (t.rankMax || 0) - (t.rankMin || 0) + 1;
-          perPerson = tierCount > 0 ? amt / tierCount : 0;
-          totalTok = perPerson * cnt;
+          const perPerson = tierCount > 0 ? amt / tierCount : 0;
+          const totalTok = perPerson * cnt;
+          totalTokens += totalTok;
+          const uVal = price != null ? totalTok * price : null;
+          if (uVal != null) totalUSD += uVal;
+          const c = _badgeColors[i % _badgeColors.length];
+          badges += '<span class="badge" style="background:' + c.bg + ';border-color:' + c.border + ';color:' + c.text + '" title="' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
         }
-        const usdVal = price != null ? perPerson * price : null;
-        const totalUsdVal = price != null && totalTok > 0 ? totalTok * price : null;
-        if (totalUsdVal != null) totalUSD += totalUsdVal;
-        totalTokens += totalTok;
-        const c = _badgeColors[i % _badgeColors.length];
-        const tip = perPerson.toFixed(4) + " " + escapeHtml(jRecords.rewardToken || "");
-        badges += '<span class="badge" style="background:' + c.bg + ';border-color:' + c.border + ';color:' + c.text + '" title="' + tip + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
       }
+      return badges;
+    }
+    if (teamKeys.length) {
+      for (const tk of teamKeys) {
+        const tg = teamGroups[tk];
+        const tRecs = tg.records || [];
+        const tAmt = tg.totalAmount || 0;
+        const tCost = parseFloat(tg.cost) || 0;
+        const tUsd = price != null && tAmt > 0 ? tAmt * price : 0;
+        const teamName = escapeHtml(tg.team || tk);
+        let tBody = "";
+        if (isTotal) {
+          const tVol = tg.totalVolume || 0;
+          tBody = '<div style="font-size:12px;color:var(--muted);padding:2px 0;display:flex;gap:12px;flex-wrap:wrap">' +
+            '<span>已发 <b style="color:var(--accent)">' + (tg.paidRecords || 0) + '</b> / <b>' + (tg.totalRecords || 0) + '</b> 人</span>' +
+            (tVol > 0 ? '<span>交易量 <b>' + Number(tVol).toLocaleString() + '</b></span>' : "") +
+            (tAmt > 0 ? '<span>奖励 <b>' + tAmt.toFixed(4) + " " + escapeHtml(token) + '</b></span>' : "") +
+            '</div>';
+        } else {
+          tBody = teamBadges(tg);
+        }
+        let tTotal = "";
+        if (tAmt > 0) {
+          tTotal = '<div class="total-bar">' +
+            '<span class="total-amt">合计： ' + fmtValue(tAmt) + " " + escapeHtml(token) + "</span>";
+          if (tUsd > 0) tTotal += '<span class="total-usd">~$' + fmtValue(tUsd) + "</span>";
+          if (tCost > 0) tTotal += '<span class="total-cost" style="color:var(--muted)">成本 $' + fmtValue(tCost) + '</span>';
+          if (tCost > 0 && tUsd > 0) {
+            const tProfit = tUsd - tCost;
+            tTotal += '<span class="total-profit" style="color:' + (tProfit >= 0 ? 'var(--good)' : 'var(--bad)') + ';font-weight:700">盈利 ~$' + fmtValue(tProfit) + '</span>';
+          }
+          tTotal += "</div>";
+        }
+        let tPaid = "";
+        if (tg.totalRecords > 0 && tg.allPaid) {
+          tPaid = '<div class="paid-bar"><span class="paid-ok">✅ 已发放 ' + escapeHtml(tg.paidAt || "") + "</span></div>";
+        }
+        const teamPaidCls = tg.totalRecords > 0 && tg.allPaid ? " t-paid" : "";
+        teamsHtml += '<div class="team-group' + teamPaidCls + '">' +
+          '<div class="team-hd">' +
+            '<button class="team-toggle" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '">▸</button>' +
+            '<span class="team-name">' + teamName + '</span>' +
+            '<span class="team-meta">' + (tg.totalRecords || 0) + ' 条</span>' +
+          '</div>' +
+          '<div class="team-body">' + tBody + tTotal + tPaid + '</div>' +
+          '<div class="team-actions">' +
+            '<button class="edit-job-btn" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '">编辑</button>' +
+            '<button class="del-team-btn" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '">删除</button>' +
+            (tg.totalRecords > 0 ? '<button class="tog-paid-btn" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '">' + (tg.allPaid ? "撤回" : "发放") + '</button>' : "") +
+          '</div>' +
+        '</div>';
+      }
+    } else if (jRecords.totalRecords > 0) {
+      // legacy: no team groups (shouldn't happen after migration, but keep safe)
+      teamsHtml = '<div class="team-group"><div class="team-body">' + (isTotal ? "" : "") + '</div></div>';
+    }
+
+    if (isTotal) {
+      let tAmt = 0, tVol = 0;
+      for (const tk in teamGroups) {
+        const tg = teamGroups[tk];
+        tAmt += parseFloat(tg.totalAmount) || 0;
+        tVol += parseFloat(tg.totalVolume) || 0;
+      }
+      totalTokens = tAmt;
+      totalUSD = price != null ? tAmt * price : 0;
+      jRecords._totalTokens = tAmt;
+      jRecords._totalUSD = totalUSD;
+      jRecords._totalVolume = tVol;
+    } else {
       jRecords._totalTokens = totalTokens;
       jRecords._totalUSD = totalUSD;
-      jRecords._price = price;
-      bodyHtml = badges;
     }
+
     let totalStr = "";
-    const totalAmt = jRecords._totalTokens || 0;
-    const totalUsdVal = jRecords._totalUSD || 0;
-    if (totalAmt > 0) {
-      totalStr = '<div class="total-bar">' +
-        '<span class="total-amt">合计： ' + fmtValue(totalAmt) + " " + escapeHtml(jRecords.rewardToken || "") + "</span>";
+    const totalAmt = totalTokens > 0 ? totalTokens : null;
+    const totalUsdVal = totalUSD || 0;
+    if (totalAmt != null && totalAmt > 0) {
+      totalStr = '<div class="total-bar total-all">' +
+        '<span class="total-amt">总合计： ' + fmtValue(totalAmt) + " " + escapeHtml(token) + "</span>";
       if (totalUsdVal > 0) {
         totalStr += '<span class="total-usd">~$' + fmtValue(totalUsdVal) + "</span>";
       }
       if (price != null) {
         totalStr += '<span class="total-price">收盘价 @$' + price.toFixed(4) + '</span>';
       }
-      const cost = parseFloat(jRecords.cost) || 0;
-      if (cost > 0) {
-        totalStr += '<span class="total-cost" style="color:var(--muted)">成本 $' + fmtValue(cost) + '</span>';
+      if (totalCost > 0) {
+        totalStr += '<span class="total-cost" style="color:var(--muted)">成本 $' + fmtValue(totalCost) + '</span>';
       }
-      if (cost > 0 && totalUsdVal > 0) {
-        const profit = totalUsdVal - cost;
+      if (totalCost > 0 && totalUsdVal > 0) {
+        const profit = totalUsdVal - totalCost;
         totalStr += '<span class="total-profit" style="color:' + (profit >= 0 ? 'var(--good)' : 'var(--bad)') + ';font-weight:700">盈利 ~$' + fmtValue(profit) + '</span>';
       }
       totalStr += "</div>";
@@ -366,22 +466,25 @@ function renderJobs() {
         '<a class="job-name" href="/preview.html?job=' + escapeHtml(jid) + '" target="_blank" style="font-weight:700;color:var(--accent-2);text-decoration:underline;text-decoration-style:dashed;text-underline-offset:3px">' + escapeHtml(jRecords.jobName || "") + '</a>' +
         (jRecords.resourceId ? '<span class="job-rid"> [' + escapeHtml(jRecords.resourceId) + ']</span>' : "") +
         (actStr ? '<span class="job-act-time">' + actStr + "</span>" : "") +
-        '<span class="token-badge' + tokenBadgeCls + '">' + escapeHtml(jRecords.rewardToken || "") + '</span>' +
+        '<span class="token-badge' + tokenBadgeCls + '">' + escapeHtml(token) + '</span>' +
       "</div>" +
       '<div class="job-actions">' +
-        '<button class="edit-job-btn" data-jid="' + escapeHtml(jid) + '" title="修改奖励">编辑</button>' +
-        '<button class="del-job-btn" data-jid="' + escapeHtml(jid) + '" title="删除该任务所有奖励记录">删除</button>' +
-        (jRecords.totalRecords > 0 ? '<button class="tog-paid-btn" data-jid="' + escapeHtml(jid) + '">' + (jRecords.allPaid ? "撤回" : "发放") + '</button>' : "") +
+        '<button class="add-team-btn" data-jid="' + escapeHtml(jid) + '">+ 组</button>' +
       "</div>" +
-      '<div class="job-body">' + bodyHtml + "</div>" +
+      teamsHtml +
       totalStr +
       paidStr +
       "</div>";
   }
-  const statsEl = document.getElementById("statsSummary");
+  const teamSelect = document.getElementById("statsTeamSelect");
+  teamSelect.innerHTML = '<option value="">全部团队</option>';
+  _statsJobDetails = [];
+  _statsTeamDetail = {};
+  const teamSet = new Set();
   let sumCost = 0, sumProfit = 0, sumUnpaid = 0;
   const unpaidByToken = {};
-  const jobDetails = [];
+  const jobDetails = _statsJobDetails;
+  const teamDetailByKey = _statsTeamDetail;
   for (const [jid, jr] of filtered) {
     const c = parseFloat(jr.cost) || 0;
     const totalUsd = jr._totalUSD || 0;
@@ -390,7 +493,18 @@ function renderJobs() {
     if (profit != null) sumProfit += profit;
     const price = jr._price;
     const tok = (jr.rewardToken || "").toUpperCase();
-    jobDetails.push({ name: jr.jobName || jid, cost: c, token: tok, tok: jr._totalTokens || 0, price, usd: totalUsd, profit, hasUnpaid: false, unpaidTok: 0, livePrice: null });
+    const jobD = { id: jid, name: jr.jobName || jid, cost: c, token: tok, tok: jr._totalTokens || 0, price, usd: totalUsd, profit, hasUnpaid: false, unpaidTok: 0, livePrice: null };
+    jobDetails.push(jobD);
+    for (const [tk, tg] of Object.entries(jr.teamGroups || {})) {
+      teamSet.add(tk);
+      const tc = parseFloat(tg.cost) || 0;
+      const tAmt = parseFloat(tg.totalAmount) || 0;
+      const tUsd = price != null ? tAmt * price : 0;
+      const tProfit = tUsd > 0 && tc > 0 ? tUsd - tc : null;
+      const rd = { id: jid + "::" + tk, team: tk, name: jr.jobName || jid, cost: tc, token: tok, tok: tAmt, price, usd: tUsd, profit: tProfit, hasUnpaid: false, unpaidTok: 0, livePrice: null, records: tg.records || [] };
+      if (!teamDetailByKey[jid]) teamDetailByKey[jid] = {};
+      teamDetailByKey[jid][tk] = rd;
+    }
     const recs = jr.records || [];
     const token = (jr.rewardToken || "").toUpperCase();
     for (const r of recs) {
@@ -413,106 +527,40 @@ function renderJobs() {
         unpaidByToken[token].usd += usdVal;
         jobDetails[jobDetails.length - 1].hasUnpaid = true;
         jobDetails[jobDetails.length - 1].unpaidTok += tokVal;
+        const tRow = teamDetailByKey[jid] && teamDetailByKey[jid][r.team || ""];
+        if (tRow) { tRow.hasUnpaid = true; tRow.unpaidTok += tokVal; }
       }
     }
   }
-  let statsParts = [];
-  if (sumCost > 0) statsParts.push('成本: <b style="color:var(--muted)">$' + fmtValue(sumCost) + '</b>');
-  if (sumProfit !== 0) statsParts.push('盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + fmtValue(sumProfit) + '</b>');
-  if (sumUnpaid > 0) statsParts.push('待发放: <b style="color:var(--accent-2)">~$' + fmtValue(sumUnpaid) + '</b>');
-  statsEl.innerHTML = statsParts.length
-    ? '<span class="stats-clickable" style="cursor:pointer;border-bottom:1px dashed var(--line)">' + statsParts.join("  ") + "</span>"
-    : "";
-  statsEl.querySelectorAll(".stats-clickable").forEach(el => {
-    el.addEventListener("click", function() {
-      const barEl = document.getElementById("statsSummaryBar");
-      const tbodyEl = document.getElementById("statsTbody");
-      const filterCb = document.getElementById("statsUnpaidFilter");
-      function renderStatsBar() {
-        const prevChecked = document.getElementById("statsUnpaidFilter")?.checked ?? true;
-        let b = "";
-        if (sumCost > 0) b += '<span>成本: <b style="color:var(--muted)">$' + sumCost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
-        if (sumProfit !== 0) b += '<span>盈利: <b style="color:' + (sumProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + sumProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
-        if (sumUnpaid > 0) b += '<span>待发放: <b style="color:var(--accent-2)">~$' + sumUnpaid.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
-        barEl.innerHTML = b + '<label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;margin-left:auto"><input type="checkbox" id="statsUnpaidFilter" ' + (prevChecked ? 'checked' : '') + ' style="accent-color:var(--accent-2);width:13px;height:13px"> 只看未发放</label>';
-        document.getElementById("refreshPricesBtn").onclick = refreshPrices;
-        document.getElementById("statsUnpaidFilter").addEventListener("change", renderStatsRows);
-      }
-      function renderStatsRows() {
-        const activeCb = document.getElementById("statsUnpaidFilter");
-        let rows = "";
-        for (const d of jobDetails) {
-          if (d.cost <= 0 && d.usd <= 0) continue;
-          if (activeCb && activeCb.checked && !d.hasUnpaid) continue;
-          const profitCls = d.profit != null ? (d.profit >= 0 ? "profit-pos" : "profit-neg") : "";
-          const profitText = d.profit != null ? (d.profit >= 0 ? "+" : "") + d.profit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
-          let livePriceText = "—", liveUsdText = "—", liveProfitText = "—";
-          let liveProfitCls = "";
-          if (d.hasUnpaid && d.livePrice != null) {
-            livePriceText = '$' + d.livePrice.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4});
-            const liveUsd = d.tok * d.livePrice;
-            liveUsdText = liveUsd > 0 ? '~$' + liveUsd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
-            const liveProfit = liveUsd - d.cost;
-            liveProfitText = (liveProfit >= 0 ? "+" : "") + liveProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
-            liveProfitCls = liveProfit >= 0 ? " profit-pos" : " profit-neg";
-          }
-          const unpaidCls = d.hasUnpaid ? " unpaid-row" : "";
-          const costText = d.cost > 0 ? '$' + d.cost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
-          const tokText = d.tok > 0 ? d.tok.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
-          const priceText = d.price != null ? '$' + d.price.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
-          const usdText = d.usd > 0 ? '~$' + d.usd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
-          rows += '<tr class="' + unpaidCls + '">' +
-            '<td title="' + escapeHtml(d.name) + '">' + escapeHtml(d.name) + '</td>' +
-            '<td class="num cost" title="' + costText + '">' + costText + '</td>' +
-            '<td title="' + escapeHtml(d.token) + '">' + escapeHtml(d.token) + '</td>' +
-            '<td class="num" title="' + tokText + '">' + tokText + '</td>' +
-            '<td class="num" title="' + priceText + '">' + priceText + '</td>' +
-            '<td class="num" title="' + usdText + '">' + usdText + '</td>' +
-            '<td class="num ' + profitCls + '" title="' + profitText + '">' + profitText + '</td>' +
-            '<td class="num" title="' + livePriceText + '">' + livePriceText + '</td>' +
-            '<td class="num" title="' + liveUsdText + '">' + liveUsdText + '</td>' +
-            '<td class="num' + liveProfitCls + '" title="' + liveProfitText + '">' + liveProfitText + '</td>' +
-            '</tr>';
-        }
-        tbodyEl.innerHTML = rows;
-      }
-      async function refreshPrices() {
-        const btn = document.getElementById("refreshPricesBtn");
-        if (btn) btn.textContent = "⏳";
-        const allTokens = [...new Set(jobDetails.map(d => d.token))];
-        if (allTokens.length) {
-          try {
-            const resp = await fetch("/api/rewards/refresh-prices", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({tokens: allTokens}) });
-            const data = await resp.json();
-            for (const d of jobDetails) {
-              if (d.token in (data.prices || {})) d.livePrice = data.prices[d.token];
-            }
-          } catch (e) { modalMsg.textContent = "价格获取失败"; }
-        }
-        let newSumUnpaid = 0;
-        for (const d of jobDetails) { newSumUnpaid += d.unpaidTok * (d.livePrice != null ? d.livePrice : d.price); }
-        sumUnpaid = newSumUnpaid;
-        renderStatsBar();
-        renderStatsRows();
-        if (btn) btn.textContent = "↻";
-      }
-      for (const d of jobDetails) { d.livePrice = null; }
-      renderStatsBar();
-      renderStatsRows();
-      document.getElementById("statsModal").style.display = "flex";
-    });
-  });
+  const teamNames = [...teamSet].sort();
+  for (const tn of teamNames) {
+    teamSelect.innerHTML += '<option value="' + escapeHtml(tn) + '">' + escapeHtml(tn) + "</option>";
+  }
   jobListEl.innerHTML = html;
 
-  jobListEl.querySelectorAll(".del-job-btn").forEach(btn => {
+  jobListEl.querySelectorAll(".team-toggle").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const body = this.closest(".team-group").querySelector(".team-body");
+      const isHidden = !body || body.style.display === "none";
+      if (body) body.style.display = isHidden ? "" : "none";
+      this.textContent = isHidden ? "▾" : "▸";
+    });
+  });
+  jobListEl.querySelectorAll(".add-team-btn").forEach(btn => {
+    btn.addEventListener("click", function() {
+      openModal(this.dataset.jid, _allRecords[this.dataset.jid], "");
+    });
+  });
+  jobListEl.querySelectorAll(".del-team-btn").forEach(btn => {
     btn.addEventListener("click", async function() {
-      if (!confirm("删除该任务所有奖励记录？")) return;
+      const team = this.dataset.team;
+      if (!confirm((team ? "删除团队「" + team + "」" : "删除记录") + "？")) return;
       const jid = this.dataset.jid;
       try {
         const resp = await fetch("/api/rewards", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: jid, tiers: [] }),
+          body: JSON.stringify({ jobId: jid, team: team, tiers: [] }),
         });
         if (!resp.ok) throw new Error("删除失败");
         await loadAll();
@@ -526,22 +574,28 @@ function renderJobs() {
       const jid = this.dataset.jid;
       const jRecords = _allRecords[jid];
       if (!jRecords) return;
-      openModal(jid, jRecords);
+      openModal(jid, jRecords, this.dataset.team || "");
     });
   });
   jobListEl.querySelectorAll(".tog-paid-btn").forEach(btn => {
     btn.addEventListener("click", async function() {
       const jid = this.dataset.jid;
+      const team = this.dataset.team || "";
       const jRecords = _allRecords[jid];
       if (!jRecords) return;
-      if (!jRecords.allPaid) {
+      const allPaid = team ? (jRecords.teamGroups[team] || {}).allPaid : jRecords.allPaid;
+      if (!allPaid) {
         const tokenStr = fmtValue(jRecords._totalTokens) + " " + (jRecords.rewardToken || "");
         const usdStr = jRecords._totalUSD > 0 ? " ~$" + fmtValue(jRecords._totalUSD) : "";
         const priceStr = jRecords._price != null ? " (price: $" + fmtValue(jRecords._price) + ")" : "";
         if (!confirm("确认标记合计 " + tokenStr + usdStr + priceStr + " 为已发放？")) return;
       }
       try {
-        const resp = await fetch("/api/rewards/" + encodeURIComponent(jid) + "/toggle-paid", { method: "POST" });
+        const resp = await fetch("/api/rewards/" + encodeURIComponent(jid) + "/toggle-paid", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team }),
+        });
         if (!resp.ok) throw new Error("操作失败");
         await loadAll();
       } catch (e) { msgEl.textContent = "❌ " + e.message; }
@@ -565,6 +619,28 @@ async function loadLastTierRate(jobId) {
   }
 }
 
+async function loadTeams() {
+  if (_teamsCache.length) return _teamsCache;
+  try {
+    const resp = await fetch("/api/teams");
+    const data = await resp.json();
+    const teamsArr = (data && data.db && data.db.teams) || data.teams || [];
+    _teamsCache = teamsArr.map(t => t.name || "").filter(Boolean);
+  } catch (e) {
+    _teamsCache = [];
+  }
+  return _teamsCache;
+}
+
+function renderTeamSelect(selectEl, selected) {
+  const teams = _teamsCache;
+  let html = '<option value="">— 选择团队 —</option>';
+  for (const t of teams) {
+    html += '<option value="' + escapeHtml(t) + '"' + (String(selected) === String(t) ? " selected" : "") + ">" + escapeHtml(t) + "</option>";
+  }
+  selectEl.innerHTML = html;
+}
+
 async function loadEndedJobs() {
   try {
     const resp = await fetch("/api/rewards/ended-jobs");
@@ -580,10 +656,11 @@ async function loadEndedJobs() {
   }
 }
 
-async function openModal(jobId, jobData) {
+async function openModal(jobId, jobData, presetTeam) {
   addModal.style.display = "flex";
   modalTierArea.innerHTML = "";
   _modalJob = null;
+  _modalTeam = "";
   _modalTiers = {};
   _totalCandidates = null;
   _totalSearchText = "";
@@ -592,28 +669,31 @@ async function openModal(jobId, jobData) {
   modalConfirmBtn.disabled = false;
   modalMsg.textContent = "";
   modalCostInput.style.display = "";
+  await loadTeams();
   if (jobId && jobData) {
     modalTitleEl.textContent = "修改奖励";
     modalJobSelect.style.display = "none";
+    _modalIsEdit = true;
     _modalJob = { id: jobId, ...jobData };
-    if (jobData.rewardMode === "total") {
-      modalCostInput.value = jobData.cost || 0;
-      await loadTotalCandidates(jobId);
-      renderTotalCandidates();
-    } else {
-      const ti = jobData.tierInfo || {};
-      for (const k in ti) _modalTiers[parseInt(k)] = ti[k].count || 0;
-      modalCostInput.value = jobData.cost || 0;
-      if (jobData.rewardMode === "rank_last_volume") {
-        const rec = (jobData.records || []).find(r => r.rewardMode === "rank_last_volume");
-        _modalLastVolume = rec && rec.volume != null ? String(rec.volume) : "";
-        await loadLastTierRate(jobId);
-      }
-      renderModalTiers();
+    modalTeamSelect.style.display = "";
+    renderTeamSelect(modalTeamSelect, presetTeam || "");
+    if (presetTeam) {
+      _modalTeam = presetTeam;
+      _modalTiers = {};
+      _totalCandidates = null;
+      _totalRows = [];
+      _totalRowsTotalVolume = "";
+      _modalRate = null;
+      _modalLastVolume = "";
+      modalCostInput.value = 0;
+      await _loadModalTeam(jobId);
     }
   } else {
     modalTitleEl.textContent = "添加奖励";
     modalJobSelect.style.display = "";
+    _modalIsEdit = false;
+    modalTeamSelect.style.display = "";
+    renderTeamSelect(modalTeamSelect, "");
     modalCostInput.value = 0;
     await loadEndedJobs();
   }
@@ -735,17 +815,89 @@ function updateTotalFooter() {
   if (rwEl) rwEl.textContent = checkedReward.toFixed(4);
 }
 
+function renderTotalInputs() {
+  const token = _modalJob.rewardToken || "";
+  const totalReward = parseFloat(_modalJob.totalReward || 0) || 0;
+  const totalVolume = parseFloat(_totalRowsTotalVolume || 0) || 0;
+  let html = '<div class="total-manual">';
+  html += '<div class="total-summary">总奖池: <span>' + Number(totalReward).toLocaleString() + " " + escapeHtml(token) + '</span></div>';
+  html += '<div style="margin:8px 0 4px;font-size:12px;color:var(--muted)">交易量（全部由用户输入）</div>';
+  html += '<table class="total-candidate-table"><thead><tr>' +
+    '<th>昵称</th>' +
+    '<th class="num">交易量</th>' +
+    '<th></th>' +
+    '</tr></thead><tbody id="totalRowsBody"></tbody>' +
+    '</table>';
+  html += '<div class="total-add-row">' +
+    '<input type="text" id="trNickInput" placeholder="昵称" style="flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px" />' +
+    '<input type="text" id="trVolInput" inputmode="decimal" placeholder="交易量" style="width:120px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px" />' +
+    '<button type="button" class="tier-btn" id="trAddBtn">+ 添加</button>' +
+    '</div>';
+  html += '<div style="margin-top:8px;font-size:12px;color:var(--muted)">总交易量（用于分摊奖池）</div>';
+  html += '$<input type="text" id="trTotalVolInput" inputmode="decimal" placeholder="总交易量" value="' + escapeHtml(_totalRowsTotalVolume || "") + '" style="width:160px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px" />';
+  html += '</div>';
+  modalTierArea.innerHTML = html;
+  renderTotalRows();
+  const addBtn = document.getElementById("trAddBtn");
+  if (addBtn) addBtn.addEventListener("click", addTotalRow);
+  const nickInput = document.getElementById("trNickInput");
+  const volInput = document.getElementById("trVolInput");
+  if (nickInput) nickInput.addEventListener("keydown", function(e){ if (e.key === "Enter") addTotalRow(); });
+  if (volInput) volInput.addEventListener("keydown", function(e){ if (e.key === "Enter") addTotalRow(); });
+  const tvInput = document.getElementById("trTotalVolInput");
+  if (tvInput) tvInput.addEventListener("input", function(){ _totalRowsTotalVolume = this.value; });
+}
+
+function renderTotalRows() {
+  const body = document.getElementById("totalRowsBody");
+  if (!body) return;
+  const token = _modalJob.rewardToken || "";
+  let rows = "";
+  for (let i = 0; i < _totalRows.length; i++) {
+    const r = _totalRows[i];
+    rows += '<tr>' +
+      '<td><input type="text" value="' + escapeHtml(r.nickname) + '" data-field="nickname" data-idx="' + i + '" style="width:100%;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px" /></td>' +
+      '<td class="num"><input type="text" inputmode="decimal" value="' + escapeHtml(r.volume) + '" data-field="volume" data-idx="' + i + '" style="width:100px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;background:#fffdf8;color:var(--ink);font-size:12px;text-align:right" /></td>' +
+      '<td><button type="button" class="tier-btn" data-idx="' + i + '" data-remove="1">×</button></td>' +
+      '</tr>';
+  }
+  body.innerHTML = rows;
+  body.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("input", function() {
+      const i = parseInt(this.dataset.idx);
+      const field = this.dataset.field;
+      if (_totalRows[i]) _totalRows[i][field] = this.value;
+    });
+  });
+  body.querySelectorAll("[data-remove]").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const i = parseInt(this.dataset.idx);
+      _totalRows.splice(i, 1);
+      renderTotalRows();
+    });
+  });
+}
+
+function addTotalRow() {
+  const nickInput = document.getElementById("trNickInput");
+  const volInput = document.getElementById("trVolInput");
+  const nickname = (nickInput ? nickInput.value : "").trim();
+  const volume = (volInput ? volInput.value : "").replace(/,/g, "").trim();
+  if (!nickname) { if (nickInput) nickInput.focus(); return; }
+  _totalRows.push({ nickname, volume });
+  if (nickInput) nickInput.value = "";
+  if (volInput) volInput.value = "";
+  renderTotalRows();
+  if (nickInput) nickInput.focus();
+}
+
 function renderModalTiers() {
   if (!_modalJob) {
     modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">先选择一个已结束任务</div>';
     return;
   }
   if (_modalJob.rewardMode === "total") {
-    if (_totalCandidates) {
-      renderTotalCandidates();
-    } else {
-      modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">加载中...</div>';
-    }
+    renderTotalInputs();
     return;
   }
   const tiers = _modalJob.rewardTiers || [];
@@ -823,59 +975,97 @@ function updateLastTierFooter() {
   el.innerHTML = "应发奖励: <span class='ok'>" + amount.toFixed(4) + " " + escapeHtml(_modalJob.rewardToken || "") + "</span>";
 }
 
-modalJobSelect.addEventListener("change", async function() {
-  const id = this.value;
-  if (!id) { _modalJob = null; _modalTiers = {}; _totalCandidates = null; modalTitleEl.textContent = "添加奖励"; renderModalTiers(); return; }
-  _modalJob = _endedJobs.find(j => j.id === id);
+async function _loadModalTeam(jobId) {
   if (!_modalJob) return;
-  modalTitleEl.textContent = "添加奖励 — " + escapeHtml(_modalJob.jobName || _modalJob.name || "");
-  _modalTiers = {};
-  _totalCandidates = null;
-  _modalRate = null;
-  _modalLastVolume = "";
-  modalCostInput.value = 0;
   if (_modalJob.rewardMode === "total") {
-    await loadTotalCandidates(id);
+    const tg = (_allRecords[jobId] && _allRecords[jobId].teamGroups && _allRecords[jobId].teamGroups[_modalTeam]) || null;
+    if (tg && tg.records) {
+      _totalRows = [];
+      let poolVol = "";
+      for (const r of tg.records) {
+        if (r.rewardMode !== "total") continue;
+        if (!poolVol && r.totalVolume != null) poolVol = String(r.totalVolume);
+        _totalRows.push({ nickname: r.nickname || "", volume: r.volume != null ? String(r.volume) : (r.grade != null ? String(r.grade) : "") });
+      }
+      _totalRowsTotalVolume = poolVol;
+      modalCostInput.value = tg.cost || 0;
+    }
+    renderTotalInputs();
   } else {
     try {
-      const resp = await fetch("/api/rewards?jobId=" + encodeURIComponent(id));
+      const resp = await fetch("/api/rewards?jobId=" + encodeURIComponent(jobId) + ( _modalTeam ? "&team=" + encodeURIComponent(_modalTeam) : ""));
       const data = await resp.json();
       for (const ti in (data.tiers || {})) _modalTiers[parseInt(ti)] = data.tiers[ti];
       modalCostInput.value = data.cost || 0;
       if (_modalJob.rewardMode === "rank_last_volume") {
         const rec = (data.records || []).find(r => r.rewardMode === "rank_last_volume");
         _modalLastVolume = rec && rec.volume != null ? String(rec.volume) : "";
-        await loadLastTierRate(id);
+        await loadLastTierRate(jobId);
       }
     } catch (e) { _modalTiers = {}; }
   }
   renderModalTiers();
+}
+
+modalJobSelect.addEventListener("change", async function() {
+  const id = this.value;
+  if (!id) { _modalJob = null; _modalTeam = ""; _modalTiers = {}; _totalCandidates = null; modalTitleEl.textContent = "添加奖励"; modalTeamSelect.value = ""; renderModalTiers(); return; }
+  _modalJob = _endedJobs.find(j => j.id === id);
+  if (!_modalJob) return;
+  _modalTeam = "";
+  modalTeamSelect.value = "";
+  modalTitleEl.textContent = "添加奖励 — " + escapeHtml(_modalJob.jobName || _modalJob.name || "");
+  _modalTiers = {};
+  _totalCandidates = null;
+  _totalRows = [];
+  _totalRowsTotalVolume = "";
+  _modalRate = null;
+  _modalLastVolume = "";
+  modalCostInput.value = 0;
+  renderModalTiers();
+});
+
+modalTeamSelect.addEventListener("change", async function() {
+  _modalTeam = this.value || "";
+  if (!_modalJob) return;
+  _modalTiers = {};
+  _totalCandidates = null;
+  _totalRows = [];
+  _totalRowsTotalVolume = "";
+  _modalRate = null;
+  _modalLastVolume = "";
+  modalCostInput.value = 0;
+  if (_modalIsEdit && _modalTeam) {
+    await _loadModalTeam(_modalJob.id);
+  } else {
+    renderModalTiers();
+  }
 });
 
 async function modalSubmit() {
   if (!_modalJob) { modalMsg.textContent = "请选择任务"; return; }
+  if (!_modalTeam) { modalMsg.textContent = "请选择团队"; return; }
   const isTotal = _modalJob.rewardMode === "total";
   let body;
   if (isTotal) {
-    if (!_totalCandidates || !_totalCandidates.users) { modalMsg.textContent = "候选数据未加载"; return; }
     const users = [];
-    let totalCheckedVol = 0;
-    for (const u of _totalCandidates.users) {
-      if (!u.checked) continue;
-      const grade = parseFloat(u.grade) || 0;
-      if (grade <= 0) continue;
-      users.push({ nickname: u.nickname, userId: u.userId, grade });
-      totalCheckedVol += grade;
+    for (const r of _totalRows) {
+      const nickname = (r.nickname || "").trim();
+      const grade = parseFloat(String(r.volume || "").replace(/,/g, "")) || 0;
+      if (!nickname || grade <= 0) continue;
+      users.push({ nickname, userId: "", grade });
     }
-    if (!users.length) { modalMsg.textContent = "请至少选择一个用户"; return; }
-    body = { jobId: _modalJob.id, rewardMode: "total", users, totalVolume: _totalCandidates.totalVolume, cost: parseFloat(modalCostInput.value) || 0 };
+    if (!users.length) { modalMsg.textContent = "请至少添加一个获奖用户"; return; }
+    const totalVolume = parseFloat(String(_totalRowsTotalVolume || "").replace(/,/g, "")) || 0;
+    if (totalVolume <= 0) { modalMsg.textContent = "请填写总交易量"; return; }
+    body = { jobId: _modalJob.id, team: _modalTeam, rewardMode: "total", users, totalVolume, cost: parseFloat(modalCostInput.value) || 0 };
   } else if (_modalJob.rewardMode === "rank_last_volume") {
     const tiers = [];
     for (const ti in _modalTiers) {
       const count = _modalTiers[ti];
       if (count > 0) tiers.push({ tierIndex: parseInt(ti), count });
     }
-    body = { jobId: _modalJob.id, rewardMode: "rank_last_volume", tiers, cost: parseFloat(modalCostInput.value) || 0 };
+    body = { jobId: _modalJob.id, team: _modalTeam, rewardMode: "rank_last_volume", tiers, cost: parseFloat(modalCostInput.value) || 0 };
     const lvRaw = document.getElementById("lastTierVolumeInput");
     const lv = lvRaw ? parseFloat((lvRaw.value || "").replace(/,/g, "")) : NaN;
     if (Number.isFinite(lv) && lv > 0) body.lastTierVolume = lv;
@@ -885,7 +1075,7 @@ async function modalSubmit() {
       const count = _modalTiers[ti];
       if (count > 0) tiers.push({ tierIndex: parseInt(ti), count });
     }
-    body = { jobId: _modalJob.id, tiers, cost: parseFloat(modalCostInput.value) || 0 };
+    body = { jobId: _modalJob.id, team: _modalTeam, tiers, cost: parseFloat(modalCostInput.value) || 0 };
   }
   try {
     const resp = await fetch("/api/rewards", {
@@ -911,6 +1101,97 @@ const statsModal = document.getElementById("statsModal");
 document.getElementById("statsModalCloseBtn").addEventListener("click", function() { statsModal.style.display = "none"; });
 document.getElementById("statsModalCloseBtn2").addEventListener("click", function() { statsModal.style.display = "none"; });
 statsModal.addEventListener("click", function(evt) { if (evt.target === statsModal) statsModal.style.display = "none"; });
+
+document.getElementById("statsSummary").addEventListener("click", openStatsModal);
+document.getElementById("statsTeamSelect").addEventListener("change", openStatsModal);
+async function openStatsModal() {
+  const barEl = document.getElementById("statsSummaryBar");
+  const tbodyEl = document.getElementById("statsTbody");
+  const teamSelect = document.getElementById("statsTeamSelect");
+  const selectedTeam = teamSelect.value || "";
+  const jobDetails = _statsJobDetails;
+  const teamDetailByKey = _statsTeamDetail;
+  let rows = jobDetails;
+  if (selectedTeam) {
+    rows = [];
+    for (const jd of jobDetails) {
+      const tRow = teamDetailByKey[jd.id] && teamDetailByKey[jd.id][selectedTeam];
+      if (tRow) rows.push(tRow);
+    }
+  }
+  function curRows() { return rows; }
+  function renderStatsBar() {
+    const prevChecked = document.getElementById("statsUnpaidFilter")?.checked ?? true;
+    let cCost = 0, cProfit = 0, cUnpaid = 0;
+    for (const d of curRows()) { cCost += d.cost > 0 ? d.cost : 0; if (d.profit != null) cProfit += d.profit; cUnpaid += d.unpaidTok * (d.livePrice != null ? d.livePrice : (d.price != null ? d.price : 0)); }
+    let b = "";
+    if (cCost > 0) b += '<span>成本: <b style="color:var(--muted)">$' + cCost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+    if (cProfit !== 0) b += '<span>盈利: <b style="color:' + (cProfit >= 0 ? 'var(--good)' : 'var(--bad)') + '">~$' + cProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+    if (cUnpaid > 0) b += '<span>待发放: <b style="color:var(--accent-2)">~$' + cUnpaid.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) + '</b></span>';
+    barEl.innerHTML = b + '<label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap;margin-left:auto"><input type="checkbox" id="statsUnpaidFilter" ' + (prevChecked ? 'checked' : '') + ' style="accent-color:var(--accent-2);width:13px;height:13px"> 只看未发放</label>';
+    document.getElementById("refreshPricesBtn").onclick = refreshPrices;
+    document.getElementById("statsUnpaidFilter").addEventListener("change", renderStatsRows);
+  }
+  function renderStatsRows() {
+    const activeCb = document.getElementById("statsUnpaidFilter");
+    let r = "";
+    for (const d of curRows()) {
+      if (d.cost <= 0 && d.usd <= 0) continue;
+      if (activeCb && activeCb.checked && !d.hasUnpaid) continue;
+      const profitCls = d.profit != null ? (d.profit >= 0 ? "profit-pos" : "profit-neg") : "";
+      const profitText = d.profit != null ? (d.profit >= 0 ? "+" : "") + d.profit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+      let livePriceText = "—", liveUsdText = "—", liveProfitText = "—";
+      let liveProfitCls = "";
+      if (d.hasUnpaid && d.livePrice != null) {
+        livePriceText = '$' + d.livePrice.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4});
+        const liveUsd = d.tok * d.livePrice;
+        liveUsdText = liveUsd > 0 ? '~$' + liveUsd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+        const liveProfit = liveUsd - d.cost;
+        liveProfitText = (liveProfit >= 0 ? "+" : "") + liveProfit.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+        liveProfitCls = liveProfit >= 0 ? " profit-pos" : " profit-neg";
+      }
+      const unpaidCls = d.hasUnpaid ? " unpaid-row" : "";
+      const costText = d.cost > 0 ? '$' + d.cost.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+      const tokText = d.tok > 0 ? d.tok.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
+      const priceText = d.price != null ? '$' + d.price.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:4}) : "—";
+      const usdText = d.usd > 0 ? '~$' + d.usd.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}) : "—";
+      r += '<tr class="' + unpaidCls + '">' +
+        '<td title="' + escapeHtml(d.name) + '">' + escapeHtml(d.name) + '</td>' +
+        '<td class="num cost" title="' + costText + '">' + costText + '</td>' +
+        '<td title="' + escapeHtml(d.token) + '">' + escapeHtml(d.token) + '</td>' +
+        '<td class="num" title="' + tokText + '">' + tokText + '</td>' +
+        '<td class="num" title="' + priceText + '">' + priceText + '</td>' +
+        '<td class="num" title="' + usdText + '">' + usdText + '</td>' +
+        '<td class="num ' + profitCls + '" title="' + profitText + '">' + profitText + '</td>' +
+        '<td class="num" title="' + livePriceText + '">' + livePriceText + '</td>' +
+        '<td class="num" title="' + liveUsdText + '">' + liveUsdText + '</td>' +
+        '<td class="num' + liveProfitCls + '" title="' + liveProfitText + '">' + liveProfitText + '</td>' +
+        '</tr>';
+    }
+    tbodyEl.innerHTML = r;
+  }
+  async function refreshPrices() {
+    const btn = document.getElementById("refreshPricesBtn");
+    if (btn) btn.textContent = "⏳";
+    const allTokens = [...new Set(curRows().map(d => d.token))];
+    if (allTokens.length) {
+      try {
+        const resp = await fetch("/api/rewards/refresh-prices", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({tokens: allTokens}) });
+        const data = await resp.json();
+        for (const d of curRows()) {
+          if (d.token in (data.prices || {})) d.livePrice = data.prices[d.token];
+        }
+      } catch (e) { modalMsg.textContent = "价格获取失败"; }
+    }
+    renderStatsBar();
+    renderStatsRows();
+    if (btn) btn.textContent = "↻";
+  }
+  for (const d of rows) { d.livePrice = null; }
+  renderStatsBar();
+  renderStatsRows();
+  statsModal.style.display = "flex";
+}
 
 loadAll();
 </script>

@@ -649,6 +649,7 @@ function renderRewardPanel(data, rows, forceShow) {
       r._dg = Number(r.deltaGrade) || 0;
       r._v = Number(r.tradingVolume ?? r.grade ?? 0);
       r._nl = (r.nickname || "").toLowerCase();
+      r._ul = (r.userId || "").toLowerCase();
       r._pr = r.prevRank != null ? Number(r.prevRank) : null;
     }
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
@@ -1148,7 +1149,7 @@ function renderRewardPanel(data, rows, forceShow) {
       let rows = allRows;
       if (q || teamFilter) {
         rows = allRows.filter(r => {
-          if (q && !r._nl.includes(q)) return false;
+          if (q && !r._nl.includes(q) && !r._ul.includes(q)) return false;
           if (teamFilter) {
             const t = teamOfUser[r.nickname] || "";
             if (t !== teamFilter) return false;
