@@ -409,11 +409,11 @@ function fillFromArticle(data) {
 let _activitiesCache = null;
 const ACTIVITIES_CACHE_TTL = 5 * 60 * 1000;
 
-async function loadActivityOptions(force) {
-  if (!force && _activitiesCache && Date.now() - _activitiesCache.fetchedAt < ACTIVITIES_CACHE_TTL) {
+async function loadActivityOptions() {
+  if (_activitiesCache && Date.now() - _activitiesCache.fetchedAt < ACTIVITIES_CACHE_TTL) {
     return _activitiesCache.articles;
   }
-  const data = await api("/api/activities" + (force ? "?refresh=1&t=" + Date.now() : ""));
+  const data = await api("/api/activities");
   _activitiesCache = { fetchedAt: Date.now(), articles: data.articles || [] };
   return _activitiesCache.articles;
 }
@@ -425,22 +425,13 @@ function fmtArticleDate(ms) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function renderArticleOptions(filterText, selectCode) {
+function renderArticleOptions(selectCode) {
   const select = document.getElementById("articlePick");
-  const q = (filterText || "").trim().toUpperCase();
   const articles = (_activitiesCache && _activitiesCache.articles) || [];
-  const filtered = q ? articles.filter((a) => {
-    const title = String(a.title || "").toUpperCase();
-    const code = String(a.code || "").toUpperCase();
-    const tokens = (a.tags && Array.isArray(a.tags.tokens) ? a.tags.tokens : []).join(" ").toUpperCase();
-    return (title + " " + code + " " + tokens).includes(q);
-  }) : articles;
-  if (select.value && !filtered.some((a) => String(a.code) === select.value)) select.value = "";
-  select.innerHTML = '<option value="">选择公告…</option>' + filtered.map((a) =>
+  select.innerHTML = '<option value="">选择公告…</option>' + articles.map((a) =>
     `<option value="${escapeHtml(a.code)}">${escapeHtml(a.title)}（${fmtArticleDate(a.releaseDate)}）</option>`
   ).join("");
-  if (selectCode && filtered.some((a) => String(a.code) === selectCode)) select.value = selectCode;
-  return filtered;
+  if (selectCode && articles.some((a) => String(a.code) === selectCode)) select.value = selectCode;
 }
 
 function crossQueryAnnouncement(token) {
@@ -456,44 +447,30 @@ function crossQueryAnnouncement(token) {
 
 function setupArticlePicker(token) {
   const statusEl = document.getElementById("articleExtractStatus");
-  document.getElementById("articleFilterInput").value = "";
   document.getElementById("articlePick").innerHTML = '<option value="">选择公告…</option>';
   statusEl.className = "article-extract-status";
   statusEl.textContent = "正在加载最新活动公告…";
-  loadActivityOptions(false)
+  loadActivityOptions()
     .then(() => {
       const matches = crossQueryAnnouncement(token);
       if (token && matches.length === 1) {
         const m = matches[0];
-        document.getElementById("articleFilterInput").value = token;
-        renderArticleOptions(token, m.code);
+        renderArticleOptions(m.code);
         statusEl.textContent = `已自动预选：${m.title}（${fmtArticleDate(m.releaseDate)}）· 点击「从公告提取」回填`;
       } else if (token && matches.length > 1) {
-        renderArticleOptions(token, "");
-        statusEl.textContent = `${token} 相关公告 ${matches.length} 条，请在下方选择`;
+        renderArticleOptions("");
+        statusEl.textContent = `${token} 相关公告 ${matches.length} 条，请在下拉框中选择`;
       } else {
-        renderArticleOptions("", "");
-        statusEl.textContent = token ? `未匹配到 ${token} 相关公告，可在下方选择或手动粘贴链接` : "";
+        renderArticleOptions("");
+        statusEl.textContent = token ? `未匹配到 ${token} 相关公告，请在下拉框中选择` : "";
       }
       return null;
     })
     .catch((err) => {
       statusEl.className = "article-extract-status err";
-      statusEl.textContent = "加载公告列表失败：" + err.message + "（可在下方手动粘贴链接提取）";
+      statusEl.textContent = "加载公告列表失败：" + err.message;
     });
 }
-
-let _articleFilterTimer = null;
-document.getElementById("articleFilterInput").addEventListener("input", () => {
-  clearTimeout(_articleFilterTimer);
-  _articleFilterTimer = setTimeout(() => {
-    const q = document.getElementById("articleFilterInput").value;
-    renderArticleOptions(q, "");
-    const statusEl = document.getElementById("articleExtractStatus");
-    statusEl.className = "article-extract-status";
-    statusEl.textContent = q.trim() ? "已按搜索词过滤，请选择公告" : "";
-  }, 200);
-});
 
 document.getElementById("articlePick").addEventListener("change", () => {
   const statusEl = document.getElementById("articleExtractStatus");
@@ -511,33 +488,13 @@ document.getElementById("articlePick").addEventListener("change", () => {
     : "已选择该公告，点击「从公告提取」回填";
 });
 
-document.getElementById("articleRefreshBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("articleRefreshBtn");
-  const statusEl = document.getElementById("articleExtractStatus");
-  btn.disabled = true;
-  try {
-    await loadActivityOptions(true);
-    const q = document.getElementById("articleFilterInput").value.trim();
-    renderArticleOptions(q, "");
-    statusEl.className = "article-extract-status";
-    const n = ((_activitiesCache && _activitiesCache.articles) || []).length;
-    statusEl.textContent = `已刷新列表（共 ${n} 条）` + (q ? `，当前按「${q}」过滤` : "");
-  } catch (err) {
-    statusEl.className = "article-extract-status err";
-    statusEl.textContent = "刷新失败：" + err.message;
-  } finally {
-    btn.disabled = false;
-  }
-});
-
 document.getElementById("extractArticleBtn").addEventListener("click", async () => {
   const statusEl = document.getElementById("articleExtractStatus");
   const btn = document.getElementById("extractArticleBtn");
   const picked = document.getElementById("articlePick").value;
-  const manual = (document.getElementById("editArticleInput").value || "").trim();
-  if (!picked && !manual) {
+  if (!picked) {
     statusEl.className = "article-extract-status err";
-    statusEl.textContent = "请先在下方选择一条最新公告，或粘贴公告链接 / code。";
+    statusEl.textContent = "请先在下拉框中选择一条最新公告。";
     return;
   }
   btn.disabled = true;
@@ -545,10 +502,7 @@ document.getElementById("extractArticleBtn").addEventListener("click", async () 
   statusEl.className = "article-extract-status";
   statusEl.textContent = "正在读取公告并解析…";
   try {
-    const path = picked
-      ? "/api/activities/article?articleCode=" + encodeURIComponent(picked)
-      : "/api/activities/article?url=" + encodeURIComponent(manual);
-    const data = await api(path);
+    const data = await api("/api/activities/article?articleCode=" + encodeURIComponent(picked));
     fillFromArticle(data);
     statusEl.className = "article-extract-status ok";
     statusEl.textContent = "已提取：" + articleExtractSummary(data) + " · 已回填表单（请核对后保存）";

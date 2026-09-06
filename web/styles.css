@@ -577,10 +577,6 @@ td:nth-child(2) {
   font-weight: 900;
 }
 
-.article-search-input {
-  width: 100%;
-}
-
 .article-pick-select {
   width: 100%;
 }
@@ -608,10 +604,6 @@ td:nth-child(2) {
 .article-picker-btns button:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.article-manual-fallback {
-  opacity: 0.85;
 }
 
 .discovery-section {
