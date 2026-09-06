@@ -351,7 +351,7 @@ document.getElementById("editRewardMode").addEventListener("change", () => {
   document.getElementById("rewardTotalFields").style.display = mode === "total" ? "" : "none";
 });
 
-// —— 从公告提取回填 ——
+// —— 公告提取回填 ——
 function setModalRewardFromArticle(data) {
   if (data.rewardToken) document.getElementById("editRewardToken").value = data.rewardToken;
   const tierRowsEl = document.getElementById("editTierRows");
@@ -456,7 +456,7 @@ function setupArticlePicker(token) {
       if (token && matches.length === 1) {
         const m = matches[0];
         renderArticleOptions(m.code);
-        statusEl.textContent = `已自动预选：${m.title}（${fmtArticleDate(m.releaseDate)}）· 点击「从公告提取」回填`;
+        statusEl.textContent = `已自动预选：${m.title}（${fmtArticleDate(m.releaseDate)}）· 点击「提取」回填`;
       } else if (token && matches.length > 1) {
         renderArticleOptions("");
         statusEl.textContent = `${token} 相关公告 ${matches.length} 条，请在下拉框中选择`;
@@ -484,8 +484,8 @@ document.getElementById("articlePick").addEventListener("change", () => {
   const a = ((_activitiesCache && _activitiesCache.articles) || []).find((x) => String(x.code) === code);
   statusEl.className = "article-extract-status";
   statusEl.textContent = a
-    ? `已选择：${a.title}（${fmtArticleDate(a.releaseDate)}）· 点击「从公告提取」回填`
-    : "已选择该公告，点击「从公告提取」回填";
+    ? `已选择：${a.title}（${fmtArticleDate(a.releaseDate)}）· 点击「提取」回填`
+    : "已选择该公告，点击「提取」回填";
 });
 
 document.getElementById("extractArticleBtn").addEventListener("click", async () => {
@@ -511,7 +511,7 @@ document.getElementById("extractArticleBtn").addEventListener("click", async () 
     statusEl.textContent = "提取失败：" + error.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = "从公告提取";
+    btn.textContent = "提取";
   }
 });
 
