@@ -577,6 +577,43 @@ td:nth-child(2) {
   font-weight: 900;
 }
 
+.article-search-input {
+  width: 100%;
+}
+
+.article-pick-select {
+  width: 100%;
+}
+
+.article-picker-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+  justify-content: stretch;
+}
+
+.article-picker-btns button {
+  flex: 1;
+  padding: 8px 12px;
+  background: #4a7c8c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.article-picker-btns button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.article-manual-fallback {
+  opacity: 0.85;
+}
+
 .discovery-section {
   min-height: 20px;
   margin-top: 12px;

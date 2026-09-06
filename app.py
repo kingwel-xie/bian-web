@@ -2306,13 +2306,17 @@ def _parse_reward_rows(table: list[list[str]]) -> dict[str, Any]:
                 "cap": cap,
             }
         )
+    rows = [
+        r for r in rows
+        if r.get("is_remaining") or r.get("cap") is not None or r["rankMax"] > 5
+    ]
     if not rows:
         return {"found": False}
     last = rows[-1]
     is_last_vol = bool(last.get("is_remaining") or last.get("cap"))
     if is_last_vol:
-        prev_max = max((r["rankMax"] for r in rows[:-1]), default=0)
-        last["rankMin"] = prev_max + 1
+        prev_max = max((r["rankMax"] for r in rows[:-1]), default=5)
+        last["rankMin"] = max(prev_max + 1, 6)
         last["rankMax"] = 999999
     tiers = []
     units: list[str] = []

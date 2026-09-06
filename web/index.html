@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
-    <link rel="stylesheet" href="/css888/styles.css?v=20260906a" />
+    <link rel="stylesheet" href="/css888/styles.css?v=20260906b" />
   </head>
   <body>
     <main class="shell">
@@ -70,12 +70,21 @@
         <div class="modal-form">
           <div id="tabBasic" class="tab-content">
             <div class="form-row">
-              <label class="form-grow">公告链接 / code
-                <input id="editArticleInput" autocomplete="off" placeholder="https://www.binance.com/zh-CN/support/announcement/detail/… 或直接粘贴 code" />
+              <label class="form-grow">最新活动公告
+                <input id="articleFilterInput" class="article-search-input" autocomplete="off" placeholder="搜索 token / 标题关键词（按当前任务交叉查询）" />
+                <select id="articlePick" class="article-pick-select"><option value="">选择公告…</option></select>
               </label>
-              <button id="extractArticleBtn" type="button" style="align-self:flex-end;padding:8px 12px;background:#4a7c8c;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap">从公告提取</button>
+              <div class="article-picker-btns">
+                <button id="extractArticleBtn" type="button">从公告提取</button>
+                <button id="articleRefreshBtn" type="button">刷新列表</button>
+              </div>
             </div>
             <div id="articleExtractStatus" class="article-extract-status"></div>
+            <div class="form-row article-manual-fallback">
+              <label class="form-grow">或用公告链接 / code（手动兜底）
+                <input id="editArticleInput" autocomplete="off" placeholder="https://www.binance.com/zh-CN/support/announcement/detail/… 或直接粘贴 code" />
+              </label>
+            </div>
             <hr class="form-divider">
             <div class="form-row">
               <label class="form-grow">任务名
@@ -158,6 +167,6 @@
       </div>
     </div>
 
-    <script src="/css888/app.js?v=20260906a"></script>
+    <script src="/css888/app.js?v=20260906b"></script>
   </body>
 </html>
