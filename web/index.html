@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
-    <link rel="stylesheet" href="/css888/styles.css?v=20260801b" />
+    <link rel="stylesheet" href="/css888/styles.css?v=20260906a" />
   </head>
   <body>
     <main class="shell">
@@ -69,6 +69,14 @@
         </div>
         <div class="modal-form">
           <div id="tabBasic" class="tab-content">
+            <div class="form-row">
+              <label class="form-grow">公告链接 / code
+                <input id="editArticleInput" autocomplete="off" placeholder="https://www.binance.com/zh-CN/support/announcement/detail/… 或直接粘贴 code" />
+              </label>
+              <button id="extractArticleBtn" type="button" style="align-self:flex-end;padding:8px 12px;background:#4a7c8c;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap">从公告提取</button>
+            </div>
+            <div id="articleExtractStatus" class="article-extract-status"></div>
+            <hr class="form-divider">
             <div class="form-row">
               <label class="form-grow">任务名
                 <input id="editName" placeholder="SPOT CELO" />
@@ -150,6 +158,6 @@
       </div>
     </div>
 
-    <script src="/css888/app.js?v=20260731c"></script>
+    <script src="/css888/app.js?v=20260906a"></script>
   </body>
 </html>

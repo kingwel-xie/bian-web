@@ -2076,6 +2076,494 @@ def api_activities_changes() -> Response:
     return jsonify({"changes": recent, "hasNew": has_new})
 
 
+ARTICLE_DETAIL_URL = (
+    "https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query"
+)
+_ACTIVITY_ARTICLE_CACHE: dict[str, tuple[float, dict]] = {}
+_ACTIVITY_ARTICLE_CACHE_LOCK = threading.Lock()
+_ACTIVITY_ARTICLE_TTL = 600
+
+_ARTICLE_QUOTE_TOKENS = {
+    "USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD", "BTC", "ETH", "BNB",
+    "EUR", "TRY", "BRL", "XRP", "SOL", "DOGE",
+}
+_ARTICLE_RANK_ORDINAL = re.compile(
+    r"^\s*(?:第|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:place|名|位)\b", re.I
+)
+_ARTICLE_RANK_RANGE = re.compile(
+    r"^\s*(?:第|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:-|–|—|~|至|到)\s*(?:第|rank\s*)?"
+    r"([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:places?|名|位)(?:\b|$)", re.I
+)
+_ARTICLE_RANK_REMAINING = re.compile(
+    r"^\s*(?:(?:all\s+)?remaining|其余|剩余|rest\b|中游|其他)|^\s*behind\b", re.I
+)
+_ARTICLE_AMOUNT_UNIT = re.compile(r"([A-Z][A-Z0-9]{1,12})\b")
+_ARTICLE_NUM = re.compile(r"(\d[\d,]*\.?\d*)")
+_ARTICLE_POOL_OF = re.compile(
+    r"\b(?:share|split|pool|prize|reward)\w*\s+(?:a\s+)?(?:total\s+)?(?:prize\s+pool\s+of\s+)?"
+    r"of\s+([\d,]+(?:\.\d+)?)",
+    re.I,
+)
+_ARTICLE_TOP_N = re.compile(r"\btop\s+([\d,]+)\b", re.I)
+_ARTICLE_TOP_N_CN = re.compile(r"(?:排名\s*)?前\s*([\d,]+)\s*名", re.I)
+_ARTICLE_SHARE_X = re.compile(
+    r"\bshare(?:s)?\s+(?:a\s+)?(?:total\s+)?(?:prize\s+pool\s+of\s+)?"
+    r"([\d,]+(?:\.\d+)?)\s*([A-Z][A-Z0-9]{1,12})(?:\s+tokens?)?\b",
+    re.I,
+)
+_ARTICLE_SHARE_X_CN = re.compile(
+    r"(?:平分|瓜分)\s*([\d,]+(?:\.\d+)?)\s*(?:枚)?\s*([A-Z][A-Z0-9]{1,12})"
+    r"(?:\s*(?:枚|枚代币|代币|token|tokens))?\b",
+    re.I,
+)
+_ARTICLE_CAP = re.compile(
+    r"(?:\b(?:capped|cap)\s+at\s+|上限\s*(?:为|[:：])?\s*)"
+    r"([\d,]+(?:\.\d+)?)\s*([A-Z][A-Z0-9]{1,12})?",
+    re.I,
+)
+_ARTICLE_TIME_RAW = (
+    r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?[T ]?(\d{1,2}):(\d{2})(?::(\d{2}))?"
+    r"\s*(?:[\(（]?(UTC|东八区时间|北京时间)[\)）]?)?"
+)
+_ARTICLE_TIME = re.compile(_ARTICLE_TIME_RAW, re.I)
+_ARTICLE_PERIOD_BODY = (
+    r"(?:(?:Promotion|Campaign|Activity|Statistical)\s+Periods?\s*[:：]?"
+    r"|活动期间|活动时间|统计时间|促销(?:活动)?期)\s*[:：]?\s*"
+    + _ARTICLE_TIME_RAW
+    + r"\s*(?:to|until|至|到|~|[-–—])\s*"
+    + _ARTICLE_TIME_RAW
+)
+_ARTICLE_PERIOD = re.compile(_ARTICLE_PERIOD_BODY, re.I)
+_ARTICLE_PAIR = re.compile(r"(?<![A-Za-z0-9])([A-Z0-9]{2,12})/([A-Z0-9]{2,12})")
+
+
+def _extract_article_code(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    m = re.search(r"/announcement/detail/([a-zA-Z0-9]{20,40})", raw)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b([a-f0-9]{32})\b", raw, re.I)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b([A-Za-z0-9]{20,40})\b", raw)
+    return m.group(1) if m else ""
+
+
+def _fetch_article_detail(code: str) -> dict[str, Any]:
+    import urllib.request
+
+    url = f"{ARTICLE_DETAIL_URL}?articleCode={code}"
+    req = urllib.request.Request(url)
+    req.add_header("accept-language", "zh-CN")
+    req.add_header("lang", "zh-CN")
+    req.add_header(
+        "referer", f"https://www.binance.com/zh-CN/support/announcement/detail/{code}"
+    )
+    req.add_header("user-agent", "Mozilla/5.0")
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read().decode("utf-8")
+    data = json.loads(raw)
+    if not data.get("success"):
+        raise ValueError(f"Binance 公告接口失败：{data.get('message') or data.get('code')}")
+    return data.get("data") or {}
+
+
+def _article_body_text(tree: dict[str, Any]) -> str:
+    out: list[str] = []
+
+    def walk(n: dict[str, Any]) -> None:
+        kind = n.get("node")
+        if kind == "text":
+            out.append(str(n.get("text", "")).replace("\u00a0", " "))
+            return
+        tag = str(n.get("tag") or "")
+        if kind == "element":
+            if tag == "p":
+                out.append("\n\n")
+            elif tag in ("li", "tr", "br"):
+                out.append("\n")
+            elif tag in ("td", "th"):
+                out.append(" | ")
+        for c in n.get("child") or []:
+            walk(c)
+        if kind == "element" and tag in ("td", "th"):
+            out.append(" \u200b")
+
+    walk(tree)
+    text = "".join(out)
+    return "\n".join(ln.strip() for ln in text.splitlines() if ln.strip())
+
+
+def _article_tables(tree: dict[str, Any]) -> list[list[list[str]]]:
+    def _collect_cells_in(node: dict[str, Any]) -> list[str]:
+        cells: list[str] = []
+
+        def w(x: dict[str, Any]) -> None:
+            if x.get("node") == "element" and x.get("tag") in ("td", "th"):
+                buf: list[str] = []
+
+                def ct(y: dict[str, Any], b: list[str]) -> None:
+                    if y.get("node") == "text":
+                        b.append(str(y.get("text", "")).replace("\u00a0", " "))
+                        return
+                    for cc in y.get("child") or []:
+                        ct(cc, b)
+
+                ct(x, buf)
+                cells.append(" ".join("".join(buf).split()))
+            for c in x.get("child") or []:
+                w(c)
+
+        w(node)
+        return cells
+
+    tables: list[list[list[str]]] = []
+
+    def walk(n: dict[str, Any]) -> None:
+        if n.get("node") == "element" and n.get("tag") == "table":
+            rows: list[list[str]] = []
+
+            def wr(x: dict[str, Any]) -> None:
+                if x.get("node") == "element" and x.get("tag") == "tr":
+                    rows.append(_collect_cells_in(x))
+                for c in x.get("child") or []:
+                    wr(c)
+
+            wr(n)
+            tables.append(rows)
+        for c in n.get("child") or []:
+            walk(c)
+
+    walk(tree)
+    return tables
+
+
+def _parse_rank_cell(cell: str) -> tuple[int, int, bool] | None:
+    txt = (cell or "").strip()
+    if not txt:
+        return None
+    if _ARTICLE_RANK_REMAINING.search(txt):
+        return (0, 0, True)
+    m = _ARTICLE_RANK_RANGE.match(txt)
+    if m:
+        return (int(m.group(1).replace(",", "")), int(m.group(2).replace(",", "")), False)
+    m = _ARTICLE_RANK_ORDINAL.match(txt)
+    if m:
+        n = int(m.group(1).replace(",", ""))
+        return (n, n, False)
+    return None
+
+
+def _cell_amount_unit(cell: str) -> tuple[float | None, str | None]:
+    txt = (cell or "").replace("\u200b", " ")
+    m = _ARTICLE_POOL_OF.search(txt)
+    num_text = m.group(1) if m else None
+    if num_text is None:
+        m2 = _ARTICLE_NUM.search(txt)
+        if not m2:
+            return (None, None)
+        num_text = m2.group(1)
+    try:
+        num = float(num_text.replace(",", ""))
+    except ValueError:
+        num = None
+    m3 = _ARTICLE_AMOUNT_UNIT.search(txt)
+    unit = m3.group(1).upper() if m3 else None
+    return (num, unit)
+
+
+def _parse_reward_rows(table: list[list[str]]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for cells in table:
+        if not cells:
+            continue
+        rank = _parse_rank_cell(cells[0])
+        if rank is None:
+            continue
+        rest = " ".join(cells[1:])
+        if not rest.strip():
+            continue
+        num, unit = _cell_amount_unit(rest)
+        if num is None:
+            continue
+        cap = None
+        cm = _ARTICLE_CAP.search(rest)
+        if cm:
+            try:
+                cap = float(cm.group(1).replace(",", ""))
+            except ValueError:
+                cap = None
+        rank_min, rank_max, is_remaining = rank
+        rows.append(
+            {
+                "rankMin": rank_min,
+                "rankMax": rank_max,
+                "is_remaining": is_remaining,
+                "amount": num,
+                "unit": unit,
+                "cap": cap,
+            }
+        )
+    if not rows:
+        return {"found": False}
+    last = rows[-1]
+    is_last_vol = bool(last.get("is_remaining") or last.get("cap"))
+    if is_last_vol:
+        prev_max = max((r["rankMax"] for r in rows[:-1]), default=0)
+        last["rankMin"] = prev_max + 1
+        last["rankMax"] = 999999
+    tiers = []
+    units: list[str] = []
+    last_tier_cap = None
+    for r in rows:
+        amt = r["amount"]
+        tiers.append(
+            {
+                "rankMin": int(r["rankMin"]),
+                "rankMax": int(r["rankMax"]),
+                "amount": _format_num(amt),
+            }
+        )
+        if r.get("unit"):
+            units.append(r["unit"])
+        if r.get("cap"):
+            last_tier_cap = _format_num(r["cap"])
+    return {
+        "found": True,
+        "tiers": tiers,
+        "isLastVol": is_last_vol,
+        "unit": max(set(units), key=units.count) if units else None,
+        "lastTierCap": last_tier_cap,
+    }
+
+
+def _format_num(value: float) -> str:
+    if value is None:
+        return ""
+    if float(value).is_integer():
+        return str(int(value))
+    text = f"{value:.12f}".rstrip("0").rstrip(".")
+    return text
+
+
+def _parse_article_times(text: str) -> dict[str, Any]:
+    is_cn = bool(re.search(r"东八区时间|北京时间|至", text))
+
+    def _to_dt(m: re.Match[str]) -> datetime | None:
+        try:
+            hour = int(m.group(4))
+            minute = int(m.group(5))
+            second = int(m.group(6) or 0)
+            if hour > 23 or minute > 59 or second > 59:
+                return None
+            tz = (m.group(7) or "").upper()
+            base = datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                hour, minute, second,
+            )
+            if "北京时间" in tz or "东八区" in tz:
+                base = base.replace(tzinfo=BJ)
+            elif "UTC" in tz:
+                base = base.replace(tzinfo=timezone.utc)
+            elif is_cn:
+                base = base.replace(tzinfo=BJ)
+            else:
+                base = base.replace(tzinfo=timezone.utc)
+            return base
+        except ValueError:
+            return None
+
+    starts: list[datetime] = []
+    ends: list[datetime] = []
+    for pm in _ARTICLE_PERIOD.finditer(text):
+        matches = list(_ARTICLE_TIME.finditer(pm.group(0)))
+        if len(matches) >= 2:
+            s0 = _to_dt(matches[0])
+            s1 = _to_dt(matches[1])
+            if s0 and s1:
+                starts.append(min(s0, s1))
+                ends.append(max(s0, s1))
+    if starts and ends:
+        return {
+            "start": min(starts).astimezone(BJ).strftime("%Y-%m-%d %H:%M:%S"),
+            "end": max(ends).astimezone(BJ).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    times: list[datetime] = []
+    for m in _ARTICLE_TIME.finditer(text):
+        dt = _to_dt(m)
+        if dt:
+            times.append(dt)
+    if not times:
+        return {"start": None, "end": None}
+    times.sort()
+    return {
+        "start": times[0].astimezone(BJ).strftime("%Y-%m-%d %H:%M:%S"),
+        "end": times[-1].astimezone(BJ).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def _parse_article_market(text: str) -> str | None:
+    lowered = text.lower()
+    if re.search(r"usdt-m\b|perpetual|binance futures|(\w+\s+)?futures|合约", lowered):
+        return "um"
+    if re.search(r"\bspot\b|现货", lowered):
+        return "spot"
+    if re.search(r"\bsaving\b|理财|活期", lowered):
+        return "saving"
+    return None
+
+
+def _parse_article_token(title: str, pairs: list[str]) -> str | None:
+    m = re.search(r"\(([A-Z][A-Z0-9]{1,24})\)", title)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b[Tr]rade\s+([A-Z][A-Z0-9]{1,24})\b", title)
+    if m:
+        return m.group(1).upper()
+    m = re.search(r"^([A-Z][A-Z0-9]{1,24})(?![A-Z0-9])", title.strip())
+    if m:
+        return m.group(1).upper()
+    if pairs:
+        return pairs[0][:-4] if pairs[0].endswith("USDT") else pairs[0]
+    return None
+
+
+def _parse_article_pairs(text: str, token: str | None) -> list[str]:
+    def _try(candidates: list[str]) -> list[str]:
+        seen: list[str] = []
+        seen_pairs: set[str] = set()
+        for m in _ARTICLE_PAIR.finditer(text):
+            base = m.group(1).upper()
+            qraw = m.group(2).upper()
+            quote = None
+            for k in range(len(qraw), 1, -1):
+                if qraw[:k] in _ARTICLE_QUOTE_TOKENS:
+                    quote = qraw[:k]
+                    break
+            if quote is None or len(base) < 2:
+                continue
+            if candidates and base not in candidates:
+                continue
+            sym = f"{base}{quote}"
+            if sym not in seen_pairs:
+                seen_pairs.add(sym)
+                seen.append(sym)
+        return seen
+
+    wanted = [token] if token else []
+    result = _try(wanted)
+    if not result:
+        result = _try([])
+    return result
+
+
+def _parse_article_reward_blocks(
+    text: str, title: str, tables: list[list[list[str]]]
+) -> dict[str, Any]:
+    reward_table: list[list[str]] | None = None
+    for table in tables:
+        rank_hits = sum(1 for cells in table if cells and _parse_rank_cell(cells[0]))
+        if rank_hits >= 1:
+            reward_table = table
+            break
+    if reward_table is not None:
+        parsed = _parse_reward_rows(reward_table)
+        if parsed.get("found"):
+            return {
+                "mode": "rank_last_volume" if parsed["isLastVol"] else "rank",
+                "tiers": parsed["tiers"],
+                "unit": parsed["unit"],
+                "lastTierCap": parsed["lastTierCap"],
+            }
+    for top_re, share_re in (
+        (_ARTICLE_TOP_N, _ARTICLE_SHARE_X),
+        (_ARTICLE_TOP_N_CN, _ARTICLE_SHARE_X_CN),
+    ):
+        tm = top_re.search(text)
+        sm = share_re.search(text)
+        if not tm or not sm:
+            continue
+        try:
+            total = float(sm.group(1).replace(",", ""))
+            eligible = int(tm.group(1).replace(",", ""))
+        except ValueError:
+            total = eligible = None
+        if total is not None:
+            return {
+                "mode": "total",
+                "tiers": [],
+                "unit": sm.group(2).upper(),
+                "lastTierCap": None,
+                "totalReward": _format_num(total),
+                "eligibleUsers": eligible,
+            }
+    return {"mode": None, "tiers": [], "unit": None, "lastTierCap": None}
+
+
+def _parse_article(code: str) -> dict[str, Any]:
+    payload = _fetch_article_detail(code)
+    body = payload.get("body") or "{}"
+    try:
+        tree = json.loads(body) if isinstance(body, str) else body
+    except (TypeError, ValueError):
+        tree = {}
+    text = _article_body_text(tree or {})
+    tables = _article_tables(tree or {})
+    title = str(payload.get("title") or "")
+    times = _parse_article_times(text)
+    market = _parse_article_market(text)
+    pairs = _parse_article_pairs(text, None)
+    token = _parse_article_token(title, pairs)
+    pairs = _parse_article_pairs(text, token)
+    reward = _parse_article_reward_blocks(text, title, tables)
+    result: dict[str, Any] = {
+        "code": code,
+        "title": title,
+        "releaseDate": payload.get("releaseDate") or payload.get("publishDate"),
+        "start": times["start"],
+        "end": times["end"],
+        "market": market,
+        "token": token,
+        "pairs": pairs,
+        "rewardToken": reward["unit"],
+        "rewardMode": reward["mode"],
+        "rewardTiers": reward["tiers"],
+        "lastTierCap": reward["lastTierCap"],
+    }
+    if reward.get("mode") == "total":
+        result["totalReward"] = reward.get("totalReward")
+        result["eligibleUsers"] = reward.get("eligibleUsers")
+    return result
+
+
+@app.get("/api/activities/article")
+def api_activities_article() -> Response:
+    value = (
+        request.args.get("articleCode")
+        or request.args.get("url")
+        or request.args.get("article_url")
+        or ""
+    ).strip()
+    if not value:
+        return jsonify({"error": "缺少 articleCode 或 url"}), 400
+    code = _extract_article_code(value)
+    if not code:
+        return jsonify({"error": "无法识别公告 code"}), 400
+    with _ACTIVITY_ARTICLE_CACHE_LOCK:
+        cached = _ACTIVITY_ARTICLE_CACHE.get(code)
+        if cached and time.time() - cached[0] < _ACTIVITY_ARTICLE_TTL:
+            return jsonify(cached[1])
+    try:
+        result = _parse_article(code)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+    with _ACTIVITY_ARTICLE_CACHE_LOCK:
+        _ACTIVITY_ARTICLE_CACHE[code] = (time.time(), result)
+    return jsonify(result)
+
+
 @app.get("/api/binance/kline/<symbol>")
 def api_kline_snapshot(symbol: str) -> Response:
     safe_symbol = symbol.upper().strip()

@@ -350,6 +350,89 @@ document.getElementById("editRewardMode").addEventListener("change", () => {
   document.getElementById("rewardTotalFields").style.display = mode === "total" ? "" : "none";
 });
 
+// —— 从公告提取回填 ——
+function setModalRewardFromArticle(data) {
+  if (data.rewardToken) document.getElementById("editRewardToken").value = data.rewardToken;
+  const tierRowsEl = document.getElementById("editTierRows");
+  if (data.rewardMode === "rank" || data.rewardMode === "rank_last_volume") {
+    document.getElementById("editRewardMode").value = data.rewardMode;
+    document.getElementById("rewardRankFields").style.display = "";
+    document.getElementById("rewardTotalFields").style.display = "none";
+    tierRowsEl.innerHTML = "";
+    _tierRowCount = 0;
+    const tiers = (data.rewardTiers && data.rewardTiers.length) ? data.rewardTiers : [{ rankMin: 1, rankMax: 1, amount: "0" }];
+    for (const t of tiers) addTierRow(t);
+  } else if (data.rewardMode === "total" && data.totalReward != null && data.totalReward !== "") {
+    document.getElementById("editRewardMode").value = "total";
+    document.getElementById("rewardRankFields").style.display = "none";
+    document.getElementById("rewardTotalFields").style.display = "";
+    document.getElementById("editTotalReward").value = addCommas(String(data.totalReward).replace(/,/g, ""));
+    document.getElementById("editEligibleUsers").value = data.eligibleUsers != null ? addCommas(String(data.eligibleUsers)) : "";
+  }
+}
+
+function articleExtractSummary(data) {
+  const parts = [];
+  if (data.rewardMode === "rank") parts.push(`按排名 ${(data.rewardTiers || []).length} 档`);
+  else if (data.rewardMode === "rank_last_volume") {
+    const tiers = data.rewardTiers || [];
+    const last = tiers[tiers.length - 1];
+    parts.push(`按排名 ${tiers.length} 档`);
+    if (last) parts.push(`末档按量 池 ${last.amount}`);
+    if (data.lastTierCap) parts.push(`人均上限 ${data.lastTierCap}`);
+  } else if (data.rewardMode === "total") {
+    parts.push(`按总量 池 ${data.totalReward}`);
+    if (data.eligibleUsers != null) parts.push(`${data.eligibleUsers} 人`);
+  } else {
+    parts.push("未识别奖励结构");
+  }
+  if (data.rewardToken) parts.push(`币种 ${data.rewardToken}`);
+  if (data.start && data.end) parts.push(`${data.start} ~ ${data.end}`);
+  if (data.market) parts.push(data.market.toUpperCase());
+  if (data.pairs && data.pairs.length) parts.push(`${data.pairs.length} 交易对`);
+  return parts.join(" · ");
+}
+
+function fillFromArticle(data) {
+  if (data.title) document.getElementById("editName").value = data.title;
+  if (data.token) document.getElementById("editToken").value = data.token;
+  if (data.market) document.getElementById("editMarket").value = data.market;
+  if (data.pairs && data.pairs.length) document.getElementById("editSymbol").value = data.pairs.join(", ");
+  if (data.start && data.end) {
+    document.getElementById("editActivityStart").value = data.start.replace(" ", "T");
+    document.getElementById("editActivityEnd").value = data.end.replace(" ", "T");
+  }
+  setModalRewardFromArticle(data);
+}
+
+document.getElementById("extractArticleBtn").addEventListener("click", async () => {
+  const input = document.getElementById("editArticleInput");
+  const statusEl = document.getElementById("articleExtractStatus");
+  const btn = document.getElementById("extractArticleBtn");
+  const val = (input.value || "").trim();
+  if (!val) {
+    statusEl.className = "article-extract-status err";
+    statusEl.textContent = "请先填写公告链接或 code。";
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "提取中...";
+  statusEl.className = "article-extract-status";
+  statusEl.textContent = "正在读取公告并解析…";
+  try {
+    const data = await api("/api/activities/article?url=" + encodeURIComponent(val));
+    fillFromArticle(data);
+    statusEl.className = "article-extract-status ok";
+    statusEl.textContent = "已提取：" + articleExtractSummary(data) + " · 已回填表单（请核对后保存）";
+  } catch (error) {
+    statusEl.className = "article-extract-status err";
+    statusEl.textContent = "提取失败：" + error.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "从公告提取";
+  }
+});
+
 document.querySelectorAll(".modal-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".modal-tab").forEach((t) => t.classList.remove("active"));

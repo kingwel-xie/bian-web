@@ -560,6 +560,23 @@ td:nth-child(2) {
   font-weight: 900;
 }
 
+.article-extract-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  min-height: 1.3em;
+  word-break: break-all;
+}
+
+.article-extract-status.ok {
+  color: var(--good);
+}
+
+.article-extract-status.err {
+  color: var(--bad);
+  font-weight: 900;
+}
+
 .discovery-section {
   min-height: 20px;
   margin-top: 12px;
