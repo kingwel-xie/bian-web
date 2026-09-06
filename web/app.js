@@ -395,7 +395,8 @@ function articleExtractSummary(data) {
 }
 
 function fillFromArticle(data) {
-  if (data.title) document.getElementById("editName").value = data.title;
+  const title = (data.title || "").split(/[：:]/)[0].trim();
+  if (title) document.getElementById("editName").value = title;
   if (data.token) document.getElementById("editToken").value = data.token;
   if (data.market) document.getElementById("editMarket").value = data.market;
   if (data.pairs && data.pairs.length) document.getElementById("editSymbol").value = data.pairs.join(", ");
