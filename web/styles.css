@@ -581,17 +581,19 @@ td:nth-child(2) {
   width: 100%;
 }
 
-.article-picker-btns {
+.article-picker-line {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-self: stretch;
-  justify-content: stretch;
+  align-items: stretch;
+  gap: 10px;
 }
 
-.article-picker-btns button {
+.article-picker-line .article-pick-select {
   flex: 1;
-  padding: 8px 12px;
+  min-width: 0;
+}
+
+.article-picker-line button {
+  padding: 0 12px;
   background: #4a7c8c;
   color: #fff;
   border: none;
@@ -601,7 +603,7 @@ td:nth-child(2) {
   white-space: nowrap;
 }
 
-.article-picker-btns button:disabled {
+.article-picker-line button:disabled {
   opacity: 0.6;
   cursor: default;
 }

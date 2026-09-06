@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
-    <link rel="stylesheet" href="/css888/styles.css?v=20260906c" />
+    <link rel="stylesheet" href="/css888/styles.css?v=20260906d" />
   </head>
   <body>
     <main class="shell">
@@ -71,11 +71,11 @@
           <div id="tabBasic" class="tab-content">
             <div class="form-row">
               <label class="form-grow">最新活动公告
-                <select id="articlePick" class="article-pick-select"><option value="">选择公告…</option></select>
+                <div class="article-picker-line">
+                  <select id="articlePick" class="article-pick-select"><option value="">选择公告…</option></select>
+                  <button id="extractArticleBtn" type="button">从公告提取</button>
+                </div>
               </label>
-              <div class="article-picker-btns">
-                <button id="extractArticleBtn" type="button">从公告提取</button>
-              </div>
             </div>
             <div id="articleExtractStatus" class="article-extract-status"></div>
             <hr class="form-divider">
