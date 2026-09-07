@@ -2121,6 +2121,11 @@ _ARTICLE_CAP = re.compile(
     r"([\d,]+(?:\.\d+)?)\s*([A-Z][A-Z0-9]{1,12})?",
     re.I,
 )
+_ARTICLE_SHARE_WORD = re.compile(
+    r"均分|平分|瓜分|占比|分得|share|split|proportion|pro[- ]?rata|pool|tokens?\s*each|每位|每人|per\s+user"
+    r"|每位用户|每名|equally|equal",
+    re.I,
+)
 _ARTICLE_TIME_RAW = (
     r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?[T ]?(\d{1,2}):(\d{2})(?::(\d{2}))?"
     r"\s*(?:[\(（]?(UTC|东八区时间|北京时间)[\)）]?)?"
@@ -2296,11 +2301,13 @@ def _parse_reward_rows(table: list[list[str]]) -> dict[str, Any]:
             except ValueError:
                 cap = None
         rank_min, rank_max, is_remaining = rank
+        is_pool = bool(_ARTICLE_SHARE_WORD.search(rest))
         rows.append(
             {
                 "rankMin": rank_min,
                 "rankMax": rank_max,
                 "is_remaining": is_remaining,
+                "is_pool": is_pool,
                 "amount": num,
                 "unit": unit,
                 "cap": cap,
@@ -2323,6 +2330,8 @@ def _parse_reward_rows(table: list[list[str]]) -> dict[str, Any]:
     last_tier_cap = None
     for r in rows:
         amt = r["amount"]
+        if not r.get("is_remaining") and not r.get("is_pool") and r["rankMax"] >= r["rankMin"]:
+            amt = amt * (r["rankMax"] - r["rankMin"] + 1)
         tiers.append(
             {
                 "rankMin": int(r["rankMin"]),
