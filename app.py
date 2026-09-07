@@ -2088,10 +2088,10 @@ _ARTICLE_QUOTE_TOKENS = {
     "EUR", "TRY", "BRL", "XRP", "SOL", "DOGE",
 }
 _ARTICLE_RANK_ORDINAL = re.compile(
-    r"^\s*(?:第|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:place|名|位)\b", re.I
+    r"^\s*(?:第\s*|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:place|名|位)\b", re.I
 )
 _ARTICLE_RANK_RANGE = re.compile(
-    r"^\s*(?:第|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:-|–|—|~|至|到)\s*(?:第|rank\s*)?"
+    r"^\s*(?:第\s*|rank\s*)?([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:-|–|—|~|至|到)\s*(?:第\s*|rank\s*)?"
     r"([\d,]{1,20})(?:st|nd|rd|th)?\s*(?:places?|名|位)(?:\b|$)", re.I
 )
 _ARTICLE_RANK_REMAINING = re.compile(
@@ -2176,7 +2176,7 @@ def _article_body_text(tree: dict[str, Any]) -> str:
     def walk(n: dict[str, Any]) -> None:
         kind = n.get("node")
         if kind == "text":
-            out.append(str(n.get("text", "")).replace("\u00a0", " "))
+            out.append(str(n.get("text", "")).replace("\u00a0", " ").replace("\u200b", "").replace("\u200c", "").replace("\u200d", ""))
             return
         tag = str(n.get("tag") or "")
         if kind == "element":
@@ -2212,7 +2212,7 @@ def _article_tables(tree: dict[str, Any]) -> list[list[list[str]]]:
                         ct(cc, b)
 
                 ct(x, buf)
-                cells.append(" ".join("".join(buf).split()))
+                cells.append(" ".join("".join(buf).replace("\u200b", "").replace("\u200c", "").replace("\u200d", "").split()))
             for c in x.get("child") or []:
                 w(c)
 
@@ -2412,10 +2412,10 @@ def _parse_article_market(text: str) -> str | None:
     lowered = text.lower()
     if re.search(r"usdt-m\b|perpetual|binance futures|(\w+\s+)?futures|合约", lowered):
         return "um"
+    if re.search(r"\bsaving\b|理财|活期|定期|申购", lowered):
+        return "saving"
     if re.search(r"\bspot\b|现货", lowered):
         return "spot"
-    if re.search(r"\bsaving\b|理财|活期", lowered):
-        return "saving"
     return None
 
 
@@ -2426,6 +2426,9 @@ def _parse_article_token(title: str, pairs: list[str]) -> str | None:
     m = re.search(r"\b[Tr]rade\s+([A-Z][A-Z0-9]{1,24})\b", title)
     if m:
         return m.group(1).upper()
+    m = re.search(r"([A-Z][A-Z0-9]{1,24})\s*[和与及]", title)
+    if m:
+        return m.group(1)
     m = re.search(r"^([A-Z][A-Z0-9]{1,24})(?![A-Z0-9])", title.strip())
     if m:
         return m.group(1).upper()
@@ -2518,9 +2521,13 @@ def _parse_article(code: str) -> dict[str, Any]:
     title = str(payload.get("title") or "")
     times = _parse_article_times(text)
     market = _parse_article_market(text)
-    pairs = _parse_article_pairs(text, None)
-    token = _parse_article_token(title, pairs)
-    pairs = _parse_article_pairs(text, token)
+    if market == "saving":
+        pairs: list[str] = []
+        token = _parse_article_token(title, pairs)
+    else:
+        pairs = _parse_article_pairs(text, None)
+        token = _parse_article_token(title, pairs)
+        pairs = _parse_article_pairs(text, token)
     reward = _parse_article_reward_blocks(text, title, tables)
     result: dict[str, Any] = {
         "code": code,
