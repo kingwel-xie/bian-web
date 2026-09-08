@@ -481,22 +481,12 @@ function renderRewardPanel(data, rows, forceShow) {
           const rateStr = per10k != null
             ? `每万U ${per10k.toLocaleString("en-US", {maximumFractionDigits:4})}`
             : "每万U —";
-          const capThreshold = per10k != null && capNum != null && per10k > 0
-            ? Number((capNum * 10000 / per10k).toFixed(2))
-            : null;
-          const fmtVol = (v) => {
-            if (!Number.isFinite(v)) return "—";
-            if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
-            if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
-            if (v >= 1000) return (v / 1000).toFixed(2) + "K";
-            return v.toFixed(2);
-          };
           let tip = lastTierReward.tierVolume != null
             ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
             : "档内总量不足";
-          if (capNum != null) tip += ` · 个人上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}${capThreshold != null ? `，成交 ${fmtVol(capThreshold)}U 触顶` : ""}`;
+          if (capNum != null) tip += ` · 个人上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}，按量折后不超过此值`;
           const capStr = capNum != null
-            ? `（上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}${capThreshold != null ? `/成交 ${fmtVol(capThreshold)}U` : ""}）`
+            ? `（上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}）`
             : "";
           parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}"><span style="white-space:nowrap">${rateStr}</span>${capStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
         } else {
