@@ -485,7 +485,10 @@ function renderRewardPanel(data, rows, forceShow) {
             ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
             : "档内总量不足";
           if (capNum != null) tip += ` · 个人上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}，按量折后不超过此值`;
-          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}">${rateStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
+          const capStr = capNum != null
+            ? `（上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}）`
+            : "";
+          parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}"><span style="white-space:nowrap">${rateStr}</span>${capStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
         } else {
           const perPerson = count > 0 ? pool / count : 0;
           const usd = price != null ? perPerson * price : null;
