@@ -261,6 +261,14 @@ function openEditModal(job) {
   const isRankLike = rewardMode === "rank" || rewardMode === "rank_last_volume";
   document.getElementById("rewardRankFields").style.display = isRankLike ? "" : "none";
   document.getElementById("rewardTotalFields").style.display = rewardMode === "total" ? "" : "none";
+  const capField = document.getElementById("lastTierCapField");
+  if (rewardMode === "rank_last_volume") {
+    capField.style.display = "flex";
+    document.getElementById("editLastTierCap").value = p.lastTierCap != null ? String(p.lastTierCap) : "";
+  } else {
+    capField.style.display = "none";
+    document.getElementById("editLastTierCap").value = "";
+  }
   const rowsEl = document.getElementById("editTierRows");
   rowsEl.innerHTML = "";
   _tierRowCount = 0;
@@ -349,6 +357,13 @@ document.getElementById("editRewardMode").addEventListener("change", () => {
   const mode = document.getElementById("editRewardMode").value;
   document.getElementById("rewardRankFields").style.display = (mode === "rank" || mode === "rank_last_volume") ? "" : "none";
   document.getElementById("rewardTotalFields").style.display = mode === "total" ? "" : "none";
+  const capField = document.getElementById("lastTierCapField");
+  if (mode === "rank_last_volume") {
+    capField.style.display = "flex";
+  } else {
+    capField.style.display = "none";
+    document.getElementById("editLastTierCap").value = "";
+  }
 });
 
 // —— 公告提取回填 ——
@@ -359,6 +374,14 @@ function setModalRewardFromArticle(data) {
     document.getElementById("editRewardMode").value = data.rewardMode;
     document.getElementById("rewardRankFields").style.display = "";
     document.getElementById("rewardTotalFields").style.display = "none";
+    const capField = document.getElementById("lastTierCapField");
+    if (data.rewardMode === "rank_last_volume") {
+      capField.style.display = "flex";
+      document.getElementById("editLastTierCap").value = data.lastTierCap != null ? String(data.lastTierCap) : "";
+    } else {
+      capField.style.display = "none";
+      document.getElementById("editLastTierCap").value = "";
+    }
     tierRowsEl.innerHTML = "";
     _tierRowCount = 0;
     const tiers = (data.rewardTiers && data.rewardTiers.length) ? data.rewardTiers : [{ rankMin: 1, rankMax: 1, amount: "0" }];
@@ -553,6 +576,10 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
       }
     });
     if (rewardTiers.length) body.rewardTiers = rewardTiers;
+    if (rewardMode === "rank_last_volume") {
+      const capVal = (document.getElementById("editLastTierCap").value || "").replace(/,/g, "").trim();
+      if (capVal !== "") body.lastTierCap = capVal;
+    }
   } else {
     body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
     body.eligibleUsers = parseInt((document.getElementById("editEligibleUsers").value || "").replace(/,/g, ""), 10) || undefined;

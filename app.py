@@ -3349,6 +3349,14 @@ def api_update_job_params(job_id: str) -> Response:
                         p.pop("rewardTiers", None)
                 else:
                     p.pop("rewardTiers", None)
+                last_tier_cap = body.get("lastTierCap")
+                if last_tier_cap not in (None, ""):
+                    try:
+                        p["lastTierCap"] = str(float(last_tier_cap))
+                    except (TypeError, ValueError):
+                        p.pop("lastTierCap", None)
+                else:
+                    p.pop("lastTierCap", None)
                 total_reward = body.get("totalReward")
                 if total_reward:
                     p["totalReward"] = str(total_reward)
@@ -3608,6 +3616,13 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
     eligible_volume = decimal_float(meta.get("eligibleTradingVolume"))
     base_volume = float(eligible_volume) if eligible_volume is not None else rows_volume
     tier_volume = base_volume - other_volume
+    cap: float | None = None
+    cap_raw = payload.get("lastTierCap")
+    if cap_raw not in (None, ""):
+        try:
+            cap = float(cap_raw)
+        except (TypeError, ValueError):
+            cap = None
     result = {
         "tierIndex": last_idx,
         "rankMin": last_min,
@@ -3617,6 +3632,7 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
         "otherTiersVolume": round(other_volume, 2),
         "tierVolume": round(tier_volume, 2) if tier_volume > 0 else None,
         "per10k": round(pool / (tier_volume / 10000.0), 8) if tier_volume > 0 else None,
+        "cap": cap,
     }
     return result
 
@@ -3666,6 +3682,7 @@ def _build_preview_base(
         preview["lastTierReward"] = None
     preview["totalReward"] = payload.get("totalReward")
     preview["eligibleUsers"] = payload.get("eligibleUsers")
+    preview["lastTierCap"] = payload.get("lastTierCap")
     if preview.get("rewardTiers"):
         preview["totalRewardAmount"] = sum(
             float(t.get("amount", 0) or 0) for t in preview["rewardTiers"]
@@ -5044,6 +5061,9 @@ def api_rewards() -> Response:
                     return jsonify({"error": "无法计算末档每万U奖励（档内总量不足或快照数据缺失）"}), 400
                 last_tier = reward_tiers[last_idx]
                 amount = round(per10k * last_volume / 10000.0, 4)
+                cap = (rate or {}).get("cap")
+                if cap:
+                    amount = min(amount, cap)
                 db["records"].append({
                     "id": uuid.uuid4().hex[:12],
                     "jobId": job_id,

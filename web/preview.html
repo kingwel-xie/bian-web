@@ -475,13 +475,16 @@ function renderRewardPanel(data, rows, forceShow) {
         const poolStr = pool.toLocaleString("en-US");
         if (lastTierReward && i === lastTierReward.tierIndex) {
           const per10k = lastTierReward.per10k != null ? lastTierReward.per10k : null;
+          const cap = data.lastTierCap != null ? parseFloat(data.lastTierCap) : null;
+          const capNum = cap != null && Number.isFinite(cap) ? cap : null;
           const usd = per10k != null && price != null ? per10k * price : null;
           const rateStr = per10k != null
             ? `每万U ${per10k.toLocaleString("en-US", {maximumFractionDigits:4})}`
             : "每万U —";
-          const tip = lastTierReward.tierVolume != null
+          let tip = lastTierReward.tierVolume != null
             ? `档内总量 ${Number(lastTierReward.tierVolume).toLocaleString("en-US")}`
             : "档内总量不足";
+          if (capNum != null) tip += ` · 个人上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})}，按量折后不超过此值`;
           parts.push(`<tr><td>${t.rankMin} — ${t.rankMax}</td><td class="num">${count}</td><td class="num">${poolStr}</td><td class="num" title="${tip}">${rateStr}</td><td class="num reward-tier-usd">${usd != null ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}</td></tr>`);
         } else {
           const perPerson = count > 0 ? pool / count : 0;
