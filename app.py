@@ -4989,6 +4989,9 @@ def api_rewards() -> Response:
         if is_last_vol:
             for ti, count in tier_counts.items():
                 tier_info = reward_tiers[ti]
+                amt_float = float(tier_info.get("amount", 0) or 0)
+                tier_cnt = (int(tier_info.get("rankMax", 0) or 0) - int(tier_info.get("rankMin", 0) or 0)) + 1
+                per_person = str(round(amt_float / tier_cnt, 4)) if tier_cnt > 0 else str(round(amt_float, 4))
                 for _ in range(count):
                     db["records"].append({
                         "id": uuid.uuid4().hex[:12],
@@ -4999,7 +5002,7 @@ def api_rewards() -> Response:
                         "tierIndex": ti,
                         "rankMin": tier_info.get("rankMin"),
                         "rankMax": tier_info.get("rankMax"),
-                        "amount": tier_info.get("amount", "0"),
+                        "amount": per_person,
                         "createdAt": now,
                         "paid": False,
                         "paidAt": None,
@@ -5014,6 +5017,9 @@ def api_rewards() -> Response:
                     rank_max = int(reward_tiers[ti].get("rankMax"))
                 except (TypeError, ValueError):
                     rank_max = None
+                amt_float = float(reward_tiers[ti].get("amount", 0) or 0)
+                tier_cnt = (int(reward_tiers[ti].get("rankMax", 0) or 0) - int(reward_tiers[ti].get("rankMin", 0) or 0)) + 1
+                per_person = str(round(amt_float / tier_cnt, 4)) if tier_cnt > 0 else str(round(amt_float, 4))
                 assigned = 0
                 for row in rows:
                     if assigned >= count:
@@ -5041,7 +5047,7 @@ def api_rewards() -> Response:
                         "tierIndex": ti,
                         "rankMin": reward_tiers[ti].get("rankMin"),
                         "rankMax": reward_tiers[ti].get("rankMax"),
-                        "amount": reward_tiers[ti].get("amount", "0"),
+                        "amount": per_person,
                         "nickname": nick,
                         "userId": row.get("userId", ""),
                         "grade": row.get("grade") or 0,
@@ -5064,9 +5070,6 @@ def api_rewards() -> Response:
                     return jsonify({"error": "无法计算末档每万U奖励（档内总量不足或快照数据缺失）"}), 400
                 last_tier = reward_tiers[last_idx]
                 amount = round(per10k * last_volume / 10000.0, 4)
-                cap = (rate or {}).get("cap")
-                if cap:
-                    amount = min(amount, cap)
                 db["records"].append({
                     "id": uuid.uuid4().hex[:12],
                     "jobId": job_id,

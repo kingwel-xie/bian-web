@@ -518,8 +518,7 @@ function renderJobs() {
         tokVal = parseFloat(r.amount) || 0;
         usdVal = price != null ? tokVal * price : 0;
       } else if (r.rankMin != null && r.rankMax != null) {
-        const tierCnt = (r.rankMax - r.rankMin + 1) || 1;
-        tokVal = (parseFloat(r.amount) || 0) / tierCnt;
+        tokVal = parseFloat(r.amount) || 0;
         usdVal = price != null ? tokVal * price : 0;
       }
       if (!r.paid) {
