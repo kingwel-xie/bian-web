@@ -2911,6 +2911,7 @@ def api_analysis() -> Response:
     job_data: list[dict[str, Any]] = []
     max_rank = 0
     tier_union: set[tuple[int, int]] = set()
+    rank_tier_sigs: list[tuple[tuple[int, int], ...]] = []
 
     for job in candidates:
         payload = job.get("payload", {})
@@ -2934,11 +2935,17 @@ def api_analysis() -> Response:
 
         reward_mode = payload.get("rewardMode") or "rank"
         if reward_mode in ("rank", "rank_last_volume"):
+            sig: list[tuple[int, int]] = []
             for t in payload.get("rewardTiers") or []:
                 try:
-                    tier_union.add((int(t["rankMin"]), int(t["rankMax"])))
+                    tr = (int(t["rankMin"]), int(t["rankMax"]))
                 except (KeyError, TypeError, ValueError):
                     continue
+                tier_union.add(tr)
+                sig.append(tr)
+            if sig:
+                sig.sort(key=lambda p: (p[0], p[1]))
+                rank_tier_sigs.append(tuple(sig))
         for r in limited:
             if reward_mode not in ("rank", "rank_last_volume"):
                 continue
@@ -2952,21 +2959,42 @@ def api_analysis() -> Response:
             "rows": limited,
         })
 
-    sorted_tiers = sorted(tier_union, key=lambda t: (t[0], t[1]))
-    merged_tiers: list[tuple[int, int]] = []
-    for rmin, rmax in sorted_tiers:
-        if merged_tiers and rmin <= merged_tiers[-1][1]:
-            if rmax > merged_tiers[-1][1]:
-                merged_tiers[-1] = (merged_tiers[-1][0], rmax)
-        else:
-            merged_tiers.append((rmin, rmax))
     ranges: list[tuple[int, int]] = []
-    cursor = 1
-    for rmin, rmax in merged_tiers:
-        if rmin > cursor:
-            ranges.append((cursor, rmin - 1))
-        ranges.append((rmin, rmax))
-        cursor = rmax + 1
+    if rank_tier_sigs:
+        sig_counts: dict[tuple[tuple[int, int], ...], int] = {}
+        for sig in rank_tier_sigs:
+            sig_counts[sig] = sig_counts.get(sig, 0) + 1
+
+        def _sig_key(sig: tuple[tuple[int, int], ...]) -> tuple[int, int]:
+            return (len(sig), sig[-1][1])
+
+        mode_sig = max(sig_counts, key=lambda s: (sig_counts[s], _sig_key(s)))
+        mode_max = mode_sig[-1][1]
+        top = max(tier_union, key=lambda t: t[1])[1]
+
+        cursor = 1
+        for rmin, rmax in mode_sig:
+            if rmin > cursor:
+                ranges.append((cursor, rmin - 1))
+            ranges.append((rmin, rmax))
+            cursor = rmax + 1
+        if top > mode_max:
+            ranges.append((mode_max + 1, top))
+    else:
+        sorted_tiers = sorted(tier_union, key=lambda t: (t[0], t[1]))
+        merged_tiers: list[tuple[int, int]] = []
+        for rmin, rmax in sorted_tiers:
+            if merged_tiers and rmin <= merged_tiers[-1][1]:
+                if rmax > merged_tiers[-1][1]:
+                    merged_tiers[-1] = (merged_tiers[-1][0], rmax)
+            else:
+                merged_tiers.append((rmin, rmax))
+        cursor = 1
+        for rmin, rmax in merged_tiers:
+            if rmin > cursor:
+                ranges.append((cursor, rmin - 1))
+            ranges.append((rmin, rmax))
+            cursor = rmax + 1
     if not ranges:
         ranges = list(_ANALYSIS_RANGES)
 
