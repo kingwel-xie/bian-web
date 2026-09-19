@@ -1074,6 +1074,13 @@ function renderRewardPanel(data, rows, forceShow) {
     let deltaSort = false;
     let volumeSort = false;
     let teamOfUser = (preview.teamMap || {});
+    const saveMode = (preview.market || "").toUpperCase() === "SAVING";
+    function teamOf(r) {
+      if (saveMode && (r.nickname || r.userId)) {
+        return teamOfUser[((r.userId || "") + "|" + (r.nickname || ""))] || "";
+      }
+      return teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
+    }
     let madDogOf = (preview.madDogMap || {});
     let madDogTeamOf = (preview.madDogTeamIndex || {});
     let _vRows = null, _dirtyRows = true, _vRowH = 0, _vRowMeasured = false;
@@ -1095,7 +1102,7 @@ function renderRewardPanel(data, rows, forceShow) {
     const teamSizes = (preview.teamSizes || {});
     const teamMap = {};
     for (const r of allRows) {
-      const t = teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
+      const t = teamOf(r);
       if (t) {
         if (!teamMap[t]) teamMap[t] = { count: 0, totalGrade: 0, totalDelta: 0 };
         teamMap[t].count++;
@@ -1182,7 +1189,7 @@ function renderRewardPanel(data, rows, forceShow) {
         rows = allRows.filter(r => {
           if (q && !r._nl.includes(q) && !r._ul.includes(q)) return false;
           if (teamFilter) {
-            const t = teamOfUser[r.nickname] || "";
+            const t = teamOf(r);
             if (t !== teamFilter) return false;
           }
           return true;
@@ -1205,7 +1212,7 @@ function renderRewardPanel(data, rows, forceShow) {
     }
 
     function rowHtml(r) {
-      const teamName = teamOfUser[r.nickname] || "";
+      const teamName = teamOf(r);
       const mdv = madDogOf[r.nickname];
       const isMD = mdv != null;
       const md = mdv || 0;
@@ -2068,7 +2075,8 @@ function renderRewardPanel(data, rows, forceShow) {
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const teamName = pickerTeamSelect.options[pickerTeamSelect.selectedIndex].text;
-        teamOfUser[_pickerNick] = teamName;
+        if (saveMode) teamOfUser[( _pickerUid || "") + "|" + (_pickerNick || "")] = teamName;
+        else teamOfUser[_pickerNick] = teamName;
         hidePicker();
         renderRows();
       } catch (err) {
