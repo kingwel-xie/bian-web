@@ -4660,6 +4660,27 @@ def api_update_member_maddog() -> Response:
     return jsonify({"error": "成员不存在"}), 404
 
 
+@app.put("/api/teams/member/userid")
+def api_update_member_userid() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    nickname = str(body.get("nickname") or "").strip().lower()
+    new_user_id = str(body.get("userId") or "").strip()
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    for m in (teams[team_idx].get("members") or []):
+        if _team_member_key(m) == nickname:
+            if "userId" in m and m["userId"] == new_user_id:
+                return jsonify({"db": db})
+            m["userId"] = new_user_id
+            db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_teams_db(db)
+            return jsonify({"db": db})
+    return jsonify({"error": "成员不存在"}), 404
+
+
 @app.post("/api/teams/merge")
 def api_merge_teams() -> Response:
     db = load_teams_db()
