@@ -4681,6 +4681,33 @@ def api_update_member_userid() -> Response:
     return jsonify({"error": "成员不存在"}), 404
 
 
+@app.put("/api/teams/member/nickname")
+def api_update_member_nickname() -> Response:
+    db = load_teams_db()
+    body = request.get_json(force=True)
+    team_idx = int(body.get("teamIndex", 0))
+    nickname = str(body.get("nickname") or "").strip().lower()
+    new_nickname = str(body.get("newNickname") or "").strip()
+    if not new_nickname:
+        return jsonify({"error": "昵称不能为空"}), 400
+    teams = db.get("teams") or []
+    if team_idx < 0 or team_idx >= len(teams):
+        return jsonify({"error": "团队索引无效"}), 400
+    members = teams[team_idx].get("members") or []
+    new_key = new_nickname.lower()
+    if new_key == nickname:
+        return jsonify({"db": db})
+    if any(_team_member_key(m) == new_key for m in members):
+        return jsonify({"error": "该团队已存在同名成员"}), 400
+    for m in members:
+        if _team_member_key(m) == nickname:
+            m["nickname"] = new_nickname
+            db["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_teams_db(db)
+            return jsonify({"db": db})
+    return jsonify({"error": "成员不存在"}), 404
+
+
 @app.post("/api/teams/merge")
 def api_merge_teams() -> Response:
     db = load_teams_db()

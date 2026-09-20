@@ -34,8 +34,8 @@
   .weight-input:focus { border-color: var(--accent-2); outline: none; }
   .maddog-input { width: 88px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; text-align: center; background: #fff; }
   .maddog-input:focus { border-color: var(--accent-2); outline: none; }
-  .uid-input { width: calc(100% - 8px); box-sizing: border-box; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; background: #fff; }
-  .uid-input:focus { border-color: var(--accent-2); outline: none; }
+  .uid-input, .nick-input { width: calc(100% - 8px); box-sizing: border-box; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; font: inherit; font-size: 11px; background: #fff; }
+  .uid-input:focus, .nick-input:focus { border-color: var(--accent-2); outline: none; }
   .member-table td.ic { padding-left: 4px; padding-right: 4px; }
   .member-table .md-col { width: 112px; }
   .del-btn { border: 0; background: transparent; color: #bbb; cursor: pointer; font-size: 18px; padding: 0; line-height: 1; }
@@ -185,7 +185,7 @@ function loadDb() {
             <tbody>
               ${sortedMembers.map((m, mi) => `<tr>
                 <td class="ck-col"><input type="checkbox" class="ck-member" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" ${sel.has(memberKey(m)) ? "checked" : ""}></td>
-                <td class="nick-col" title="${escapeHtml(m.nickname)}">${escapeHtml(m.nickname)}</td>
+                <td class="nick-col" title="${escapeHtml(m.nickname)}"><input class="nick-input" type="text" value="${escapeHtml(m.nickname)}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
                 <td class="uid-col" title="${escapeHtml(m.userId || "")}"><input class="uid-input" type="text" value="${escapeHtml(m.userId || "")}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
                 <td class="num ic"><input class="weight-input" type="number" min="1" value="${m.weight || 1}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
                 <td class="num ic"><input class="maddog-input" type="number" min="0" value="${m.madDog || 0}" data-ti="${ti}" data-nick="${encodeURIComponent(m.nickname)}" /></td>
@@ -261,6 +261,25 @@ function loadDb() {
           if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
           return r.json();
         }).then(() => { loadDb(); msg("成员已添加", true); }).catch(err => msg("错误: " + err.message, false));
+      });
+    });
+
+    // nickname change
+    content.querySelectorAll(".nick-input").forEach(el => {
+      el.addEventListener("change", function() {
+        const ti = parseInt(this.dataset.ti);
+        const nick = decodeURIComponent(this.dataset.nick);
+        const newNickname = this.value.trim();
+        if (!newNickname) { msg("昵称不能为空", false); loadDb(); return; }
+        if (newNickname.toLowerCase() === nick.toLowerCase()) return;
+        fetch("/api/teams/member/nickname", {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({teamIndex: ti, nickname: nick, newNickname: newNickname}),
+        }).then(r => {
+          if (!r.ok) return r.json().then(d => { throw new Error(d.error); });
+          return r.json();
+        }).then(() => { loadDb(); msg("昵称已更新", true); }).catch(err => { msg("错误: " + err.message, false); loadDb(); });
       });
     });
 
