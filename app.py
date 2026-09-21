@@ -3579,19 +3579,6 @@ def _build_team_map(
     return team_map, team_sizes, maddog_map, maddog_team_idx
 
 
-def _team_name_by_nick() -> dict[str, str]:
-    """Map normalized nickname -> team name, from the global teams db."""
-    team_db = load_teams_db()
-    lookup: dict[str, str] = {}
-    for team in team_db.get("teams") or []:
-        team_name = team.get("name", "")
-        for m in team.get("members") or []:
-            key = (m.get("nickname") or "").strip()
-            if key and key not in lookup:
-                lookup[key] = team_name
-    return lookup
-
-
 def _last_tier_index(tiers: list) -> int:
     best = -1
     best_max = -1
@@ -5077,9 +5064,6 @@ def api_rewards() -> Response:
         last_idx = _last_tier_index(reward_tiers) if is_last_vol else -1
         if is_last_vol and last_idx < 0:
             return jsonify({"error": "任务无分档配置"}), 400
-        rows_data = _latest_job_snapshot_data(job)
-        rows = rows_data.get("rows") or [] if not is_last_vol else []
-        team_name_by_nick = _team_name_by_nick() if not is_last_vol else {}
         tier_counts: dict[int, int] = {}
         for t in tiers_in:
             ti = t.get("tierIndex")
@@ -5089,77 +5073,26 @@ def api_rewards() -> Response:
             if ti < 0 or ti >= len(reward_tiers) or ti == last_idx:
                 continue
             tier_counts[ti] = count
-        if is_last_vol:
-            for ti, count in tier_counts.items():
-                tier_info = reward_tiers[ti]
-                amt_float = float(tier_info.get("amount", 0) or 0)
-                tier_cnt = (int(tier_info.get("rankMax", 0) or 0) - int(tier_info.get("rankMin", 0) or 0)) + 1
-                per_person = str(round(amt_float / tier_cnt, 4)) if tier_cnt > 0 else str(round(amt_float, 4))
-                for _ in range(count):
-                    db["records"].append({
-                        "id": uuid.uuid4().hex[:12],
-                        "jobId": job_id,
-                        "jobName": job_name,
-                        "team": team,
-                        "rewardToken": reward_token,
-                        "tierIndex": ti,
-                        "rankMin": tier_info.get("rankMin"),
-                        "rankMax": tier_info.get("rankMax"),
-                        "amount": per_person,
-                        "createdAt": now,
-                        "paid": False,
-                        "paidAt": None,
-                    })
-        else:
-            for ti, count in tier_counts.items():
-                try:
-                    rank_min = int(reward_tiers[ti].get("rankMin"))
-                except (TypeError, ValueError):
-                    rank_min = None
-                try:
-                    rank_max = int(reward_tiers[ti].get("rankMax"))
-                except (TypeError, ValueError):
-                    rank_max = None
-                amt_float = float(reward_tiers[ti].get("amount", 0) or 0)
-                tier_cnt = (int(reward_tiers[ti].get("rankMax", 0) or 0) - int(reward_tiers[ti].get("rankMin", 0) or 0)) + 1
-                per_person = str(round(amt_float / tier_cnt, 4)) if tier_cnt > 0 else str(round(amt_float, 4))
-                assigned = 0
-                for row in rows:
-                    if assigned >= count:
-                        break
-                    rank_val = row.get("rank")
-                    if rank_val is None:
-                        rank_val = row.get("sequence")
-                    try:
-                        rank = int(rank_val)
-                    except (TypeError, ValueError):
-                        continue
-                    if rank_min is not None and rank < rank_min:
-                        continue
-                    if rank_max is not None and rank > rank_max:
-                        continue
-                    nick = (row.get("nickname") or row.get("nickName") or "").strip()
-                    if not nick or team_name_by_nick.get(nick) != team:
-                        continue
-                    db["records"].append({
-                        "id": uuid.uuid4().hex[:12],
-                        "jobId": job_id,
-                        "jobName": job_name,
-                        "team": team,
-                        "rewardToken": reward_token,
-                        "tierIndex": ti,
-                        "rankMin": reward_tiers[ti].get("rankMin"),
-                        "rankMax": reward_tiers[ti].get("rankMax"),
-                        "amount": per_person,
-                        "nickname": nick,
-                        "userId": row.get("userId", ""),
-                        "grade": row.get("grade") or 0,
-                        "volume": row.get("tradingVolume") or row.get("grade") or 0,
-                        "createdAt": now,
-                        "paid": False,
-                        "paidAt": None,
-                    })
-                    assigned += 1
+        for ti, count in tier_counts.items():
+            tier_info = reward_tiers[ti]
+            amt_float = float(tier_info.get("amount", 0) or 0)
+            tier_cnt = (int(tier_info.get("rankMax", 0) or 0) - int(tier_info.get("rankMin", 0) or 0)) + 1
+            per_person = str(round(amt_float / tier_cnt, 4)) if tier_cnt > 0 else str(round(amt_float, 4))
+            for _ in range(count):
+                db["records"].append({
+                    "id": uuid.uuid4().hex[:12],
+                    "jobId": job_id,
+                    "jobName": job_name,
+                    "team": team,
+                    "rewardToken": reward_token,
+                    "tierIndex": ti,
+                    "rankMin": tier_info.get("rankMin"),
+                    "rankMax": tier_info.get("rankMax"),
+                    "amount": per_person,
+                    "createdAt": now,
+                    "paid": False,
+                    "paidAt": None,
+                })
         if is_last_vol:
             last_volume_raw = body.get("lastTierVolume")
             try:
