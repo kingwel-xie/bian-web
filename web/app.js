@@ -108,27 +108,33 @@ function inferFromUrl(rawUrl) {
   }
   const segments = path.split("/").filter(Boolean);
   const slug = segments[segments.length - 1] || "";
-  const lowerSlug = slug.toLowerCase();
-  const market = lowerSlug.includes("saving") ? "saving" : lowerSlug.includes("spot") ? "spot" : "um";
+  const lowerPath = path.toLowerCase();
+  const market = /saving|earn|stak|locked|flexi/.test(lowerPath) ? "saving"
+    : lowerPath.includes("spot") ? "spot" : "um";
 
   state.discoveredTop = TOP_DEFAULTS[market] || 1000;
 
+  const core = slug.replace(/-(?:round|wave|series|r|w)-?\d+$/i, "");
   const patterns = [
+    /^([a-z0-9]+)-(?:usdt|usdc|try|fdusd)-(?:futures|spot)-/i,
     /^([a-z0-9]+)-spot-/i,
     /^([a-z0-9]+)-futures-/i,
     /(?:^|-)futures-([a-z0-9]+)(?:-|$)/i,
-    /(?:^|-)spot-[a-z0-9-]*-([a-z0-9]+)$/i,
     /(?:^|-)wave-([a-z0-9]+)(?:-|$)/i,
+    /(?:^|-)spot-[a-z0-9-]*-([a-z0-9]+)$/i,
     /(?:^|-)reward-?([a-z0-9]+)(?:-|$)/i,
   ];
-  for (const pattern of patterns) {
-    const match = slug.match(pattern);
-    if (match?.[1]) return { market, symbol: match[1].toUpperCase() };
+  const roundish = (t) => /^[rw]\d+$|^(round|wave|series)\d+$|^\d+[km]?(?:usdt)?$/i.test(t);
+  for (const s of core !== slug ? [core, slug] : [core]) {
+    for (const pattern of patterns) {
+      const match = s.match(pattern);
+      if (match?.[1] && !roundish(match[1])) return { market, symbol: match[1].toUpperCase() };
+    }
   }
 
-  const tokens = slug.split(/[^a-z0-9]+/i).filter(Boolean);
-  const ignored = new Set(["spot", "futures", "trading", "competition", "challenge", "activity", "reward", "main", "sprint"]);
-  const token = [...tokens].reverse().find((item) => /^[a-z0-9]{2,24}$/i.test(item) && !ignored.has(item.toLowerCase()));
+  const tokens = core.split(/[^a-z0-9]+/i).filter(Boolean);
+  const ignored = new Set(["spot", "futures", "trading", "competition", "challenge", "activity", "reward", "main", "sprint", "wave", "round", "series", "earn", "saving", "usdt"]);
+  const token = tokens.reverse().find((item) => /^[a-z0-9]{2,24}$/i.test(item) && !/^\d+[km]?$/i.test(item) && !roundish(item) && !ignored.has(item.toLowerCase()));
   if (!token) throw new Error("无法从 URL 识别 symbol。");
   return { market, symbol: token.toUpperCase() };
 }
