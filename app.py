@@ -3601,6 +3601,9 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
     tierVolume = meta.eligibleTradingVolume - sum(volume of all rows outside the
     last tier range, including unconfigured ranks such as 1~5 before the first tier).
     per10k = lastTierPool / (tierVolume / 10000).
+    If the grade base diverges from trading volume (weighted-point leagues) or the
+    subtraction yields <= 0, falls back to the snapshot in-tier grade sum
+    (basis="grade").
     """
     tiers = payload.get("rewardTiers") or []
     if not isinstance(tiers, list):
@@ -3637,6 +3640,9 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
 
     other_volume = 0.0
     rows_volume = 0.0
+    in_tier_grade = 0.0
+    sum_grade = 0.0
+    sum_tv = 0.0
     for r in rows:
         try:
             grade = float(r.get("grade", 0) or 0)
@@ -3644,6 +3650,12 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
         except (TypeError, ValueError):
             continue
         rows_volume += grade
+        sum_grade += grade
+        tv_raw = r.get("tradingVolume")
+        try:
+            sum_tv += float(tv_raw) if tv_raw not in (None, "") else grade
+        except (TypeError, ValueError):
+            sum_tv += grade
         # Anything outside the last tier range is excluded from the base:
         # unconfigured prefix ranks (e.g. 1~5), other configured tiers, gaps,
         # and ranks beyond the last tier's upper bound.
@@ -3652,10 +3664,26 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
             continue
         if any(rmin <= seq <= rmax for rmin, rmax in other_bounds):
             other_volume += grade
+            continue
+        in_tier_grade += grade
 
     eligible_volume = decimal_float(meta.get("eligibleTradingVolume"))
-    base_volume = float(eligible_volume) if eligible_volume is not None else rows_volume
-    tier_volume = base_volume - other_volume
+    # Last tier is shared by grade proportion. The eligible meta matches the
+    # grade base only when grade == trading volume; if they diverge (e.g.
+    # bStock leagues where grade is weighted points), subtracting
+    # grade-based out-of-tier volume from a volume-based meta total is
+    # meaningless, so use the snapshot's in-tier grade sum instead.
+    diverged = sum_grade > 0 and abs(sum_grade - sum_tv) / sum_grade > 0.02
+    basis = "eligible"
+    tier_volume: float | None = None
+    if not diverged:
+        base_volume = float(eligible_volume) if eligible_volume is not None else rows_volume
+        candidate_volume = base_volume - other_volume
+        if candidate_volume > 0:
+            tier_volume = candidate_volume
+    if (tier_volume is None or tier_volume <= 0) and in_tier_grade > 0:
+        tier_volume = in_tier_grade
+        basis = "grade"
     cap: float | None = None
     cap_raw = payload.get("lastTierCap")
     if cap_raw not in (None, ""):
@@ -3670,9 +3698,10 @@ def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
         "pool": pool,
         "eligibleTradingVolume": eligible_volume,
         "otherTiersVolume": round(other_volume, 2),
-        "tierVolume": round(tier_volume, 2) if tier_volume > 0 else None,
-        "per10k": round(pool / (tier_volume / 10000.0), 8) if tier_volume > 0 else None,
+        "tierVolume": round(tier_volume, 2) if tier_volume and tier_volume > 0 else None,
+        "per10k": round(pool / (tier_volume / 10000.0), 8) if tier_volume and tier_volume > 0 else None,
         "cap": cap,
+        "basis": basis if tier_volume and tier_volume > 0 else None,
     }
     return result
 
