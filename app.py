@@ -1786,8 +1786,9 @@ def daily_scrape_loop() -> None:
 
             elif state["phase"] == "waiting":
                 jobs_map = {j["id"]: j for j in load_jobs()}
+                state["pending"] = [j for j in state["pending"] if j["id"] in jobs_map]
                 running = [j for j in state["pending"]
-                           if jobs_map.get(j["id"], {}).get("status") in ("queued", "running")]
+                           if jobs_map[j["id"]].get("status") in ("queued", "running")]
                 if not running:
                     missing = [j for j in state["pending"]
                                if not _has_today_data(jobs_map.get(j["id"], {}))]
@@ -1808,14 +1809,21 @@ def daily_scrape_loop() -> None:
 
             elif state["phase"] == "retry":
                 if state["retry_time"] and now_bj >= state["retry_time"]:
-                    print(f"[daily_scrape] {today_key} retry #{state['retry_count']} — {len(state['pending'])} jobs")
-                    for j in state["pending"]:
-                        try:
-                            create_job(j["payload"], source="schedule:daily")
-                        except ScriptError as e:
-                            print(f"  skip {j.get('id','')}: {e}")
-                    state["phase"] = "waiting"
-                    state["retry_time"] = None
+                    alive_ids = {j["id"] for j in load_jobs()}
+                    state["pending"] = [j for j in state["pending"] if j["id"] in alive_ids]
+                    if not state["pending"]:
+                        print(f"[daily_scrape] {today_key}: pending jobs deleted, stopping retries")
+                        state["phase"] = "done"
+                        state["retry_time"] = None
+                    else:
+                        print(f"[daily_scrape] {today_key} retry #{state['retry_count']} — {len(state['pending'])} jobs")
+                        for j in state["pending"]:
+                            try:
+                                create_job(j["payload"], source="schedule:daily")
+                            except ScriptError as e:
+                                print(f"  skip {j.get('id','')}: {e}")
+                        state["phase"] = "waiting"
+                        state["retry_time"] = None
         except Exception as exc:
             print(f"[daily_scrape] error: {exc}", file=sys.stderr)
         time.sleep(30)
