@@ -1545,12 +1545,10 @@ def _extract_activity_tags(title: str) -> dict[str, list[str]]:
     return result
 
 
-def sync_activities() -> dict[str, Any]:
-    """Fetch latest activities from Binance API, compare with stored DB,
-    detect new/removed items, keep only latest 50, and save."""
+def _fetch_activity_catalog(catalog_id: int) -> list[dict[str, Any]]:
     import json as _j
     import urllib.request
-    url = ACTIVITIES_BINANCE_URL + "?type=1&pageNo=1&pageSize=50&catalogId=93"
+    url = ACTIVITIES_BINANCE_URL + f"?type=1&pageNo=1&pageSize=50&catalogId={catalog_id}"
     req = urllib.request.Request(url)
     req.add_header("accept-language", "zh-CN")
     req.add_header("lang", "zh-CN")
@@ -1561,7 +1559,30 @@ def sync_activities() -> dict[str, Any]:
         raw = resp.read().decode("utf-8")
     data = _j.loads(raw)
     cats = data.get("data", {}).get("catalogs") or [{}]
-    fresh = cats[0].get("articles", [])
+    return list(cats[0].get("articles", []) or [])
+
+
+def sync_activities() -> dict[str, Any]:
+    """Fetch latest activities from Binance API, compare with stored DB,
+    detect new/removed items, keep only latest 50, and save.
+
+    Catalog 93 (活动公告) is taken in full. Catalog 49 (综合公告) is merged
+    only for articles matching activity type keywords, because Binance
+    occasionally posts competitions (e.g. COAI Alpha) there only.
+    """
+    fresh = _fetch_activity_catalog(93)
+    seen_ids = {a.get("id") for a in fresh}
+    try:
+        extra_articles = _fetch_activity_catalog(49)
+    except Exception as exc:
+        print(f"activities catalog 49 fetch error: {exc}", file=sys.stderr)
+        extra_articles = []
+    for a in extra_articles:
+        if a.get("id") in seen_ids:
+            continue
+        types = _extract_activity_tags(a.get("title", "")).get("types") or []
+        if types and types != ["其他"]:
+            fresh.append(a)
     fresh.sort(key=lambda a: a.get("releaseDate", 0), reverse=True)
     fresh = fresh[:50]
     for a in fresh:
@@ -1598,7 +1619,7 @@ def sync_activities() -> dict[str, Any]:
 
     try:
         ACTIVITIES_CACHE_FILE.write_text(
-            _j.dumps({"fetchedAt": now_ts, "data": {"articles": fresh, "total": len(fresh)}}, ensure_ascii=False), encoding="utf-8"
+            json.dumps({"fetchedAt": now_ts, "data": {"articles": fresh, "total": len(fresh)}}, ensure_ascii=False), encoding="utf-8"
         )
     except OSError:
         pass
