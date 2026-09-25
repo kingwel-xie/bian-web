@@ -639,12 +639,10 @@ async function loadTeams() {
     for (const t of teamsArr) {
       const name = t.name || "";
       if (!name) continue;
-      const m = _teamsMembers[name] = { nicks: new Set(), uids: new Set() };
+      const m = _teamsMembers[name] = { nicks: new Set() };
       for (const mem of (t.members || [])) {
         const nick = (mem.nickname || "").trim();
         if (nick) m.nicks.add(nick.toLowerCase());
-        const uid = (mem.userId || "").trim();
-        if (uid) m.uids.add(uid);
       }
     }
   } catch (e) {
@@ -653,12 +651,11 @@ async function loadTeams() {
   return _teamsCache;
 }
 
-function teamOfUser(nickname, userId) {
+function teamOfUser(nickname) {
   const nick = (nickname || "").trim().toLowerCase();
-  const uid = (userId || "").trim();
+  if (!nick) return "";
   for (const name in _teamsMembers) {
-    const m = _teamsMembers[name];
-    if ((uid && m.uids.has(uid)) || (nick && m.nicks.has(nick))) return name;
+    if (_teamsMembers[name].nicks.has(nick)) return name;
   }
   return "";
 }
@@ -771,7 +768,7 @@ function renderTotalCandidates() {
   const eligible = data.eligibleUsers || 0;
   const totalVolume = data.totalVolume || 0;
   for (const u of users) {
-    u._team = teamOfUser(u.nickname, u.userId);
+    u._team = teamOfUser(u.nickname);
   }
   const filtered = !!_modalTeam;
   let html = '<div class="total-summary">总奖池: <span>' + Number(totalReward).toLocaleString() + " " + escapeHtml(token) + '</span> | 有效用户数: <span>' + eligible + '</span> | 总交易量: <span>' + Number(totalVolume).toLocaleString() + "</span></div>";
