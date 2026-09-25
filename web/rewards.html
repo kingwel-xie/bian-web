@@ -55,6 +55,7 @@
   .modal-close-btn:hover { color:#333; }
   .modal-body { padding:12px 14px; overflow-y:auto; flex:1; }
   .modal-job-select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; background:#fffdf8; color:var(--ink); margin-bottom:10px; box-sizing:border-box; }
+  #modalCostInput:disabled { opacity:.45; background:#efe9dd; cursor:not-allowed; }
   .tier-card { border:1px solid var(--line); border-radius:6px; background:var(--panel); margin-bottom:4px; display:flex; align-items:center; gap:8px; padding:8px 12px; }
   .tier-label { flex:1; font-size:13px; color:var(--ink); }
   .tier-label .sub { color:var(--muted); font-size:11px; }
@@ -688,7 +689,6 @@ async function loadEndedJobs() {
 
 async function openModal(jobId, jobData, presetTeam) {
   addModal.style.display = "flex";
-  modalTierArea.innerHTML = "";
   _modalJob = null;
   _modalTeam = "";
   _modalTiers = {};
@@ -698,6 +698,7 @@ async function openModal(jobId, jobData, presetTeam) {
   modalConfirmBtn.disabled = false;
   modalMsg.textContent = "";
   modalCostInput.style.display = "";
+  renderModalTiers();
   await loadTeams();
   if (jobId && jobData) {
     modalTitleEl.textContent = "修改奖励";
@@ -731,6 +732,7 @@ function closeModal() {
 }
 
 async function loadTotalCandidates(jobId) {
+  modalCostInput.disabled = !(_modalJob && _modalTeam);
   try {
     const resp = await fetch("/api/rewards/total-candidates?jobId=" + encodeURIComponent(jobId));
     if (!resp.ok) throw new Error("加载失败");
@@ -834,8 +836,13 @@ function updateTotalFooter() {
 }
 
 function renderModalTiers() {
+  modalCostInput.disabled = !(_modalJob && _modalTeam);
   if (!_modalJob) {
     modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">先选择一个已结束任务</div>';
+    return;
+  }
+  if (!_modalTeam) {
+    modalTierArea.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">请先选择团队，再录入奖励数据</div>';
     return;
   }
   if (_modalJob.rewardMode === "total") {
