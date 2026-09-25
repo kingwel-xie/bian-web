@@ -35,6 +35,8 @@
   .act-error { color: #b34a4a; text-align: center; padding: 24px; font-size: 13px; }
   .act-loading { color: var(--muted); text-align: center; padding: 24px; font-size: 13px; }
   .act-count { font-size: 12px; color: var(--muted); }
+  .act-more { text-align: center; color: var(--muted); font-size: 12px; padding: 14px 0 24px; cursor: pointer; user-select: none; }
+  .act-more:hover { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -49,6 +51,7 @@
   <div class="act-filters" id="filters"></div>
   <div class="act-count" id="count">加载中...</div>
   <div id="grid" class="act-grid"></div>
+  <div id="lazyMore" class="act-more" hidden>↓ 加载更多</div>
 </main>
 
 <script>
@@ -64,6 +67,10 @@
   let pollTimer = null;
   let excludedTypes = new Set();
   let allTypes = [];
+  const LAZY_SIZE = 60;
+  let _filtered = [];
+  let _shown = 0;
+  const lazyMore = document.getElementById("lazyMore");
 
   function fmtDate(ts) {
     const d = new Date(ts);
@@ -99,21 +106,8 @@
     });
   }
 
-  function render() {
-    const q = searchInput.value.trim().toLowerCase();
-    let filtered = articles;
-    if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q));
-    if (excludedTypes.size) filtered = filtered.filter(a => {
-      if (!a.tags || Array.isArray(a.tags) || !a.tags.types) return true;
-      return !a.tags.types.some(t => excludedTypes.has(t));
-    });
-    renderFilters();
-    if (!filtered.length) {
-      grid.innerHTML = `<div class="act-empty">${q || excludedTypes.size ? "没有匹配的活动。" : "暂无活动。"}</div>`;
-      count.textContent = `共 ${articles.length} 条${q || excludedTypes.size ? `，筛选 ${filtered.length} 条` : ""}`;
-      return;
-    }
-    grid.innerHTML = filtered.map(a => `
+  function cardHtml(a) {
+    return `
       <div class="act-card${newIds.has(a.id) ? " act-new" : ""}">
         <div class="act-title">${escapeHtml(a.title)}</div>
         ${a.tags && !Array.isArray(a.tags) ? `<div class="act-tags">${[...(a.tags.types || []).map(t => { const h=tagHue(t); return `<span class="tag type" style="--tag-bg:${tagBg(h)};--tag-fg:${tagFg(h)};--tag-border:${tagBorder(h)}">${escapeHtml(t)}</span>`; }), ...(a.tags.tokens || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`)].join("")}</div>` : ""}
@@ -124,10 +118,61 @@
             <a class="act-link" href="https://${DOMAIN.MIRROR}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">🇨🇳 国内</a>
           </div>
         </div>
-      </div>
-    `).join("");
-    count.textContent = `共 ${articles.length} 条${q || excludedTypes.size ? `，筛选 ${filtered.length} 条` : ""}`;
+      </div>`;
   }
+
+  function updateCount() {
+    const q = searchInput.value.trim().toLowerCase();
+    const total = _filtered.length;
+    const shown = Math.min(_shown, total);
+    count.textContent = `共 ${articles.length} 条${q || excludedTypes.size ? `，筛选 ${total} 条` : ""}${total > shown ? ` · 已显示 ${shown}` : ""}`;
+  }
+
+  function renderMore() {
+    if (_shown >= _filtered.length) return;
+    const next = _filtered.slice(_shown, _shown + LAZY_SIZE);
+    grid.insertAdjacentHTML("beforeend", next.map(cardHtml).join(""));
+    _shown = Math.min(_shown + LAZY_SIZE, _filtered.length);
+    updateCount();
+  }
+
+  function maybeFill() {
+    let guard = 0;
+    while (_shown < _filtered.length && guard++ < 20) {
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (lazyMore.hidden || lazyMore.getBoundingClientRect().top - vh > 600) break;
+      renderMore();
+    }
+    lazyMore.hidden = _shown >= _filtered.length;
+  }
+
+  function render(keepShown) {
+    if (keepShown !== true) _shown = LAZY_SIZE;
+    const q = searchInput.value.trim().toLowerCase();
+    let filtered = articles;
+    if (q) filtered = filtered.filter(a => a.title.toLowerCase().includes(q));
+    if (excludedTypes.size) filtered = filtered.filter(a => {
+      if (!a.tags || Array.isArray(a.tags) || !a.tags.types) return true;
+      return !a.tags.types.some(t => excludedTypes.has(t));
+    });
+    _filtered = filtered;
+    renderFilters();
+    if (!filtered.length) {
+      grid.innerHTML = `<div class="act-empty">${q || excludedTypes.size ? "没有匹配的活动。" : "暂无活动。"}</div>`;
+      lazyMore.hidden = true;
+      updateCount();
+      return;
+    }
+    grid.innerHTML = filtered.slice(0, _shown).map(cardHtml).join("");
+    updateCount();
+    maybeFill();
+  }
+
+  const _lazyIO = new IntersectionObserver(entries => {
+    if (entries.some(e => e.isIntersecting)) maybeFill();
+  }, { rootMargin: "600px" });
+  _lazyIO.observe(lazyMore);
+  lazyMore.addEventListener("click", () => { renderMore(); maybeFill(); });
 
   function tagHue(kw) {
     let h = 0;
@@ -181,7 +226,7 @@
         if (articles.length === 0) {
           await load(false);
         } else {
-          if (newIds.size) render();
+          if (newIds.size) render(true);
           allTypes = [...new Set(articles.flatMap(a => (a.tags && !Array.isArray(a.tags) && a.tags.types) ? a.tags.types : []))].sort();
           renderFilters();
         }
