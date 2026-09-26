@@ -2563,6 +2563,42 @@ def _parse_article_reward_blocks(
     return {"mode": None, "tiers": [], "unit": None, "lastTierCap": None}
 
 
+_ROUND_CELL = re.compile(
+    r"(?:第([一二三四五六七八九十\d]+)轮|Rounds?\s*(\d+))[^:：]{0,30}?(?:时间|time|period)[^:：]{0,10}[:：]\s*(.+)",
+    re.I,
+)
+
+
+def _parse_limited_rounds(tables: list[list[list[str]]]) -> list[dict[str, str]]:
+    """Extract 限时奖池 round stat windows, e.g. cells like
+    '第一轮统计时间：2026年09月24日18:00至2026年09月26日18:00（东八区时间）'."""
+    rounds: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def _fmt(g: re.Match[str]) -> str:
+        sec = f":{int(g.group(6)):02d}" if g.group(6) else ""
+        return (
+            f"{int(g.group(1)):04d}-{int(g.group(2)):02d}-{int(g.group(3)):02d} "
+            f"{int(g.group(4)):02d}:{int(g.group(5)):02d}{sec}"
+        )
+
+    for table in tables:
+        for row in table:
+            for cell in row:
+                m = _ROUND_CELL.search(cell)
+                if not m:
+                    continue
+                label = f"第{m.group(1) or m.group(2)}轮"
+                if label in seen:
+                    continue
+                times = list(_ARTICLE_TIME.finditer(m.group(3)))
+                if len(times) < 2:
+                    continue
+                seen.add(label)
+                rounds.append({"round": label, "start": _fmt(times[0]), "end": _fmt(times[1])})
+    return rounds
+
+
 def _parse_article(code: str) -> dict[str, Any]:
     payload = _fetch_article_detail(code)
     body = payload.get("body") or "{}"
@@ -2597,6 +2633,10 @@ def _parse_article(code: str) -> dict[str, Any]:
         "rewardTiers": reward["tiers"],
         "lastTierCap": reward["lastTierCap"],
     }
+    if reward.get("mode") in ("rank", "rank_last_volume"):
+        limited_rounds = _parse_limited_rounds(tables)
+        if limited_rounds:
+            result["limitedRounds"] = limited_rounds
     if reward.get("mode") == "total":
         result["totalReward"] = reward.get("totalReward")
         result["eligibleUsers"] = reward.get("eligibleUsers")
@@ -2703,6 +2743,7 @@ def _job_summary(job: dict) -> dict:
             "lastTierCap": payload.get("lastTierCap"),
             "activityEnd": payload.get("activityEnd"),
             "activityStart": payload.get("activityStart"),
+            "limitedRounds": payload.get("limitedRounds"),
             "top": payload.get("top"),
         },
         "snapshotCount": len(job.get("snapshots") or []),
@@ -3431,6 +3472,21 @@ def api_update_job_params(job_id: str) -> Response:
                         p.pop("lastTierCap", None)
                 else:
                     p.pop("lastTierCap", None)
+                if "limitedRounds" in body:
+                    lr_raw = body.get("limitedRounds")
+                    lr_clean: list[dict[str, str]] = []
+                    if isinstance(lr_raw, list):
+                        for x in lr_raw:
+                            if isinstance(x, dict) and x.get("round") and x.get("start") and x.get("end"):
+                                lr_clean.append({
+                                    "round": str(x.get("round"))[:16],
+                                    "start": str(x.get("start"))[:20],
+                                    "end": str(x.get("end"))[:20],
+                                })
+                    if lr_clean:
+                        p["limitedRounds"] = lr_clean
+                    else:
+                        p.pop("limitedRounds", None)
                 total_reward = body.get("totalReward")
                 if total_reward:
                     p["totalReward"] = str(total_reward)
@@ -3805,6 +3861,7 @@ def _build_preview_base(
     rid = str(payload.get("resourceId") or "").strip()
     preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
     preview["activityStart"] = payload.get("activityStart")
+    preview["limitedRounds"] = payload.get("limitedRounds")
     preview["activityEnd"] = payload.get("activityEnd")
     preview["snapshots"] = [
         {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
@@ -3927,6 +3984,7 @@ def api_job_preview(job_id: str) -> Response:
                 "url": payload.get("url", ""),
                 "activityStart": payload.get("activityStart"),
                 "activityEnd": payload.get("activityEnd"),
+                "limitedRounds": payload.get("limitedRounds"),
                 "rewardToken": payload.get("rewardToken", ""),
                 "rewardAmount": payload.get("rewardAmount", ""),
                 "rewardMode": payload.get("rewardMode"),
@@ -3982,6 +4040,7 @@ def api_job_preview(job_id: str) -> Response:
                     "rewardAmount": payload.get("rewardAmount", ""),
                     "activityStart": payload.get("activityStart"),
                     "activityEnd": payload.get("activityEnd"),
+                    "limitedRounds": payload.get("limitedRounds"),
                 },
                 sort_keys=True,
                 default=str,
@@ -3994,6 +4053,7 @@ def api_job_preview(job_id: str) -> Response:
             )
             _cache_put(_preview_cache, cache_key, base, _PREVIEW_CACHE_MAX)
         preview = dict(base)
+        preview["limitedRounds"] = payload.get("limitedRounds")
 
         team_map, team_sizes, maddog_map, maddog_team_idx = _build_team_map(
             preview.get("rows") or [],
