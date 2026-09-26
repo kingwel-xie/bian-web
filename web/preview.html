@@ -136,6 +136,7 @@
         <h2 style="font-size:18px;margin:0;display:inline" id="title">排行榜预览</h2>
         <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:8px">← 返回主页</a>
         <span id="actTime" style="margin-left:12px;font-size:12px;color:var(--muted)"></span>
+        <span id="limitedRounds" style="margin-left:12px;font-size:12px;color:var(--accent-2)"></span>
         <p class="preview-meta" id="meta">加载中...</p>
       </div>
       <div class="downloads" id="downloadLinks">
@@ -635,6 +636,7 @@ function renderRewardPanel(data, rows, forceShow) {
       document.getElementById("title").innerHTML = `${escapeHtml(ndHeading)}${ndUrl ? ` <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
       const ndActS = preview.activityStart, ndActE = preview.activityEnd;
       document.getElementById("actTime").textContent = ndActS || ndActE ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "";
+      document.getElementById("limitedRounds").textContent = (preview.limitedRounds || []).length ? "⏳ 限时池：" + (preview.limitedRounds || []).map(r => `${r.round} ${(r.start || "").slice(5)}~${(r.end || "").slice(5)}`).join(" / ") : "";
       const ndMsg = preview.status && preview.status !== "completed" ? "任务进行中，暂无快照数据。" : "没有快照数据。请在主页重新抓取，或上传快照文件。";
       document.getElementById("meta").innerHTML = `<span style="font-size:14px">${ndMsg}</span>`;
       document.getElementById("downloadLinks").innerHTML = preview.resourceId
@@ -693,6 +695,7 @@ function renderRewardPanel(data, rows, forceShow) {
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
     actTimeEl.textContent = actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    document.getElementById("limitedRounds").textContent = (preview.limitedRounds || []).length ? "⏳ 限时池：" + (preview.limitedRounds || []).map(r => `${r.round} ${(r.start || "").slice(5)}~${(r.end || "").slice(5)}`).join(" / ") : "";
     let endDt = null;
     if (actE) {
       endDt = new Date(actE.replace(" ", "T") + "+08:00");

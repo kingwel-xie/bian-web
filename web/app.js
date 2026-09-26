@@ -252,10 +252,24 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
 }
 
 let _editJobId = null;
+let _editLimitedRounds = null;
+
+function renderLimitedRoundsView() {
+  const el = document.getElementById("limitedRoundsView");
+  if (!el) return;
+  const lr = Array.isArray(_editLimitedRounds) ? _editLimitedRounds : [];
+  if (!lr.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.innerHTML = "⏳ 限时池（公告自动提取，暂不可编辑）：" + lr.map(r =>
+    `<b>${escapeHtml(r.round || "")}</b> ${escapeHtml(r.start || "—")} ~ ${escapeHtml(r.end || "—")}`
+  ).join("　/　");
+  el.style.display = "";
+}
 
 function openEditModal(job) {
   _editJobId = job.id;
   const p = job.payload || {};
+  _editLimitedRounds = Array.isArray(p.limitedRounds) && p.limitedRounds.length ? p.limitedRounds : null;
+  renderLimitedRoundsView();
   document.getElementById("editMarket").value = (p.market || "um").toLowerCase();
   const symVal = Array.isArray(p.symbol) ? p.symbol[0] : (p.symbol || "");
   document.getElementById("editToken").value = (p.token || symVal.replace(/USDT$/i, "") || "").toUpperCase();
@@ -352,6 +366,7 @@ document.getElementById("addTierBtn").addEventListener("click", () => addTierRow
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
+  _editLimitedRounds = null;
 });
 
 // blur handlers to format comma-separated number inputs
@@ -418,6 +433,9 @@ function articleExtractSummary(data) {
   }
   if (data.rewardToken) parts.push(`币种 ${data.rewardToken}`);
   if (data.start && data.end) parts.push(`${data.start} ~ ${data.end}`);
+  if (data.limitedRounds && data.limitedRounds.length) {
+    parts.push("限时池 " + data.limitedRounds.map(r => `${r.round} ${(r.start || "").slice(5)}~${(r.end || "").slice(5)}`).join(" / "));
+  }
   if (data.market) parts.push(data.market.toUpperCase());
   if (data.pairs && data.pairs.length) parts.push(`${data.pairs.length} 交易对`);
   return parts.join(" · ");
@@ -433,6 +451,12 @@ function fillFromArticle(data) {
     document.getElementById("editActivityStart").value = data.start.replace(" ", "T");
     document.getElementById("editActivityEnd").value = data.end.replace(" ", "T");
   }
+  if (data.rewardMode === "rank" || data.rewardMode === "rank_last_volume") {
+    _editLimitedRounds = Array.isArray(data.limitedRounds) && data.limitedRounds.length ? data.limitedRounds : null;
+  } else if (data.rewardMode === "total") {
+    _editLimitedRounds = null;
+  }
+  renderLimitedRoundsView();
   setModalRewardFromArticle(data);
 }
 
@@ -586,9 +610,11 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
       const capVal = (document.getElementById("editLastTierCap").value || "").replace(/,/g, "").trim();
       if (capVal !== "") body.lastTierCap = capVal;
     }
+    body.limitedRounds = _editLimitedRounds || [];
   } else {
     body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
     body.eligibleUsers = parseInt((document.getElementById("editEligibleUsers").value || "").replace(/,/g, ""), 10) || undefined;
+    body.limitedRounds = [];
   }
   try {
     await api(`/api/jobs/${jobId}/params`, {
@@ -657,6 +683,8 @@ function renderJobCard(job, now) {
   const expiredClass = isExpired ? " expired" : "";
   const snapshotTs = job.latestSnapshot;
   const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
+  const lrArr = Array.isArray(payload.limitedRounds) ? payload.limitedRounds : [];
+  const lrText = lrArr.length ? `限时池：${lrArr.map(r => `${r.round} ${String(r.start || "").slice(5)}~${String(r.end || "").slice(5)}`).join(" / ")}` : "";
   let countdownText = "", countdownCls = "job-countdown";
   if (endDate) {
     const diff = endDate - now;
@@ -679,6 +707,7 @@ function renderJobCard(job, now) {
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
+          ${lrText ? `<div class="job-limited-rounds">⏳ ${escapeHtml(lrText)}</div>` : ""}
           <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
           <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}

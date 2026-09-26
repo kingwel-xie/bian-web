@@ -371,6 +371,26 @@ button:disabled {
   font-weight: 400;
 }
 
+.job-limited-rounds {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.modal-limited-rounds {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.modal-limited-rounds b { color: var(--accent-2); font-weight: 700; }
+
 .job-countdown {
   margin-left: 8px;
   font-size: 12px;
