@@ -1085,10 +1085,10 @@ function renderRewardPanel(data, rows, forceShow) {
     let deltaSort = false;
     let volumeSort = false;
     let teamOfUser = (preview.teamMap || {});
-    const saveMode = (preview.market || "").toUpperCase() === "SAVING";
+    const MASKED_NICK_RE = /^.\*{3,}$/u;
     function teamOf(r) {
-      if (saveMode && (r.nickname || r.userId)) {
-        return teamOfUser[((r.userId || "") + "|" + (r.nickname || ""))] || "";
+      if (MASKED_NICK_RE.test((r.nickname || "").trim())) {
+        return teamOfUser[((r.userId || "").trim() + "|" + (r.nickname || ""))] || "";
       }
       return teamOfUser[r.nickname] || teamOfUser[r.userId] || "";
     }
@@ -2086,7 +2086,7 @@ function renderRewardPanel(data, rows, forceShow) {
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const teamName = pickerTeamSelect.options[pickerTeamSelect.selectedIndex].text;
-        if (saveMode) teamOfUser[( _pickerUid || "") + "|" + (_pickerNick || "")] = teamName;
+        if (MASKED_NICK_RE.test((_pickerNick || "").trim())) teamOfUser[((_pickerUid || "").trim()) + "|" + (_pickerNick || "")] = teamName;
         else teamOfUser[_pickerNick] = teamName;
         hidePicker();
         renderRows();

@@ -3629,15 +3629,16 @@ def api_kill_job(job_id: str) -> Response:
     return jsonify({"success": True})
 
 
-def _build_team_map(
-    rows: list, uid_first: bool = False
-) -> tuple[dict[str, str], dict[str, int], dict[str, int], dict[str, int]]:
+_MASKED_NICK_RE = re.compile(r"^.\*{3,}$")
+
+
+def _build_team_map(rows: list) -> tuple[dict[str, str], dict[str, int], dict[str, int], dict[str, int]]:
     """Map preview rows to teams.
 
-    uid_first (saving tasks, where nicknames are masked to 首字+*****):
-      match by member userId (masked string) first, then fall back to a
-      masked-nickname comparison (member nickname -> 首字+*****). Ambiguous
-      masked keys resolve to the first team in teams-db order.
+    Per-row rule: a masked nickname (single leading char + asterisks, e.g.
+    大*****) is matched by userId AND that member's masked nickname (AND),
+    keyed as "uid|nick" because masked nicknames collide across users.
+    Unmasked rows match by full nickname, keyed by nickname.
     """
     team_db = load_teams_db()
     team_lookup: dict[str, str] = {}
@@ -3652,11 +3653,10 @@ def _build_team_map(
             key = (m.get("nickname") or "").strip()
             if key and key not in team_lookup:
                 team_lookup[key] = team_name
-            if uid_first:
-                uid = str(m.get("userId") or "").strip()
+            uid = str(m.get("userId") or "").strip()
+            if uid:
                 masked_nick = key[0] + "*****" if key else ""
-                if uid:
-                    members_by_uid.setdefault(uid, []).append((team_name, masked_nick))
+                members_by_uid.setdefault(uid, []).append((team_name, masked_nick))
         if not team.get("madDog"):
             continue
         for m in team.get("members") or []:
@@ -3670,8 +3670,10 @@ def _build_team_map(
     for row in rows:
         nick = row.get("nickname") or ""
         nv = nickname_value({"nickName": nick})
+        masked = bool(_MASKED_NICK_RE.match(nv))
         team_name = None
-        if uid_first:
+        uid = ""
+        if masked:
             uid = str(row.get("userId") or "").strip()
             for cand_team, cand_masked in members_by_uid.get(uid, []):
                 if cand_masked and nv and cand_masked == nv:
@@ -3680,7 +3682,7 @@ def _build_team_map(
         else:
             team_name = team_lookup.get(nv)
         if team_name:
-            team_key = f"{uid}|{nick}" if uid_first else nick
+            team_key = f"{uid}|{nick}" if masked else nick
             team_map[team_key] = team_name
         if nv in maddog_lookup:
             maddog_map[nick] = maddog_lookup[nv]
@@ -4065,7 +4067,6 @@ def api_job_preview(job_id: str) -> Response:
 
         team_map, team_sizes, maddog_map, maddog_team_idx = _build_team_map(
             preview.get("rows") or [],
-            uid_first=(payload.get("market") == "saving"),
         )
         preview["teamMap"] = team_map
         preview["teamSizes"] = team_sizes
