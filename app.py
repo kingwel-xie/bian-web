@@ -31,6 +31,7 @@ STATE_DIR = DATA_ROOT / ".workflow"
 JOBS_FILE = STATE_DIR / "jobs.json"
 SCHEDULES_FILE = STATE_DIR / "schedules.json"
 DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
+DISCOVERY_CACHE_MAX = 10
 ACTIVITIES_CACHE_FILE = STATE_DIR / "activities_cache.json"
 ACTIVITIES_CACHE_TTL = 600
 ACTIVITIES_DB_FILE = STATE_DIR / "activities_db.json"
@@ -253,6 +254,13 @@ def load_discovery_cache() -> dict[str, Any]:
 
 
 def save_discovery_cache(cache: dict[str, Any]) -> None:
+    if len(cache) > DISCOVERY_CACHE_MAX:
+        ordered = sorted(
+            cache.items(),
+            key=lambda kv: (kv[1] or {}).get("cachedAt") or "",
+            reverse=True,
+        )
+        cache = dict(ordered[:DISCOVERY_CACHE_MAX])
     write_json(DISCOVERY_CACHE_FILE, cache)
 
 
@@ -1985,7 +1993,7 @@ def api_discover_cache() -> Response:
             "cachedAt": entry.get("cachedAt"),
         })
     entries.sort(key=lambda e: e.get("cachedAt") or "", reverse=True)
-    return jsonify({"entries": entries})
+    return jsonify({"entries": entries[:DISCOVERY_CACHE_MAX]})
 
 
 @app.delete("/api/discover/cache/<path:key>")
