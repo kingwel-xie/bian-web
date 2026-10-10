@@ -3798,6 +3798,12 @@ def api_create_sprint_jobs() -> Response:
                     t_list = tiers_by_round.get(pj.get("sprintIndex")) or []
                     if t_list and not pj.get("rewardTiers"):
                         pj["rewardTiers"] = t_list
+                    # create_job's normalize mangles multi-pair symbols (appends USDT
+                    # to e.g. BABYUSDC); keep child in sync with parent's raw values.
+                    if snapshot["symbol"] and pj.get("symbol") != snapshot["symbol"]:
+                        pj["symbol"] = snapshot["symbol"]
+                    if snapshot["token"] and pj.get("token") != snapshot["token"]:
+                        pj["token"] = snapshot["token"]
                     j["updatedAt"] = datetime.now(timezone.utc).isoformat()
             save_jobs(jobs)
     return jsonify({"jobs": created, "errors": errors})

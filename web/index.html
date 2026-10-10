@@ -69,7 +69,7 @@
         </div>
         <div class="modal-form">
           <div id="tabBasic" class="tab-content">
-            <div class="form-row">
+            <div class="form-row" id="articlePickRow">
               <label class="form-grow">最新活动公告
                 <div class="article-picker-line">
                   <select id="articlePick" class="article-pick-select"><option value="">选择公告…</option></select>
@@ -111,10 +111,10 @@
             <div id="sprintSection">
               <div class="form-row">
                 <label>第一轮 起始时间
-                  <input id="editSprint1Start" type="datetime-local" />
+                  <input id="editSprint1Start" type="datetime-local" disabled />
                 </label>
                 <label>第一轮 结束时间
-                  <input id="editSprint1End" type="datetime-local" />
+                  <input id="editSprint1End" type="datetime-local" disabled />
                 </label>
                 <label>第一轮 资源ID
                   <input id="editSprint1ResourceId" placeholder="缺省 任务ID+2" />
@@ -122,10 +122,10 @@
               </div>
               <div class="form-row">
                 <label>第二轮 起始时间
-                  <input id="editSprint2Start" type="datetime-local" />
+                  <input id="editSprint2Start" type="datetime-local" disabled />
                 </label>
                 <label>第二轮 结束时间
-                  <input id="editSprint2End" type="datetime-local" />
+                  <input id="editSprint2End" type="datetime-local" disabled />
                 </label>
                 <label>第二轮 资源ID
                   <input id="editSprint2ResourceId" placeholder="缺省 任务ID+4" />

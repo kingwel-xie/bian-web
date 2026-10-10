@@ -255,6 +255,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
 let _editJobId = null;
 let _editSprintTimes = null;
 let _editSprintTiers = null;
+let _editIsSprintChild = false;
 let _editResourceId = "";
 
 function _sprintFrom(obj) {
@@ -308,9 +309,24 @@ function renderSprintTiersPreview() {
 function openEditModal(job) {
   _editJobId = job.id;
   const p = job.payload || {};
-  _editSprintTimes = _sprintFrom(p);
-  _editSprintTiers = _sprintTiersFrom(p);
-  renderSprintTiersPreview();
+  _editIsSprintChild = !!(p.sprintIndex || p.parentJobId);
+  const pickRow = document.getElementById("articlePickRow");
+  const extractStatus = document.getElementById("articleExtractStatus");
+  const sprintBox = document.getElementById("sprintSection");
+  if (_editIsSprintChild) {
+    _editSprintTimes = null;
+    _editSprintTiers = null;
+    if (pickRow) pickRow.style.display = "none";
+    if (extractStatus) { extractStatus.textContent = ""; extractStatus.style.display = "none"; }
+    if (sprintBox) sprintBox.style.display = "none";
+  } else {
+    if (pickRow) pickRow.style.display = "";
+    if (extractStatus) extractStatus.style.display = "";
+    if (sprintBox) sprintBox.style.display = "";
+    _editSprintTimes = _sprintFrom(p);
+    _editSprintTiers = _sprintTiersFrom(p);
+    renderSprintTiersPreview();
+  }
   _editResourceId = String(p.resourceId || "");
   const sr1 = document.getElementById("editSprint1ResourceId");
   const sr2 = document.getElementById("editSprint2ResourceId");
@@ -423,10 +439,12 @@ document.getElementById("editCancelBtn").addEventListener("click", () => {
   _editJobId = null;
   _editSprintTimes = null;
   _editSprintTiers = null;
+  _editIsSprintChild = false;
 });
 
 document.getElementById("syncSprintsBtn").addEventListener("click", async () => {
   if (!_editJobId) { alert("任务尚未保存，请先保存后再同步轮次"); return; }
+  if (_editIsSprintChild) return;
   const btn = document.getElementById("syncSprintsBtn");
   const hint = document.getElementById("syncSprintsHint");
   btn.disabled = true;
@@ -711,14 +729,17 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
     body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
     body.eligibleUsers = parseInt((document.getElementById("editEligibleUsers").value || "").replace(/,/g, ""), 10) || undefined;
   }
-  body.sprint1Start = normSprintTime(document.getElementById("editSprint1Start")?.value || "");
-  body.sprint1End = normSprintTime(document.getElementById("editSprint1End")?.value || "");
-  body.sprint2Start = normSprintTime(document.getElementById("editSprint2Start")?.value || "");
-  body.sprint2End = normSprintTime(document.getElementById("editSprint2End")?.value || "");
-  body.sprint1ResourceId = (document.getElementById("editSprint1ResourceId")?.value || "").trim();
-  body.sprint2ResourceId = (document.getElementById("editSprint2ResourceId")?.value || "").trim();
-  body.sprint1Tiers = (_editSprintTiers && _editSprintTiers.t1) || [];
-  body.sprint2Tiers = (_editSprintTiers && _editSprintTiers.t2) || [];
+  if (!_editIsSprintChild) {
+    const st = _editSprintTimes || {};
+    body.sprint1Start = st.s1s || "";
+    body.sprint1End = st.s1e || "";
+    body.sprint2Start = st.s2s || "";
+    body.sprint2End = st.s2e || "";
+    body.sprint1ResourceId = (document.getElementById("editSprint1ResourceId")?.value || "").trim();
+    body.sprint2ResourceId = (document.getElementById("editSprint2ResourceId")?.value || "").trim();
+    body.sprint1Tiers = (_editSprintTiers && _editSprintTiers.t1) || [];
+    body.sprint2Tiers = (_editSprintTiers && _editSprintTiers.t2) || [];
+  }
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
