@@ -229,7 +229,7 @@ function renderDiscoveryCards(result, inferred) {
   });
 }
 
-async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart, top, queue = true) {
+async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart, top, queue = true, reloadPage = 1) {
   try {
     await api("/api/scrape/jobs", {
       method: "POST",
@@ -246,7 +246,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
         queue,
       }),
     });
-    await loadJobs(1);
+    await loadJobs(reloadPage);
   } catch (error) {
     alert(`抓取失败：${error.message}`);
   }
@@ -885,20 +885,27 @@ function renderJobs(jobs) {
     let html = renderJobCard(job, now);
     const kids = Array.isArray(job.sprintChildren) ? job.sprintChildren : [];
     if (kids.length) {
-      html += `<div class="sprint-group">
-        <button class="sprint-toggle" type="button"><span class="st-arrow">▸</span>轮次任务 (${kids.length})</button>
-        <div class="sprint-kids" style="display:none">${kids.map((k) => renderJobCard(k, now)).join("")}</div>
+      if (!state._sprintOpen) state._sprintOpen = new Set();
+      const anyActive = kids.some((k) => k.status === "running" || k.status === "queued");
+      const open = state._sprintOpen.has(job.id) || anyActive;
+      html += `<div class="sprint-group" data-parent="${escapeHtml(job.id)}">
+        <button class="sprint-toggle" type="button"><span class="st-arrow">${open ? "▾" : "▸"}</span>轮次任务 (${kids.length})</button>
+        <div class="sprint-kids" style="${open ? "" : "display:none"}">${kids.map((k) => renderJobCard(k, now)).join("")}</div>
       </div>`;
     }
     return html;
   }).join("") || `<div class="empty box">没有任务。</div>`;
   jl.querySelectorAll(".sprint-toggle").forEach((btn) => {
     btn.addEventListener("click", function () {
+      if (!state._sprintOpen) state._sprintOpen = new Set();
+      const group = this.closest(".sprint-group");
+      const pid = group ? group.dataset.parent : "";
       const kids = this.parentElement.querySelector(".sprint-kids");
       const arrow = this.querySelector(".st-arrow");
       const open = kids.style.display !== "none";
       kids.style.display = open ? "none" : "";
       if (arrow) arrow.textContent = open ? "▸" : "▾";
+      if (pid) { if (open) state._sprintOpen.delete(pid); else state._sprintOpen.add(pid); }
     });
   });
 
@@ -1131,7 +1138,7 @@ $("#jobList").addEventListener("click", (e) => {
       const job = findJobById(id);
       if (!job) return;
       const p = job.payload || {};
-      startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top);
+      startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top, true, state.page);
     } else if (btn.dataset.kill) {
       if (!confirm("确认终止此任务？")) return;
       api(`/api/jobs/${id}/kill`, { method: "POST" }).catch(err => alert(`终止失败：${err.message}`));
