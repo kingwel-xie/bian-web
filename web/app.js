@@ -740,7 +740,6 @@ function renderJobCard(job, now) {
   const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
   const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
   const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
-  const statusZh = { completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status;
   const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
   const url = normalizeTaskUrl(payload.url);
   const officialUrl = withDomain(url, DOMAIN.OFFICIAL);
@@ -755,6 +754,11 @@ function renderJobCard(job, now) {
   const endDate = countdownEnd ? new Date(String(countdownEnd).replace(" ", "T") + "+08:00") : null;
   const isExpired = endDate && endDate <= new Date(now - 86400000);
   const expiredClass = isExpired ? " expired" : "";
+  const startSrc = sprintChild ? (payload.sprintStart || activityStart) : activityStart;
+  const startDate = startSrc ? new Date(String(startSrc).replace(" ", "T") + "+08:00") : null;
+  const notStarted = !!startDate && startDate.getTime() > now;
+  const preStartLabel = notStarted && job.status !== "running" && job.status !== "queued";
+  const statusZh = preStartLabel ? "未开始" : ({ completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status);
   const snapshotTs = job.latestSnapshot;
   const actTimeText = payload.sprintIndex && (payload.sprintStart || payload.sprintEnd)
     ? `轮次时间：${String(payload.sprintStart || "—").slice(0, 16)} ~ ${String(payload.sprintEnd || "—").slice(0, 16)}`
@@ -765,7 +769,13 @@ function renderJobCard(job, now) {
   if (payload.sprint2Start || payload.sprint2End) _segs.push(`S2 ${_sh(payload.sprint2Start)}~${_sh(payload.sprint2End)}`);
   const lrText = _segs.length ? `限时池：${_segs.join(" / ")}` : "";
   let countdownText = "", countdownCls = "job-countdown";
-  if (endDate) {
+  if (notStarted && startDate) {
+    const dt = startDate - now;
+    const d = Math.floor(dt / 864e5);
+    const h = Math.floor((dt % 864e5) / 36e5);
+    const m = Math.floor((dt % 36e5) / 6e4);
+    countdownText = d > 0 ? `距开始 ${d}d ${h}h` : h > 0 ? `距开始 ${h}h ${m}m` : `距开始 ${m}m`;
+  } else if (endDate) {
     const diff = endDate - now;
     if (diff > 0) {
       if (diff <= 864e5) countdownCls += " urgent";
@@ -789,7 +799,7 @@ function renderJobCard(job, now) {
           </strong>
           ${lrText ? `<div class="job-limited-rounds">⏳ ${escapeHtml(lrText)}</div>` : ""}
           <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
-          <small>${escapeHtml(statusZh)}${job.finishedAt ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
+          <small>${escapeHtml(statusZh)}${job.finishedAt && !preStartLabel ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
         <div class="job-actions">
