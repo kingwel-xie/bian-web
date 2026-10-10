@@ -1043,6 +1043,14 @@ async function loadJobs(page) {
   renderJobs(state._jobs);
 }
 
+function findJobById(id) {
+  for (const j of state._jobs || []) {
+    if (j.id === id) return j;
+    for (const k of (j.sprintChildren || [])) { if (k.id === id) return k; }
+  }
+  return null;
+}
+
 function bind() {
   $("#discoverBtn").addEventListener("click", discoverResourceIds);
   $("#urlInput").addEventListener("keydown", (e) => {
@@ -1091,14 +1099,15 @@ function bind() {
   });
 
   // Event delegation for job list actions
-  $("#jobList").addEventListener("click", (e) => {
+  
+$("#jobList").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-preview],[data-rerun],[data-kill],[data-rename],[data-delete]");
     if (!btn) return;
     const id = btn.dataset.preview || btn.dataset.rerun || btn.dataset.kill || btn.dataset.rename || btn.dataset.delete;
     if (btn.dataset.preview) {
       window.open(`/preview.html?job=${id}`, "_blank");
     } else if (btn.dataset.rerun) {
-      const job = state._jobs.find(j => j.id === id);
+      const job = findJobById(id);
       if (!job) return;
       const p = job.payload || {};
       startScrapeJob(p.resourceId, p.market, p.symbol, p.url, p.activityEnd, p.activityStart, p.top);
@@ -1106,7 +1115,7 @@ function bind() {
       if (!confirm("确认终止此任务？")) return;
       api(`/api/jobs/${id}/kill`, { method: "POST" }).catch(err => alert(`终止失败：${err.message}`));
     } else if (btn.dataset.rename) {
-      const job = state._jobs.find(j => j.id === id);
+      const job = findJobById(id);
       if (!job) return;
       openEditModal(job);
     } else if (btn.dataset.delete) {
