@@ -67,6 +67,7 @@
     <div style="display:flex;gap:6px">
       <button class="market-btn active" data-market="spot" id="btnSpot">SPOT</button>
       <button class="market-btn" data-market="um" id="btnUm">UM</button>
+      <button class="market-btn" data-market="sprint" id="btnSprint">SPRINT</button>
     </div>
   </div>
 
@@ -1327,6 +1328,13 @@ document.getElementById("btnUm").addEventListener("click", () => {
   document.getElementById("btnUm").classList.add("active");
   currentMarket = "um";
   loadAnalysis("um");
+});
+
+document.getElementById("btnSprint").addEventListener("click", () => {
+  document.querySelectorAll(".market-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("btnSprint").classList.add("active");
+  currentMarket = "sprint";
+  loadAnalysis("sprint");
 });
 
 loadAnalysis("spot");

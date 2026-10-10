@@ -54,7 +54,7 @@ SPOT_KLINES = "https://api.binance.com/api/v3/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
-SCRAPE_TOP_DEFAULTS: dict[str, int] = {"um": 400, "spot": 1000, "saving": 1500}
+SCRAPE_TOP_DEFAULTS: dict[str, int] = {"um": 400, "spot": 1000, "saving": 1500, "sprint": 50}
 SCRAPE_PAGE_SIZE = 100
 
 _running_processes: dict[str, subprocess.Popen] = {}
@@ -101,7 +101,7 @@ def _cache_put(
         if len(cache) >= max_entries:
             cache.clear()
         cache[key] = (time.time(), value)
-SCRAPE_MARKETS = {"um", "spot", "saving"}
+SCRAPE_MARKETS = {"um", "spot", "saving", "sprint"}
 
 app = Flask(__name__, static_folder="web", static_url_path="/_static")
 app.secret_key = os.environ.get("SECRET_KEY", "bian-web-default-secret")
@@ -188,7 +188,7 @@ def normalize_scrape_symbols(raw_symbols: Any) -> tuple[str, list[str]]:
 def normalize_scrape_market(raw_market: Any) -> str:
     market = str(raw_market or "").lower().strip()
     if market not in SCRAPE_MARKETS:
-        raise ScriptError("market 只能是 um、spot 或 saving。")
+        raise ScriptError("market 只能是 um、spot、saving 或 sprint。")
     return market
 
 
@@ -849,7 +849,7 @@ def scrape_command(payload: dict[str, Any]) -> list[str]:
     if not url:
         rid = normalized.get("resourceId", "")
         market = normalized.get("market", "um")
-        path = {"um": "futures-activity", "spot": "spot-activity", "saving": "saving-activity"}.get(market, "futures-activity")
+        path = {"um": "futures-activity", "spot": "spot-activity", "saving": "saving-activity", "sprint": "spot-activity"}.get(market, "futures-activity")
         url = f"https://www.binance.com/zh-CN/{path}/leaderboard?resourceId={rid}"
     command = [
         sys.executable,
@@ -1792,7 +1792,7 @@ def _spot_hourly_candidates(now_bj: datetime) -> list[dict[str, Any]]:
         payload = j.get("payload") or {}
         if payload.get("mode") == "workflow":
             continue
-        if (payload.get("market") or "").lower() != "spot":
+        if (payload.get("market") or "").lower() not in ("spot", "sprint"):
             continue
         end_str = payload.get("activityEnd", "")
         if not end_str:
@@ -3036,8 +3036,8 @@ def get_live_prices(tokens: list[str]) -> dict[str, float]:
 @app.get("/api/analysis")
 def api_analysis() -> Response:
     market = (request.args.get("market") or "").strip().lower()
-    if market not in ("spot", "um"):
-        return jsonify({"error": "market must be spot or um"}), 400
+    if market not in ("spot", "um", "sprint"):
+        return jsonify({"error": "market must be spot, um or sprint"}), 400
 
     all_jobs = load_jobs()
     candidates = [
@@ -3652,7 +3652,8 @@ def api_create_sprint_jobs() -> Response:
             "mode": "scrape",
             "resourceId": rid,
             "url": snapshot["url"],
-            "market": snapshot["market"],
+            "market": "sprint",
+            "rewardMode": "rank",
             "symbol": snapshot["symbol"],
             "token": snapshot["token"],
             "proxy": snapshot["proxy"],
@@ -5560,7 +5561,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
             return jsonify({"error": "缺少交易对"}), 400
     symbols = [s.strip() for s in query_symbol.replace(",", " ").split() if s.strip()]
     market_type = str(payload.get("market") or "").lower()
-    klines_url = SPOT_KLINES if market_type == "spot" else FAPI_KLINES
+    klines_url = SPOT_KLINES if market_type in ("spot", "sprint") else FAPI_KLINES
 
     snapshots = job.get("snapshots") or []
     if len(snapshots) < 2:
