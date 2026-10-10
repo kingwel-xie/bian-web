@@ -224,12 +224,12 @@ function renderDiscoveryCards(result, inferred) {
   el.querySelectorAll(".discovery-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const rid = btn.dataset.rid;
-      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd, state.discoveredActivityStart, state.discoveredTop);
+      startScrapeJob(rid, inferred.market, inferred.symbol, state.currentUrl, state.discoveredActivityEnd, state.discoveredActivityStart, state.discoveredTop, false);
     });
   });
 }
 
-async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart, top) {
+async function startScrapeJob(resourceId, market, symbol, url, activityEnd, activityStart, top, queue = true) {
   try {
     await api("/api/scrape/jobs", {
       method: "POST",
@@ -243,6 +243,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
         activityEnd,
         activityStart,
         top: top != null ? top : (TOP_DEFAULTS[market] || 1000),
+        queue,
       }),
     });
     await loadJobs(1);
@@ -739,7 +740,7 @@ function renderJobCard(job, now) {
   const topValue = payload.top || 1000;
   const rowsText = progress.rowsFetched ? ` · ${progress.rowsFetched}/${topValue} rows` : "";
   const pagesText = progress.totalPages ? ` · page ${progress.currentPage}/${progress.totalPages}` : "";
-  const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : "run";
+  const statusClass = job.status === "completed" ? "ok" : job.status === "failed" ? "fail" : job.status === "waiting" ? "pending" : "run";
   const errorReason = job.status === "failed" && job.stderr ? lastLine(job.stderr) : "";
   const url = normalizeTaskUrl(payload.url);
   const officialUrl = withDomain(url, DOMAIN.OFFICIAL);
@@ -758,7 +759,7 @@ function renderJobCard(job, now) {
   const startDate = startSrc ? new Date(String(startSrc).replace(" ", "T") + "+08:00") : null;
   const notStarted = !!startDate && startDate.getTime() > now;
   const preStartLabel = notStarted && job.status !== "running" && job.status !== "queued";
-  const statusZh = preStartLabel ? "未开始" : ({ completed: "执行成功", running: "运行中", queued: "排队中", failed: "失败" }[job.status] || job.status);
+  const statusZh = preStartLabel ? "未开始" : ({ completed: "执行成功", running: "运行中", queued: "排队中", waiting: "待抓取", failed: "失败" }[job.status] || job.status);
   const snapshotTs = job.latestSnapshot;
   const actTimeText = payload.sprintIndex && (payload.sprintStart || payload.sprintEnd)
     ? `轮次时间：${String(payload.sprintStart || "—").slice(0, 16)} ~ ${String(payload.sprintEnd || "—").slice(0, 16)}`

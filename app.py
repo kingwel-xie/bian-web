@@ -1387,7 +1387,9 @@ def run_job(job_id: str, payload: dict[str, Any]) -> None:
                     break
 
 
-def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any]:
+def create_job(payload: dict[str, Any], source: str = "manual", *, queue: bool = True) -> dict[str, Any]:
+    """Create a scrape job. queue=False parks a brand-new job in 'waiting'
+    (picked up by the daily scheduler instead of scraping immediately)."""
     if payload.get("mode") == "workflow":
         if not payload.get("url"):
             raise ScriptError("缺少 url。")
@@ -1411,19 +1413,24 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
                 (j for j in jobs if j.get("id") in keep_ids),
                 None,
             )
+        launch = True
         if existing:
             if existing.get("status") == "running":
                 raise ScriptError("该活动正在抓取中，请等待完成。")
-            existing["status"] = "queued"
-            existing["progress"] = progress_from_stderr("", "queued")
-            existing["stderr"] = ""
-            existing["result"] = None
-            existing["updatedAt"] = datetime.now(timezone.utc).isoformat()
-            existing["startedAt"] = None
-            existing["finishedAt"] = None
-            job = existing
-            if existing.get("payload", {}).get("top") is not None:
-                payload["top"] = existing["payload"]["top"]
+            if existing.get("status") == "waiting" and not queue:
+                job = existing
+                launch = False
+            else:
+                existing["status"] = "queued"
+                existing["progress"] = progress_from_stderr("", "queued")
+                existing["stderr"] = ""
+                existing["result"] = None
+                existing["updatedAt"] = datetime.now(timezone.utc).isoformat()
+                existing["startedAt"] = None
+                existing["finishedAt"] = None
+                job = existing
+                if existing.get("payload", {}).get("top") is not None:
+                    payload["top"] = existing["payload"]["top"]
         else:
             market = str(payload.get("market") or "").upper()
             token = str(payload.get("token") or (payload.get("symbol") or [None])[0] or "").upper()
@@ -1431,23 +1438,25 @@ def create_job(payload: dict[str, Any], source: str = "manual") -> dict[str, Any
             job = {
                 "id": uuid.uuid4().hex[:12],
                 "source": source,
-                "status": "queued",
+                "status": "queued" if queue else "waiting",
                 "name": default_name or payload.get("name"),
                 "payload": payload,
-                "progress": progress_from_stderr("", "queued"),
+                "progress": progress_from_stderr("", "queued") if queue else {"stage": "waiting", "label": "等待定时抓取", "percent": 0},
                 "createdAt": datetime.now(timezone.utc).isoformat(),
                 "updatedAt": datetime.now(timezone.utc).isoformat(),
                 "snapshots": [],
             }
             jobs.append(job)
+            launch = queue
         save_jobs(jobs)
 
-    snapshots = job.get("snapshots") or []
-    if snapshots:
-        payload["lastUpdated"] = snapshots[-1]["timestamp"]
+    if launch:
+        snapshots = job.get("snapshots") or []
+        if snapshots:
+            payload["lastUpdated"] = snapshots[-1]["timestamp"]
 
-    thread = threading.Thread(target=run_job, args=(job["id"], payload), daemon=True)
-    thread.start()
+        thread = threading.Thread(target=run_job, args=(job["id"], payload), daemon=True)
+        thread.start()
     return job
 
 
@@ -2090,8 +2099,9 @@ def api_discover() -> Response:
 def api_create_scrape_job() -> Response:
     try:
         payload = request.get_json(force=True) or {}
+        queue = payload.pop("queue", True)
         payload["mode"] = "scrape"
-        job = create_job(payload)
+        job = create_job(payload, queue=bool(queue))
         return jsonify({"job": job}), 202
     except ScriptError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -3656,7 +3666,7 @@ def api_create_sprint_jobs() -> Response:
             "sprintEnd": end or "",
         }
         try:
-            job = create_job(sp_payload, source="sprint")
+            job = create_job(sp_payload, source="sprint", queue=False)
             desired_name = f"{snapshot['name']} S{si}"
             if job.get("name") != desired_name:
                 update_job(job["id"], name=desired_name)

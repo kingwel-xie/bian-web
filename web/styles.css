@@ -332,6 +332,13 @@ button:disabled {
   box-shadow: inset 2px 0 0 var(--accent-2);
 }
 
+.job.pending {
+  border-left-color: var(--line);
+  color: var(--muted);
+}
+
+.job.pending .progress-track { opacity: 0.5; }
+
 .job.expired {
   opacity: 0.45;
   filter: grayscale(0.8);
