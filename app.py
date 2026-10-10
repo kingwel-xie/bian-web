@@ -3169,11 +3169,13 @@ def api_analysis() -> Response:
                     tr = (int(t["rankMin"]), int(t["rankMax"]))
                 except (KeyError, TypeError, ValueError):
                     continue
-                # 分析口径排除前5名：1~5 归并为单一区间，跨前5的档裁掉 1~5 部分
-                if tr[1] <= 5:
-                    tr = (1, 5)
-                elif tr[0] < 6:
-                    tr = (6, tr[1])
+                # 分析口径：spot/um 排除前5名（1~5 归并为单一区间，跨前5的档裁掉 1~5 部分）；
+                # sprint 仅前5名有意义，保留原始分档，不做归一
+                if market != "sprint":
+                    if tr[1] <= 5:
+                        tr = (1, 5)
+                    elif tr[0] < 6:
+                        tr = (6, tr[1])
                 if tr in sig:
                     continue
                 tier_union.add(tr)
@@ -4000,10 +4002,12 @@ def _last_tier_index(tiers: list) -> int:
     return best
 
 
-def _normalize_tier_ranges(tiers: list) -> list[tuple[int, int]]:
-    """归一奖励档用于区间统计：分析口径排除前5名。
+def _normalize_tier_ranges(tiers: list, exclude_top5: bool = True) -> list[tuple[int, int]]:
+    """归一奖励档用于区间统计。
 
-    rankMax<=5 的档归并为 (1,5)，跨前5的档裁掉 1~5 部分，去重后按起点排序。
+    spot/um 分析口径排除前5名：rankMax<=5 的档归并为 (1,5)，跨前5的档裁掉 1~5 部分。
+    sprint 只有前5名有意义，保留原始分档，不做归一（exclude_top5=False）。
+    去重后按起点排序。
     """
     uniq: set[tuple[int, int]] = set()
     for t in tiers or []:
@@ -4014,20 +4018,21 @@ def _normalize_tier_ranges(tiers: list) -> list[tuple[int, int]]:
             rmax = int(t.get("rankMax", 0) or 0)
         except (TypeError, ValueError):
             continue
-        if rmax <= 5:
-            rmin, rmax = 1, 5
-        elif rmin < 6:
-            rmin = 6
+        if exclude_top5:
+            if rmax <= 5:
+                rmin, rmax = 1, 5
+            elif rmin < 6:
+                rmin = 6
         if rmin >= 1 and rmax >= rmin:
             uniq.add((rmin, rmax))
     return sorted(uniq)
 
 
-def _ranges_from_tiers(tiers: list) -> list[tuple[str, int, int]]:
-    """按（排除前5名的）档位生成排名区间，含区间间的空隙。"""
+def _ranges_from_tiers(tiers: list, exclude_top5: bool = True) -> list[tuple[str, int, int]]:
+    """按档位生成排名区间，含区间间的空隙。"""
     ranges: list[tuple[str, int, int]] = []
     cursor = 1
-    for rmin, rmax in _normalize_tier_ranges(tiers):
+    for rmin, rmax in _normalize_tier_ranges(tiers, exclude_top5):
         if rmin > cursor:
             ranges.append((f"{cursor}~{rmin-1}", cursor, rmin - 1))
         ranges.append((f"{rmin}~{rmax}", rmin, rmax))
@@ -4226,7 +4231,7 @@ def _build_preview_base(
             r_tiers = payload.get("rewardTiers") or []
             r_eligible = int(payload.get("eligibleUsers") or 0)
             if r_mode in ("rank", "rank_last_volume") and r_tiers:
-                ranges = _ranges_from_tiers(r_tiers)
+                ranges = _ranges_from_tiers(r_tiers, str(payload.get("market") or "").lower() != "sprint")
             elif r_mode == "total" and r_eligible > 0:
                 ranges = [(f"1~{r_eligible}", 1, r_eligible)]
             else:
@@ -4443,7 +4448,7 @@ def api_job_trend(job_id: str) -> Response:
     r_tiers = payload.get("rewardTiers") or []
     r_eligible = int(payload.get("eligibleUsers") or 0)
     if r_mode in ("rank", "rank_last_volume") and r_tiers:
-        ranges: list[tuple[str, int, int]] = _ranges_from_tiers(r_tiers)
+        ranges: list[tuple[str, int, int]] = _ranges_from_tiers(r_tiers, str(payload.get("market") or "").lower() != "sprint")
     elif r_mode == "total" and r_eligible > 0:
         ranges = [(f"1~{r_eligible}", 1, r_eligible)]
     else:

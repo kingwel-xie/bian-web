@@ -174,7 +174,7 @@
 
     <div class="analysis-panel">
       <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">奖励效率</h3>
-      <p style="margin:0 0 12px;font-size:11px;color:var(--muted)">排除前5名后，占比% = 该档成交量占6~1000总量百分比、奖励% = 该档奖励占6~1000总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效</p>
+      <p id="rewardEffDesc" style="margin:0 0 12px;font-size:11px;color:var(--muted)">排除前5名后，占比% = 该档成交量占6~1000总量百分比、奖励% = 该档奖励占6~1000总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效</p>
       <div class="table-wrap">
         <table id="rewardEffTable" style="width:auto;min-width:auto">
           <thead id="rewardEffHead"></thead>
@@ -231,8 +231,9 @@ function fmtVolume(v) {
   return v.toFixed(2);
 }
 
-// 分析口径排除前5名：仅保留 rankMin>=6 的档位
+// 分析口径：spot/um 排除前5名（仅保留 rankMin>=6 的档位）；sprint 只有前5名有意义，保留全部分档
 function analysisTiers(tiers) {
+  if (currentMarket === "sprint") return (tiers || []).slice();
   return (tiers || []).filter(t => Number(t.rankMin || 0) >= 6);
 }
 
@@ -1276,7 +1277,13 @@ function renderRewardEfficiency(jobs) {
   if (!visible.length) { panel.style.display = "none"; return; }
   panel.style.display = "";
 
-  const tiers = analysisTiers(visible[0].rewardTiers);
+  const desc = document.getElementById("rewardEffDesc");
+  if (desc) desc.innerHTML = currentMarket === "sprint"
+    ? "Sprint 仅前5名有奖励：占比% = 该档成交量占前5总量百分比、奖励% = 该档奖励占前5总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效"
+    : "排除前5名后，占比% = 该档成交量占6~1000总量百分比、奖励% = 该档奖励占6~1000总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效";
+
+  const refJob = visible.find(j => (j.rewardTiers || []).length) || visible[0];
+  const tiers = analysisTiers(refJob.rewardTiers);
   let headHtml = '<tr><th rowspan="2">任务</th>';
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i];
