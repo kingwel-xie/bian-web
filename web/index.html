@@ -103,15 +103,38 @@
               <label>活动结束
                 <input id="editActivityEnd" type="datetime-local" />
               </label>
-              <label></label>
-            </div>
-            <div id="limitedRoundsView" class="modal-limited-rounds" style="display:none"></div>
-            <div class="form-row">
               <label>抓取行数
                 <input id="editTop" type="number" min="1" max="10000" value="1000" />
               </label>
-              <label></label>
-              <label></label>
+            </div>
+            <hr class="form-divider">
+            <div id="sprintSection">
+              <div class="form-row">
+                <label>第一轮 起始时间
+                  <input id="editSprint1Start" type="datetime-local" />
+                </label>
+                <label>第一轮 结束时间
+                  <input id="editSprint1End" type="datetime-local" />
+                </label>
+                <label>第一轮 资源ID
+                  <input id="editSprint1ResourceId" placeholder="缺省 任务ID+2" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>第二轮 起始时间
+                  <input id="editSprint2Start" type="datetime-local" />
+                </label>
+                <label>第二轮 结束时间
+                  <input id="editSprint2End" type="datetime-local" />
+                </label>
+                <label>第二轮 资源ID
+                  <input id="editSprint2ResourceId" placeholder="缺省 任务ID+4" />
+                </label>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                <button id="syncSprintsBtn" type="button" class="tier-add-btn">🔄 同步轮次任务</button>
+                <span id="syncSprintsHint" style="font-size:11px;color:var(--muted)"></span>
+              </div>
             </div>
           </div>
           <div id="tabReward" class="tab-content" style="display:none">

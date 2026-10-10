@@ -252,24 +252,56 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
 }
 
 let _editJobId = null;
-let _editLimitedRounds = null;
+let _editSprintTimes = null;
+let _editResourceId = "";
 
-function renderLimitedRoundsView() {
-  const el = document.getElementById("limitedRoundsView");
-  if (!el) return;
-  const lr = Array.isArray(_editLimitedRounds) ? _editLimitedRounds : [];
-  if (!lr.length) { el.style.display = "none"; el.innerHTML = ""; return; }
-  el.innerHTML = "⏳ 限时池（公告自动提取，暂不可编辑）：" + lr.map(r =>
-    `<b>${escapeHtml(r.round || "")}</b> ${escapeHtml(r.start || "—")} ~ ${escapeHtml(r.end || "—")}`
-  ).join("　/　");
-  el.style.display = "";
+function _sprintFrom(obj) {
+  if (!obj) return null;
+  if (!obj.sprint1Start && !obj.sprint1End && !obj.sprint2Start && !obj.sprint2End) return null;
+  return {
+    s1s: obj.sprint1Start || "", s1e: obj.sprint1End || "",
+    s2s: obj.sprint2Start || "", s2e: obj.sprint2End || "",
+  };
+}
+
+function normSprintTime(v) {
+  const s = String(v || "").replace("T", " ").slice(0, 19);
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s) ? s + ":00" : s;
+}
+
+function renderSprintSection() {
+  const toLocal = (s) => String(s || "").slice(0, 16).replace(" ", "T");
+  const t = _editSprintTimes;
+  const setV = (fid, v) => { const el = document.getElementById(fid); if (el) el.value = v ? toLocal(v) : ""; };
+  setV("editSprint1Start", t && t.s1s);
+  setV("editSprint1End", t && t.s1e);
+  setV("editSprint2Start", t && t.s2s);
+  setV("editSprint2End", t && t.s2e);
+  const base = parseInt(_editResourceId, 10);
+  const i1 = document.getElementById("editSprint1ResourceId");
+  const i2 = document.getElementById("editSprint2ResourceId");
+  if (i1 && !i1.value.trim() && Number.isFinite(base)) i1.value = String(base + 2);
+  if (i2 && !i2.value.trim() && Number.isFinite(base)) i2.value = String(base + 4);
 }
 
 function openEditModal(job) {
   _editJobId = job.id;
   const p = job.payload || {};
-  _editLimitedRounds = Array.isArray(p.limitedRounds) && p.limitedRounds.length ? p.limitedRounds : null;
-  renderLimitedRoundsView();
+  _editSprintTimes = _sprintFrom(p);
+  _editResourceId = String(p.resourceId || "");
+  const sr1 = document.getElementById("editSprint1ResourceId");
+  const sr2 = document.getElementById("editSprint2ResourceId");
+  if (sr1) sr1.value = p.sprint1ResourceId != null ? String(p.sprint1ResourceId) : "";
+  if (sr2) sr2.value = p.sprint2ResourceId != null ? String(p.sprint2ResourceId) : "";
+  renderSprintSection();
+  const hintEl = document.getElementById("syncSprintsHint");
+  if (hintEl) {
+    const link = p.sprintJobIds || {};
+    const parts = [];
+    if (link.sprint1) parts.push("S1");
+    if (link.sprint2) parts.push("S2");
+    hintEl.textContent = parts.length ? "✓ 已建轮次：" + parts.join("/") : "";
+  }
   document.getElementById("editMarket").value = (p.market || "um").toLowerCase();
   const symVal = Array.isArray(p.symbol) ? p.symbol[0] : (p.symbol || "");
   document.getElementById("editToken").value = (p.token || symVal.replace(/USDT$/i, "") || "").toUpperCase();
@@ -366,7 +398,39 @@ document.getElementById("addTierBtn").addEventListener("click", () => addTierRow
 document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
-  _editLimitedRounds = null;
+  _editSprintTimes = null;
+});
+
+document.getElementById("syncSprintsBtn").addEventListener("click", async () => {
+  if (!_editJobId) { alert("任务尚未保存，请先保存后再同步轮次"); return; }
+  const btn = document.getElementById("syncSprintsBtn");
+  const hint = document.getElementById("syncSprintsHint");
+  btn.disabled = true;
+  hint.textContent = "同步中…";
+  const val = (id) => String(document.getElementById(id)?.value || "").trim();
+  try {
+    const data = await api("/api/jobs/sprints", {
+      method: "POST",
+      body: JSON.stringify({
+        jobId: _editJobId,
+        sprint1Start: normSprintTime(val("editSprint1Start")),
+        sprint1End: normSprintTime(val("editSprint1End")),
+        sprint2Start: normSprintTime(val("editSprint2Start")),
+        sprint2End: normSprintTime(val("editSprint2End")),
+        sprint1ResourceId: val("editSprint1ResourceId"),
+        sprint2ResourceId: val("editSprint2ResourceId"),
+      }),
+    });
+    if (data.error) throw new Error(data.error);
+    const ok = (data.jobs || []).map((j) => `S${j.sprintIndex}已建`).join(" ");
+    const errs = (data.errors || []).join("; ");
+    hint.textContent = "✓ " + (ok || "无可建轮次") + (errs ? " ⚠ " + errs : "");
+    await loadJobs(state.page);
+  } catch (e) {
+    hint.textContent = "❌ " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // blur handlers to format comma-separated number inputs
@@ -433,8 +497,12 @@ function articleExtractSummary(data) {
   }
   if (data.rewardToken) parts.push(`币种 ${data.rewardToken}`);
   if (data.start && data.end) parts.push(`${data.start} ~ ${data.end}`);
-  if (data.limitedRounds && data.limitedRounds.length) {
-    parts.push("限时池 " + data.limitedRounds.map(r => `${r.round} ${(r.start || "").slice(5)}~${(r.end || "").slice(5)}`).join(" / "));
+  if (data.sprint1Start || data.sprint1End || data.sprint2Start || data.sprint2End) {
+    const sh = (s) => String(s || "").slice(5, 16);
+    const seg = [];
+    if (data.sprint1Start || data.sprint1End) seg.push(`S1 ${sh(data.sprint1Start)}~${sh(data.sprint1End)}`);
+    if (data.sprint2Start || data.sprint2End) seg.push(`S2 ${sh(data.sprint2Start)}~${sh(data.sprint2End)}`);
+    parts.push("限时池 " + seg.join(" / "));
   }
   if (data.market) parts.push(data.market.toUpperCase());
   if (data.pairs && data.pairs.length) parts.push(`${data.pairs.length} 交易对`);
@@ -452,11 +520,11 @@ function fillFromArticle(data) {
     document.getElementById("editActivityEnd").value = data.end.replace(" ", "T");
   }
   if (data.rewardMode === "rank" || data.rewardMode === "rank_last_volume") {
-    _editLimitedRounds = Array.isArray(data.limitedRounds) && data.limitedRounds.length ? data.limitedRounds : null;
+    _editSprintTimes = _sprintFrom(data);
   } else if (data.rewardMode === "total") {
-    _editLimitedRounds = null;
+    _editSprintTimes = null;
   }
-  renderLimitedRoundsView();
+  renderSprintSection();
   setModalRewardFromArticle(data);
 }
 
@@ -610,12 +678,16 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
       const capVal = (document.getElementById("editLastTierCap").value || "").replace(/,/g, "").trim();
       if (capVal !== "") body.lastTierCap = capVal;
     }
-    body.limitedRounds = _editLimitedRounds || [];
   } else {
     body.totalReward = (document.getElementById("editTotalReward").value || "").replace(/,/g, "") || undefined;
     body.eligibleUsers = parseInt((document.getElementById("editEligibleUsers").value || "").replace(/,/g, ""), 10) || undefined;
-    body.limitedRounds = [];
   }
+  body.sprint1Start = normSprintTime(document.getElementById("editSprint1Start")?.value || "");
+  body.sprint1End = normSprintTime(document.getElementById("editSprint1End")?.value || "");
+  body.sprint2Start = normSprintTime(document.getElementById("editSprint2Start")?.value || "");
+  body.sprint2End = normSprintTime(document.getElementById("editSprint2End")?.value || "");
+  body.sprint1ResourceId = (document.getElementById("editSprint1ResourceId")?.value || "").trim();
+  body.sprint2ResourceId = (document.getElementById("editSprint2ResourceId")?.value || "").trim();
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
@@ -678,13 +750,20 @@ function renderJobCard(job, now) {
   const displayName = rid ? `${jobName}  [${rid}]` : jobName;
   const activityEnd = payload.activityEnd;
   const activityStart = payload.activityStart;
-  const endDate = activityEnd ? new Date(activityEnd.replace(" ", "T") + "+08:00") : null;
+  const sprintChild = !!payload.sprintIndex && !!(payload.sprintStart || payload.sprintEnd);
+  const countdownEnd = (sprintChild && payload.sprintEnd) || activityEnd;
+  const endDate = countdownEnd ? new Date(String(countdownEnd).replace(" ", "T") + "+08:00") : null;
   const isExpired = endDate && endDate <= new Date(now - 86400000);
   const expiredClass = isExpired ? " expired" : "";
   const snapshotTs = job.latestSnapshot;
-  const actTimeText = activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
-  const lrArr = Array.isArray(payload.limitedRounds) ? payload.limitedRounds : [];
-  const lrText = lrArr.length ? `限时池：${lrArr.map(r => `${r.round} ${String(r.start || "").slice(5)}~${String(r.end || "").slice(5)}`).join(" / ")}` : "";
+  const actTimeText = payload.sprintIndex && (payload.sprintStart || payload.sprintEnd)
+    ? `轮次时间：${String(payload.sprintStart || "—").slice(0, 16)} ~ ${String(payload.sprintEnd || "—").slice(0, 16)}`
+    : (activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "");
+  const _sh = (s) => String(s || "").slice(5, 16);
+  const _segs = [];
+  if (payload.sprint1Start || payload.sprint1End) _segs.push(`S1 ${_sh(payload.sprint1Start)}~${_sh(payload.sprint1End)}`);
+  if (payload.sprint2Start || payload.sprint2End) _segs.push(`S2 ${_sh(payload.sprint2Start)}~${_sh(payload.sprint2End)}`);
+  const lrText = _segs.length ? `限时池：${_segs.join(" / ")}` : "";
   let countdownText = "", countdownCls = "job-countdown";
   if (endDate) {
     const diff = endDate - now;
@@ -704,6 +783,7 @@ function renderJobCard(job, now) {
         <div>
           <strong>
             <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
+            ${payload.sprintIndex ? `<span class="sprint-badge" title="轮次任务">S${escapeHtml(String(payload.sprintIndex))}</span>` : ""}
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
@@ -738,7 +818,26 @@ function renderJobs(jobs) {
   $("#jobCount").textContent = `${total}`;
   const jl = $("#jobList");
   const now = Date.now();
-  jl.innerHTML = jobs.map((job) => renderJobCard(job, now)).join("") || `<div class="empty box">没有任务。</div>`;
+  jl.innerHTML = jobs.map((job) => {
+    let html = renderJobCard(job, now);
+    const kids = Array.isArray(job.sprintChildren) ? job.sprintChildren : [];
+    if (kids.length) {
+      html += `<div class="sprint-group">
+        <button class="sprint-toggle" type="button"><span class="st-arrow">▸</span>轮次任务 (${kids.length})</button>
+        <div class="sprint-kids" style="display:none">${kids.map((k) => renderJobCard(k, now)).join("")}</div>
+      </div>`;
+    }
+    return html;
+  }).join("") || `<div class="empty box">没有任务。</div>`;
+  jl.querySelectorAll(".sprint-toggle").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const kids = this.parentElement.querySelector(".sprint-kids");
+      const arrow = this.querySelector(".st-arrow");
+      const open = kids.style.display !== "none";
+      kids.style.display = open ? "none" : "";
+      if (arrow) arrow.textContent = open ? "▸" : "▾";
+    });
+  });
 
   renderPagination();
 }

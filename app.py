@@ -32,6 +32,11 @@ JOBS_FILE = STATE_DIR / "jobs.json"
 SCHEDULES_FILE = STATE_DIR / "schedules.json"
 DISCOVERY_CACHE_FILE = STATE_DIR / ".url_discovery_cache.json"
 DISCOVERY_CACHE_MAX = 10
+SPRINT_FIELDS = (
+    "sprint1Start", "sprint1End", "sprint2Start", "sprint2End",
+    "sprint1ResourceId", "sprint2ResourceId",
+    "sprintJobIds", "parentJobId", "sprintIndex",
+)
 ACTIVITIES_CACHE_FILE = STATE_DIR / "activities_cache.json"
 ACTIVITIES_CACHE_TTL = 600
 ACTIVITIES_DB_FILE = STATE_DIR / "activities_db.json"
@@ -2584,7 +2589,7 @@ def _parse_limited_rounds(tables: list[list[list[str]]]) -> list[dict[str, str]]
     seen: set[str] = set()
 
     def _fmt(g: re.Match[str]) -> str:
-        sec = f":{int(g.group(6)):02d}" if g.group(6) else ""
+        sec = f":{int(g.group(6)):02d}" if g.group(6) else ":00"
         return (
             f"{int(g.group(1)):04d}-{int(g.group(2)):02d}-{int(g.group(3)):02d} "
             f"{int(g.group(4)):02d}:{int(g.group(5)):02d}{sec}"
@@ -2642,9 +2647,13 @@ def _parse_article(code: str) -> dict[str, Any]:
         "lastTierCap": reward["lastTierCap"],
     }
     if reward.get("mode") in ("rank", "rank_last_volume"):
-        limited_rounds = _parse_limited_rounds(tables)
-        if limited_rounds:
-            result["limitedRounds"] = limited_rounds
+        rounds = _parse_limited_rounds(tables)
+        if len(rounds) >= 1:
+            result["sprint1Start"] = rounds[0]["start"]
+            result["sprint1End"] = rounds[0]["end"]
+        if len(rounds) >= 2:
+            result["sprint2Start"] = rounds[1]["start"]
+            result["sprint2End"] = rounds[1]["end"]
     if reward.get("mode") == "total":
         result["totalReward"] = reward.get("totalReward")
         result["eligibleUsers"] = reward.get("eligibleUsers")
@@ -2751,7 +2760,17 @@ def _job_summary(job: dict) -> dict:
             "lastTierCap": payload.get("lastTierCap"),
             "activityEnd": payload.get("activityEnd"),
             "activityStart": payload.get("activityStart"),
-            "limitedRounds": payload.get("limitedRounds"),
+            "sprint1Start": payload.get("sprint1Start"),
+            "sprint1End": payload.get("sprint1End"),
+            "sprint2Start": payload.get("sprint2Start"),
+            "sprint2End": payload.get("sprint2End"),
+            "sprint1ResourceId": payload.get("sprint1ResourceId"),
+            "sprint2ResourceId": payload.get("sprint2ResourceId"),
+            "sprintJobIds": payload.get("sprintJobIds"),
+            "parentJobId": payload.get("parentJobId"),
+            "sprintIndex": payload.get("sprintIndex"),
+            "sprintStart": payload.get("sprintStart"),
+            "sprintEnd": payload.get("sprintEnd"),
             "top": payload.get("top"),
         },
         "snapshotCount": len(job.get("snapshots") or []),
@@ -2798,10 +2817,6 @@ def api_jobs() -> Response:
                 return True
         all_jobs = [j for j in all_jobs if is_active(j)]
 
-    total = len(all_jobs)
-    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
-    page = min(page, total_pages) if total else 1
-
     def sort_key(job):
         end_str = (job.get("payload") or {}).get("activityEnd", "") or ""
         if not end_str:
@@ -2817,13 +2832,32 @@ def api_jobs() -> Response:
             return (1, end_str, "")
 
     sorted_jobs = sorted(all_jobs, key=sort_key)
+
+    all_ids = {j.get("id") for j in sorted_jobs}
+    children_by_parent: dict[str, list] = {}
+    child_ids: set[str] = set()
+    for job in sorted_jobs:
+        pid = (job.get("payload") or {}).get("parentJobId")
+        if pid and pid in all_ids and pid != job.get("id"):
+            children_by_parent.setdefault(pid, []).append(job)
+            child_ids.add(job.get("id"))
+    top_jobs = [j for j in sorted_jobs if j.get("id") not in child_ids]
+
+    total = len(top_jobs)
+    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    page = min(page, total_pages) if total else 1
     start = (page - 1) * per_page
     end = start + per_page
-    page_jobs = sorted_jobs[start:end]
+    page_jobs = top_jobs[start:end]
 
     jobs = []
     for job in page_jobs:
-        jobs.append(_job_summary(job))
+        summary = _job_summary(job)
+        kids = children_by_parent.get(job.get("id"))
+        if kids:
+            kids.sort(key=lambda k: (k.get("payload") or {}).get("sprintIndex") or 0)
+            summary["sprintChildren"] = [_job_summary(k) for k in kids]
+        jobs.append(summary)
 
     return jsonify({
         "jobs": jobs,
@@ -3480,21 +3514,23 @@ def api_update_job_params(job_id: str) -> Response:
                         p.pop("lastTierCap", None)
                 else:
                     p.pop("lastTierCap", None)
-                if "limitedRounds" in body:
-                    lr_raw = body.get("limitedRounds")
-                    lr_clean: list[dict[str, str]] = []
-                    if isinstance(lr_raw, list):
-                        for x in lr_raw:
-                            if isinstance(x, dict) and x.get("round") and x.get("start") and x.get("end"):
-                                lr_clean.append({
-                                    "round": str(x.get("round"))[:16],
-                                    "start": str(x.get("start"))[:20],
-                                    "end": str(x.get("end"))[:20],
-                                })
-                    if lr_clean:
-                        p["limitedRounds"] = lr_clean
-                    else:
-                        p.pop("limitedRounds", None)
+                p.pop("limitedRounds", None)
+                for k in ("sprint1Start", "sprint1End", "sprint2Start", "sprint2End"):
+                    if k in body:
+                        v = str(body.get(k) or "").strip()[:20]
+                        if v:
+                            p[k] = v
+                        else:
+                            p.pop(k, None)
+                for k in ("sprint1ResourceId", "sprint2ResourceId"):
+                    if k in body:
+                        v = str(body.get(k) or "").strip()
+                        if not v:
+                            p.pop(k, None)
+                        elif re.fullmatch(r"\d{1,12}", v):
+                            p[k] = v
+                        else:
+                            return jsonify({"error": f"{k} 必须为数字"}), 400
                 total_reward = body.get("totalReward")
                 if total_reward:
                     p["totalReward"] = str(total_reward)
@@ -3526,6 +3562,129 @@ def api_update_job_params(job_id: str) -> Response:
                 save_jobs(jobs)
                 return jsonify({"job": job})
         return jsonify({"error": "任务不存在"}), 404
+
+
+def _parse_sprint_dt(v: str) -> datetime | None:
+    s = str(v or "").strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s, fmt).replace(tzinfo=BJ)
+        except ValueError:
+            continue
+    return None
+
+
+@app.post("/api/jobs/sprints")
+def api_create_sprint_jobs() -> Response:
+    """Create (or re-queue) leaderboard jobs for a task's sprint rounds.
+
+    Uses sprintXResourceId/Start/End from the request body (unsaved modal
+    values allowed), persists them onto the parent payload, then creates one
+    scrape job per round (top=50, activityEnd=round end +1d so the daily
+    loop keeps it until the final state settles). Links are stored back as
+    sprintJobIds on the parent.
+    """
+    body = request.get_json(force=True) or {}
+    job_id = str(body.get("jobId") or "").strip()
+    with state_lock:
+        jobs = load_jobs()
+        parent = next((j for j in jobs if j.get("id") == job_id), None)
+        if not parent:
+            return jsonify({"error": "任务不存在"}), 404
+        pp = parent.setdefault("payload", {})
+        for k in ("sprint1Start", "sprint1End", "sprint2Start", "sprint2End"):
+            if k in body:
+                v = str(body.get(k) or "").strip().replace("T", " ")[:19]
+                if v:
+                    pp[k] = v
+                else:
+                    pp.pop(k, None)
+        for k in ("sprint1ResourceId", "sprint2ResourceId"):
+            if k in body:
+                v = str(body.get(k) or "").strip()
+                if not v:
+                    pp.pop(k, None)
+                elif re.fullmatch(r"\d{1,12}", v):
+                    pp[k] = v
+                else:
+                    return jsonify({"error": f"{k} 必须为数字"}), 400
+        pp.pop("limitedRounds", None)
+        parent["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        save_jobs(jobs)
+        snapshot = {
+            "url": pp.get("url", ""),
+            "market": pp.get("market", ""),
+            "symbol": pp.get("symbol", []),
+            "token": pp.get("token", ""),
+            "proxy": pp.get("proxy", "auto"),
+            "rewardToken": pp.get("rewardToken", ""),
+            "name": parent.get("name") or pp.get("name") or pp.get("resourceId") or job_id,
+            "rid1": pp.get("sprint1ResourceId"),
+            "rid2": pp.get("sprint2ResourceId"),
+            "t1s": pp.get("sprint1Start"), "t1e": pp.get("sprint1End"),
+            "t2s": pp.get("sprint2Start"), "t2e": pp.get("sprint2End"),
+        }
+
+    rounds = [
+        (1, snapshot["rid1"], snapshot["t1s"], snapshot["t1e"]),
+        (2, snapshot["rid2"], snapshot["t2s"], snapshot["t2e"]),
+    ]
+    created: list[dict[str, Any]] = []
+    errors: list[str] = []
+    link_ids: dict[str, str] = {}
+    for si, rid, start, end in rounds:
+        if not rid:
+            continue
+        end_dt = _parse_sprint_dt(end)
+        sched_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d %H:%M") if end_dt else ""
+        sched_start = _parse_sprint_dt(start).strftime("%Y-%m-%d %H:%M") if _parse_sprint_dt(start) else ""
+        sp_payload = {
+            "mode": "scrape",
+            "resourceId": rid,
+            "url": snapshot["url"],
+            "market": snapshot["market"],
+            "symbol": snapshot["symbol"],
+            "token": snapshot["token"],
+            "proxy": snapshot["proxy"],
+            "top": 50,
+            "rewardToken": snapshot["rewardToken"],
+            "activityStart": sched_start,
+            "activityEnd": sched_end,
+            "parentJobId": job_id,
+            "sprintIndex": si,
+            "sprintStart": start or "",
+            "sprintEnd": end or "",
+        }
+        try:
+            job = create_job(sp_payload, source="sprint")
+            desired_name = f"{snapshot['name']} S{si}"
+            if job.get("name") != desired_name:
+                update_job(job["id"], name=desired_name)
+            link_ids[f"sprint{si}"] = job["id"]
+            created.append({"sprintIndex": si, "jobId": job["id"], "name": desired_name})
+        except ScriptError as exc:
+            errors.append(f"S{si}: {exc}")
+
+    if link_ids:
+        with state_lock:
+            jobs = load_jobs()
+            merged: dict[str, str] = {}
+            parent = None
+            for j in jobs:
+                if j.get("id") == job_id:
+                    parent = j
+                    merged.update(j["payload"].get("sprintJobIds") or {})
+            merged.update(link_ids)
+            if parent:
+                parent["payload"]["sprintJobIds"] = merged
+                parent["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            for j in jobs:
+                pj = j.get("payload") or {}
+                if pj.get("parentJobId") == job_id and pj.get("sprintIndex"):
+                    pj["sprintJobIds"] = merged
+                    j["updatedAt"] = datetime.now(timezone.utc).isoformat()
+            save_jobs(jobs)
+    return jsonify({"jobs": created, "errors": errors})
 
 
 @app.get("/api/jobs/<job_id>/snapshots")
@@ -3871,7 +4030,8 @@ def _build_preview_base(
     rid = str(payload.get("resourceId") or "").strip()
     preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
     preview["activityStart"] = payload.get("activityStart")
-    preview["limitedRounds"] = payload.get("limitedRounds")
+    for _k in SPRINT_FIELDS:
+        preview[_k] = payload.get(_k)
     preview["activityEnd"] = payload.get("activityEnd")
     preview["snapshots"] = [
         {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
@@ -3994,7 +4154,7 @@ def api_job_preview(job_id: str) -> Response:
                 "url": payload.get("url", ""),
                 "activityStart": payload.get("activityStart"),
                 "activityEnd": payload.get("activityEnd"),
-                "limitedRounds": payload.get("limitedRounds"),
+                **{k: payload.get(k) for k in SPRINT_FIELDS},
                 "rewardToken": payload.get("rewardToken", ""),
                 "rewardAmount": payload.get("rewardAmount", ""),
                 "rewardMode": payload.get("rewardMode"),
@@ -4050,7 +4210,7 @@ def api_job_preview(job_id: str) -> Response:
                     "rewardAmount": payload.get("rewardAmount", ""),
                     "activityStart": payload.get("activityStart"),
                     "activityEnd": payload.get("activityEnd"),
-                    "limitedRounds": payload.get("limitedRounds"),
+                    **{k: payload.get(k) for k in SPRINT_FIELDS},
                 },
                 sort_keys=True,
                 default=str,
@@ -4063,7 +4223,8 @@ def api_job_preview(job_id: str) -> Response:
             )
             _cache_put(_preview_cache, cache_key, base, _PREVIEW_CACHE_MAX)
         preview = dict(base)
-        preview["limitedRounds"] = payload.get("limitedRounds")
+        for _k in SPRINT_FIELDS:
+            preview[_k] = payload.get(_k)
 
         team_map, team_sizes, maddog_map, maddog_team_idx = _build_team_map(
             preview.get("rows") or [],
