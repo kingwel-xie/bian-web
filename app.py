@@ -2799,7 +2799,8 @@ def api_jobs() -> Response:
     per_page = max(1, min(per_page, 100))
     page = max(1, page)
 
-    all_jobs = load_jobs()
+    full_jobs = load_jobs()
+    all_jobs = list(full_jobs)
     filter_market = (request.args.get("market") or "").strip().lower()
     filter_search = (request.args.get("search") or "").strip()
     filter_active = request.args.get("active", "").strip().lower()
@@ -2841,6 +2842,12 @@ def api_jobs() -> Response:
         except ValueError:
             return (1, end_str, "")
 
+    kept_ids = {j.get("id") for j in all_jobs}
+    for j in full_jobs:
+        pid = (j.get("payload") or {}).get("parentJobId")
+        if pid and pid in kept_ids and j.get("id") not in kept_ids:
+            all_jobs.append(j)
+
     sorted_jobs = sorted(all_jobs, key=sort_key)
 
     all_ids = {j.get("id") for j in sorted_jobs}
@@ -2851,7 +2858,14 @@ def api_jobs() -> Response:
         if pid and pid in all_ids and pid != job.get("id"):
             children_by_parent.setdefault(pid, []).append(job)
             child_ids.add(job.get("id"))
-    top_jobs = [j for j in sorted_jobs if j.get("id") not in child_ids]
+    top_jobs = []
+    for j in sorted_jobs:
+        if j.get("id") in child_ids:
+            continue
+        pid = (j.get("payload") or {}).get("parentJobId")
+        if pid and pid not in all_ids:
+            continue  # orphan sprint children stay off the list
+        top_jobs.append(j)
 
     total = len(top_jobs)
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
