@@ -775,6 +775,7 @@ function renderJobCard(job, now) {
     const h = Math.floor((dt % 864e5) / 36e5);
     const m = Math.floor((dt % 36e5) / 6e4);
     countdownText = d > 0 ? `距开始 ${d}d ${h}h` : h > 0 ? `距开始 ${h}h ${m}m` : `距开始 ${m}m`;
+    countdownCls += " pre";
   } else if (endDate) {
     const diff = endDate - now;
     if (diff > 0) {

@@ -401,6 +401,7 @@ button:disabled {
   padding: 0 4px;
 }
 .job-countdown.urgent { color: #fff; border-color: #d0312d; background: #d0312d; }
+.job-countdown.pre { color: var(--muted); border-color: var(--line); background: transparent; }
 .job-countdown.ended { color: #bbb; border-color: #999; background: #666; }
 .job.expired .job-countdown { display: none; }
 
