@@ -815,11 +815,6 @@ function renderJobCard(job, now) {
   const actTimeText = payload.sprintIndex && (payload.sprintStart || payload.sprintEnd)
     ? `轮次时间：${String(payload.sprintStart || "—").slice(0, 16)} ~ ${String(payload.sprintEnd || "—").slice(0, 16)}`
     : (activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "");
-  const _sh = (s) => String(s || "").slice(5, 16);
-  const _segs = [];
-  if (payload.sprint1Start || payload.sprint1End) _segs.push(`S1 ${_sh(payload.sprint1Start)}~${_sh(payload.sprint1End)}`);
-  if (payload.sprint2Start || payload.sprint2End) _segs.push(`S2 ${_sh(payload.sprint2Start)}~${_sh(payload.sprint2End)}`);
-  const lrText = _segs.length ? `限时池：${_segs.join(" / ")}` : "";
   let countdownText = "", countdownCls = "job-countdown";
   if (notStarted && startDate) {
     const dt = startDate - now;
@@ -850,8 +845,7 @@ function renderJobCard(job, now) {
             ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
           </strong>
-          ${lrText ? `<div class="job-limited-rounds">⏳ ${escapeHtml(lrText)}</div>` : ""}
-          <div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>
+          ${sprintChild ? "" : `<div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>`}
           <small>${escapeHtml(statusZh)}${job.finishedAt && !preStartLabel ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
           ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
         </div>
