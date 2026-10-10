@@ -2381,10 +2381,7 @@ def _parse_reward_rows(table: list[list[str]]) -> dict[str, Any]:
                 "cap": cap,
             }
         )
-    rows = [
-        r for r in rows
-        if r.get("is_remaining") or r.get("cap") is not None or r["rankMax"] > 5
-    ]
+    # 保留完整分档（含前5名单人固定额）；分析侧仍按“排除前5名”口径处理。
     if not rows:
         return {"found": False}
     last = rows[-1]
@@ -2547,11 +2544,20 @@ def _parse_article_reward_blocks(
     text: str, title: str, tables: list[list[list[str]]]
 ) -> dict[str, Any]:
     reward_table: list[list[str]] | None = None
+    best_max = -1
     for table in tables:
-        rank_hits = sum(1 for cells in table if cells and _parse_rank_cell(cells[0]))
-        if rank_hits >= 1:
+        table_max = -1
+        for cells in table:
+            if not cells:
+                continue
+            rank = _parse_rank_cell(cells[0])
+            if not rank:
+                continue
+            # 取排名上界最大的一张表（主奖励表），避免选中仅含前几名的子表
+            table_max = max(table_max, 10**9 if rank[2] else rank[1])
+        if table_max > best_max:
+            best_max = table_max
             reward_table = table
-            break
     if reward_table is not None:
         parsed = _parse_reward_rows(reward_table)
         if parsed.get("found"):
@@ -3162,6 +3168,13 @@ def api_analysis() -> Response:
                 try:
                     tr = (int(t["rankMin"]), int(t["rankMax"]))
                 except (KeyError, TypeError, ValueError):
+                    continue
+                # 分析口径排除前5名：1~5 归并为单一区间，跨前5的档裁掉 1~5 部分
+                if tr[1] <= 5:
+                    tr = (1, 5)
+                elif tr[0] < 6:
+                    tr = (6, tr[1])
+                if tr in sig:
                     continue
                 tier_union.add(tr)
                 sig.append(tr)
@@ -3987,6 +4000,41 @@ def _last_tier_index(tiers: list) -> int:
     return best
 
 
+def _normalize_tier_ranges(tiers: list) -> list[tuple[int, int]]:
+    """归一奖励档用于区间统计：分析口径排除前5名。
+
+    rankMax<=5 的档归并为 (1,5)，跨前5的档裁掉 1~5 部分，去重后按起点排序。
+    """
+    uniq: set[tuple[int, int]] = set()
+    for t in tiers or []:
+        if not isinstance(t, dict):
+            continue
+        try:
+            rmin = int(t.get("rankMin", 0) or 0)
+            rmax = int(t.get("rankMax", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if rmax <= 5:
+            rmin, rmax = 1, 5
+        elif rmin < 6:
+            rmin = 6
+        if rmin >= 1 and rmax >= rmin:
+            uniq.add((rmin, rmax))
+    return sorted(uniq)
+
+
+def _ranges_from_tiers(tiers: list) -> list[tuple[str, int, int]]:
+    """按（排除前5名的）档位生成排名区间，含区间间的空隙。"""
+    ranges: list[tuple[str, int, int]] = []
+    cursor = 1
+    for rmin, rmax in _normalize_tier_ranges(tiers):
+        if rmin > cursor:
+            ranges.append((f"{cursor}~{rmin-1}", cursor, rmin - 1))
+        ranges.append((f"{rmin}~{rmax}", rmin, rmax))
+        cursor = rmax + 1
+    return ranges
+
+
 def _compute_last_tier_rate(payload: dict, data: dict) -> dict | None:
     """Compute per-10k-volume reward rate for the last tier (rank_last_volume mode).
 
@@ -4170,16 +4218,7 @@ def _build_preview_base(
             r_tiers = payload.get("rewardTiers") or []
             r_eligible = int(payload.get("eligibleUsers") or 0)
             if r_mode in ("rank", "rank_last_volume") and r_tiers:
-                sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
-                ranges = []
-                cursor = 1
-                for t in sorted_tiers:
-                    rmin = t.get("rankMin", 0)
-                    rmax = t.get("rankMax", 0)
-                    if rmin > cursor:
-                        ranges.append((f"{cursor}~{rmin-1}", cursor, rmin-1))
-                    ranges.append((f"{rmin}~{rmax}", rmin, rmax))
-                    cursor = rmax + 1
+                ranges = _ranges_from_tiers(r_tiers)
             elif r_mode == "total" and r_eligible > 0:
                 ranges = [(f"1~{r_eligible}", 1, r_eligible)]
             else:
@@ -4394,16 +4433,7 @@ def api_job_trend(job_id: str) -> Response:
     r_tiers = payload.get("rewardTiers") or []
     r_eligible = int(payload.get("eligibleUsers") or 0)
     if r_mode in ("rank", "rank_last_volume") and r_tiers:
-        sorted_tiers = sorted(r_tiers, key=lambda t: t.get("rankMin", 0))
-        ranges: list[tuple[str, int, int]] = []
-        cursor = 1
-        for t in sorted_tiers:
-            rmin = t.get("rankMin", 0)
-            rmax = t.get("rankMax", 0)
-            if rmin > cursor:
-                ranges.append((f"{cursor}~{rmin-1}", cursor, rmin - 1))
-            ranges.append((f"{rmin}~{rmax}", rmin, rmax))
-            cursor = rmax + 1
+        ranges: list[tuple[str, int, int]] = _ranges_from_tiers(r_tiers)
     elif r_mode == "total" and r_eligible > 0:
         ranges = [(f"1~{r_eligible}", 1, r_eligible)]
     else:
@@ -4515,29 +4545,29 @@ def api_job_trend(job_id: str) -> Response:
                             break
                     if first is not None and first is not last:
                         total_vol_delta = last["totalVol"] - first["totalVol"]
-                    trend_ranges = []
-                    for i, label in enumerate(resp["rangeLabels"]):
-                        first_r = first["ranges"][i]
-                        last_r = last["ranges"][i]
-                        vol_delta = last_r["total"] - first_r["total"]
-                        pct_change = round(last_r["pct"] - first_r["pct"], 2)
-                        delta_pct_of_total = round(vol_delta / total_vol_delta * 100, 2) if total_vol_delta else 0
-                        trend_ranges.append({
-                            "label": label,
-                            "pctStart": first_r["pct"],
-                            "pctEnd": last_r["pct"],
-                            "pctChange": pct_change,
-                            "volStart": first_r["total"],
-                            "volEnd": last_r["total"],
-                            "volDelta": vol_delta,
-                            "deltaPctOfTotal": delta_pct_of_total,
-                        })
-                    resp["pctTrend"] = {
-                        "windowStart": first["timestamp"],
-                        "windowEnd": last["timestamp"],
-                        "totalVolDelta": total_vol_delta,
-                        "ranges": trend_ranges,
-                    }
+                        trend_ranges = []
+                        for i, label in enumerate(resp["rangeLabels"]):
+                            first_r = first["ranges"][i]
+                            last_r = last["ranges"][i]
+                            vol_delta = last_r["total"] - first_r["total"]
+                            pct_change = round(last_r["pct"] - first_r["pct"], 2)
+                            delta_pct_of_total = round(vol_delta / total_vol_delta * 100, 2) if total_vol_delta else 0
+                            trend_ranges.append({
+                                "label": label,
+                                "pctStart": first_r["pct"],
+                                "pctEnd": last_r["pct"],
+                                "pctChange": pct_change,
+                                "volStart": first_r["total"],
+                                "volEnd": last_r["total"],
+                                "volDelta": vol_delta,
+                                "deltaPctOfTotal": delta_pct_of_total,
+                            })
+                        resp["pctTrend"] = {
+                            "windowStart": first["timestamp"],
+                            "windowEnd": last["timestamp"],
+                            "totalVolDelta": total_vol_delta,
+                            "ranges": trend_ranges,
+                        }
     _cache_put(_trend_cache, trend_key, resp, _TREND_CACHE_MAX)
     return jsonify(resp)
 

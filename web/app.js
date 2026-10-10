@@ -526,11 +526,11 @@ function setModalRewardFromArticle(data) {
 
 function articleExtractSummary(data) {
   const parts = [];
-  if (data.rewardMode === "rank") parts.push(`按排名 ${(data.rewardTiers || []).length} 档（已忽略前5名）`);
+  if (data.rewardMode === "rank") parts.push(`按排名 ${(data.rewardTiers || []).length} 档（完整档，含前5名）`);
   else if (data.rewardMode === "rank_last_volume") {
     const tiers = data.rewardTiers || [];
     const last = tiers[tiers.length - 1];
-    parts.push(`按排名 ${tiers.length} 档（已忽略前5名）`);
+    parts.push(`按排名 ${tiers.length} 档（完整档，含前5名）`);
     if (last) parts.push(`末档按量 池 ${last.amount}`);
     if (data.lastTierCap) parts.push(`人均上限 ${data.lastTierCap}`);
   } else if (data.rewardMode === "total") {

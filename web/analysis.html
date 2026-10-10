@@ -231,6 +231,11 @@ function fmtVolume(v) {
   return v.toFixed(2);
 }
 
+// 分析口径排除前5名：仅保留 rankMin>=6 的档位
+function analysisTiers(tiers) {
+  return (tiers || []).filter(t => Number(t.rankMin || 0) >= 6);
+}
+
 function tierAmountForRange(tiers, label) {
   if (!tiers || !tiers.length) return null;
   const parts = label.split("~").map(Number);
@@ -311,8 +316,9 @@ function efficiencyForJobRange(j, label, statVal) {
 }
 
 function normalizedTierAllocation(tiers) {
-  if (!tiers || !tiers.length) return null;
-  const sorted = [...tiers].sort((a, b) => a.rankMin - b.rankMin);
+  const kept = analysisTiers(tiers);
+  if (!kept.length) return null;
+  const sorted = [...kept].sort((a, b) => a.rankMin - b.rankMin);
   const weighted = sorted.map(t => t.amount * (t.rankMax - t.rankMin + 1));
   const total = weighted.reduce((s, v) => s + v, 0);
   if (!total) return null;
@@ -337,8 +343,8 @@ function tiersMatch(a, b) {
 
 function perPersonSimilar(a, b, maxFactor) {
   if (!a || !b) return false;
-  const sortedA = [...a].sort((x, y) => x.rankMin - y.rankMin);
-  const sortedB = [...b].sort((x, y) => x.rankMin - y.rankMin);
+  const sortedA = analysisTiers(a).sort((x, y) => x.rankMin - y.rankMin);
+  const sortedB = analysisTiers(b).sort((x, y) => x.rankMin - y.rankMin);
   if (sortedA.length !== sortedB.length) return false;
   for (let i = 0; i < sortedA.length; i++) {
     const ca = sortedA[i].rankMax - sortedA[i].rankMin + 1;
@@ -1270,7 +1276,7 @@ function renderRewardEfficiency(jobs) {
   if (!visible.length) { panel.style.display = "none"; return; }
   panel.style.display = "";
 
-  const tiers = (visible[0].rewardTiers || []);
+  const tiers = analysisTiers(visible[0].rewardTiers);
   let headHtml = '<tr><th rowspan="2">任务</th>';
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i];
@@ -1287,7 +1293,7 @@ function renderRewardEfficiency(jobs) {
 
   let bodyHtml = '';
   for (const j of visible) {
-    const jt = (j.rewardTiers || []);
+    const jt = analysisTiers(j.rewardTiers);
     const totalReward = jt.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
     const rr = j.ranges;
     const totalVol = rr.reduce((s, r) => s + (r.total || 0), 0);
