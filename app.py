@@ -2622,6 +2622,73 @@ def _parse_limited_rounds(tables: list[list[list[str]]]) -> list[dict[str, str]]
     return rounds
 
 
+_CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+
+
+def _parse_sprint_rewards(tables: list[list[list[str]]]) -> dict[str, list[dict[str, Any]]]:
+    """Parse per-round rank rewards from the 限时奖池 table, e.g. rows like
+    ['第1名', '12 BNB', '12 BNB'] under '第一轮统计时间'/'第二轮统计时间' columns."""
+    result: dict[str, list[dict[str, Any]]] = {}
+    for table in tables:
+        if not table or not table[0]:
+            continue
+        cols: list[tuple[int, int]] = []
+        for ci, cell in enumerate(table[0]):
+            m = _ROUND_CELL.match(cell or "")
+            if not m:
+                continue
+            g = str(m.group(1) or m.group(2) or "")
+            ri = _CN_NUM.get(g) or (int(g) if g.isdigit() else 0)
+            if ri:
+                cols.append((ri, ci))
+        if not cols:
+            continue
+        buckets: dict[int, list[dict[str, Any]]] = {ri: [] for ri, _ in cols}
+        for row in table[1:]:
+            if not row or not row[0]:
+                continue
+            rank = _parse_rank_cell(row[0])
+            if rank is None:
+                continue
+            rmin, rmax, is_remaining = rank
+            if is_remaining or rmax < 1:
+                continue
+            for ri, ci in cols:
+                if ci >= len(row):
+                    continue
+                num, _unit = _cell_amount_unit(row[ci])
+                if num is None:
+                    continue
+                amount = str(int(num)) if float(num) == int(num) else str(num)
+                buckets[ri].append({"rankMin": rmin, "rankMax": rmax, "amount": amount})
+        for ri, tiers in buckets.items():
+            key = f"sprint{ri}Tiers"
+            if tiers and key in ("sprint1Tiers", "sprint2Tiers") and key not in result:
+                result[key] = tiers
+    return result
+
+
+def _clean_sprint_tiers(raw: Any) -> list[dict[str, Any]]:
+    cleaned: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for t in raw:
+            if not isinstance(t, dict):
+                continue
+            try:
+                tmin = int(t.get("rankMin"))
+                tmax = int(t.get("rankMax"))
+            except (TypeError, ValueError):
+                continue
+            if tmin < 1 or tmax < tmin:
+                continue
+            amt = t.get("amount")
+            amt_str = str(amt) if isinstance(amt, (int, float)) else str(amt or "0").strip()
+            if not amt_str:
+                continue
+            cleaned.append({"rankMin": tmin, "rankMax": tmax, "amount": amt_str})
+    return cleaned
+
+
 def _parse_article(code: str) -> dict[str, Any]:
     payload = _fetch_article_detail(code)
     body = payload.get("body") or "{}"
@@ -2664,6 +2731,7 @@ def _parse_article(code: str) -> dict[str, Any]:
         if len(rounds) >= 2:
             result["sprint2Start"] = rounds[1]["start"]
             result["sprint2End"] = rounds[1]["end"]
+        result.update(_parse_sprint_rewards(tables))
     if reward.get("mode") == "total":
         result["totalReward"] = reward.get("totalReward")
         result["eligibleUsers"] = reward.get("eligibleUsers")
@@ -2776,6 +2844,8 @@ def _job_summary(job: dict) -> dict:
             "sprint2End": payload.get("sprint2End"),
             "sprint1ResourceId": payload.get("sprint1ResourceId"),
             "sprint2ResourceId": payload.get("sprint2ResourceId"),
+            "sprint1Tiers": payload.get("sprint1Tiers"),
+            "sprint2Tiers": payload.get("sprint2Tiers"),
             "sprintJobIds": payload.get("sprintJobIds"),
             "parentJobId": payload.get("parentJobId"),
             "sprintIndex": payload.get("sprintIndex"),
@@ -3555,6 +3625,13 @@ def api_update_job_params(job_id: str) -> Response:
                             p[k] = v
                         else:
                             return jsonify({"error": f"{k} 必须为数字"}), 400
+                for k in ("sprint1Tiers", "sprint2Tiers"):
+                    if k in body:
+                        cleaned_t = _clean_sprint_tiers(body.get(k))
+                        if cleaned_t:
+                            p[k] = cleaned_t
+                        else:
+                            p.pop(k, None)
                 total_reward = body.get("totalReward")
                 if total_reward:
                     p["totalReward"] = str(total_reward)
@@ -3632,6 +3709,13 @@ def api_create_sprint_jobs() -> Response:
                     pp[k] = v
                 else:
                     return jsonify({"error": f"{k} 必须为数字"}), 400
+        for k in ("sprint1Tiers", "sprint2Tiers"):
+            if k in body:
+                cleaned_t = _clean_sprint_tiers(body.get(k))
+                if cleaned_t:
+                    pp[k] = cleaned_t
+                else:
+                    pp.pop(k, None)
         pp.pop("limitedRounds", None)
         parent["updatedAt"] = datetime.now(timezone.utc).isoformat()
         save_jobs(jobs)
@@ -3647,18 +3731,21 @@ def api_create_sprint_jobs() -> Response:
             "rid2": pp.get("sprint2ResourceId"),
             "t1s": pp.get("sprint1Start"), "t1e": pp.get("sprint1End"),
             "t2s": pp.get("sprint2Start"), "t2e": pp.get("sprint2End"),
+            "tt1": pp.get("sprint1Tiers") or [], "tt2": pp.get("sprint2Tiers") or [],
         }
 
     rounds = [
-        (1, snapshot["rid1"], snapshot["t1s"], snapshot["t1e"]),
-        (2, snapshot["rid2"], snapshot["t2s"], snapshot["t2e"]),
+        (1, snapshot["rid1"], snapshot["t1s"], snapshot["t1e"], snapshot["tt1"]),
+        (2, snapshot["rid2"], snapshot["t2s"], snapshot["t2e"], snapshot["tt2"]),
     ]
+    tiers_by_round: dict[int, list] = {}
     created: list[dict[str, Any]] = []
     errors: list[str] = []
     link_ids: dict[str, str] = {}
-    for si, rid, start, end in rounds:
+    for si, rid, start, end, tiers in rounds:
         if not rid:
             continue
+        tiers_by_round[si] = tiers
         end_dt = _parse_sprint_dt(end)
         sched_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d %H:%M") if end_dt else ""
         sched_start = _parse_sprint_dt(start).strftime("%Y-%m-%d %H:%M") if _parse_sprint_dt(start) else ""
@@ -3673,6 +3760,7 @@ def api_create_sprint_jobs() -> Response:
             "proxy": snapshot["proxy"],
             "top": 50,
             "rewardToken": snapshot["rewardToken"],
+            "rewardTiers": tiers,
             "activityStart": sched_start,
             "activityEnd": sched_end,
             "parentJobId": job_id,
@@ -3707,6 +3795,9 @@ def api_create_sprint_jobs() -> Response:
                 pj = j.get("payload") or {}
                 if pj.get("parentJobId") == job_id and pj.get("sprintIndex"):
                     pj["sprintJobIds"] = merged
+                    t_list = tiers_by_round.get(pj.get("sprintIndex")) or []
+                    if t_list and not pj.get("rewardTiers"):
+                        pj["rewardTiers"] = t_list
                     j["updatedAt"] = datetime.now(timezone.utc).isoformat()
             save_jobs(jobs)
     return jsonify({"jobs": created, "errors": errors})

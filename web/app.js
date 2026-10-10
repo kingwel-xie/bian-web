@@ -254,6 +254,7 @@ async function startScrapeJob(resourceId, market, symbol, url, activityEnd, acti
 
 let _editJobId = null;
 let _editSprintTimes = null;
+let _editSprintTiers = null;
 let _editResourceId = "";
 
 function _sprintFrom(obj) {
@@ -268,6 +269,14 @@ function _sprintFrom(obj) {
 function normSprintTime(v) {
   const s = String(v || "").replace("T", " ").slice(0, 19);
   return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s) ? s + ":00" : s;
+}
+
+function _sprintTiersFrom(obj) {
+  if (!obj) return null;
+  const t1 = Array.isArray(obj.sprint1Tiers) ? obj.sprint1Tiers : [];
+  const t2 = Array.isArray(obj.sprint2Tiers) ? obj.sprint2Tiers : [];
+  if (!t1.length && !t2.length) return null;
+  return { t1, t2 };
 }
 
 function renderSprintSection() {
@@ -285,10 +294,23 @@ function renderSprintSection() {
   if (i2 && !i2.value.trim() && Number.isFinite(base)) i2.value = String(base + 4);
 }
 
+function renderSprintTiersPreview() {
+  const el = document.getElementById("sprintTiersPreview");
+  if (!el) return;
+  const fmt = (arr) => (arr && arr.length) ? arr.map((t) => `${t.rankMin === t.rankMax ? t.rankMin + "名" : t.rankMin + "-" + t.rankMax + "名"} ${t.amount}`).join(" · ") : "";
+  const t = _editSprintTiers || {};
+  const segs = [];
+  if (fmt(t.t1)) segs.push("S1: " + fmt(t.t1));
+  if (fmt(t.t2)) segs.push("S2: " + fmt(t.t2));
+  el.textContent = segs.length ? "🎁 轮次奖励（提取自公告，可在子任务配置中编辑） " + segs.join("　/　") : "";
+}
+
 function openEditModal(job) {
   _editJobId = job.id;
   const p = job.payload || {};
   _editSprintTimes = _sprintFrom(p);
+  _editSprintTiers = _sprintTiersFrom(p);
+  renderSprintTiersPreview();
   _editResourceId = String(p.resourceId || "");
   const sr1 = document.getElementById("editSprint1ResourceId");
   const sr2 = document.getElementById("editSprint2ResourceId");
@@ -400,6 +422,7 @@ document.getElementById("editCancelBtn").addEventListener("click", () => {
   document.getElementById("editModal").style.display = "none";
   _editJobId = null;
   _editSprintTimes = null;
+  _editSprintTiers = null;
 });
 
 document.getElementById("syncSprintsBtn").addEventListener("click", async () => {
@@ -420,6 +443,8 @@ document.getElementById("syncSprintsBtn").addEventListener("click", async () => 
         sprint2End: normSprintTime(val("editSprint2End")),
         sprint1ResourceId: val("editSprint1ResourceId"),
         sprint2ResourceId: val("editSprint2ResourceId"),
+        sprint1Tiers: (_editSprintTiers && _editSprintTiers.t1) || [],
+        sprint2Tiers: (_editSprintTiers && _editSprintTiers.t2) || [],
       }),
     });
     if (data.error) throw new Error(data.error);
@@ -522,10 +547,13 @@ function fillFromArticle(data) {
   }
   if (data.rewardMode === "rank" || data.rewardMode === "rank_last_volume") {
     _editSprintTimes = _sprintFrom(data);
+    _editSprintTiers = _sprintTiersFrom(data);
   } else if (data.rewardMode === "total") {
     _editSprintTimes = null;
+    _editSprintTiers = null;
   }
   renderSprintSection();
+  renderSprintTiersPreview();
   setModalRewardFromArticle(data);
 }
 
@@ -689,6 +717,8 @@ document.getElementById("editSaveBtn").addEventListener("click", async () => {
   body.sprint2End = normSprintTime(document.getElementById("editSprint2End")?.value || "");
   body.sprint1ResourceId = (document.getElementById("editSprint1ResourceId")?.value || "").trim();
   body.sprint2ResourceId = (document.getElementById("editSprint2ResourceId")?.value || "").trim();
+  body.sprint1Tiers = (_editSprintTiers && _editSprintTiers.t1) || [];
+  body.sprint2Tiers = (_editSprintTiers && _editSprintTiers.t2) || [];
   try {
     await api(`/api/jobs/${jobId}/params`, {
       method: "PUT",
