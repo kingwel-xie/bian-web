@@ -54,7 +54,7 @@ SPOT_KLINES = "https://api.binance.com/api/v3/klines"
 FSTREAM_WS = "wss://fstream.binance.com/ws"
 LIVE_KLINE_INTERVAL = "1m"
 DEFAULT_PROXY_PORTS = (7897, 7890, 7891, 10809, 1080, 8011)
-SCRAPE_TOP_DEFAULTS: dict[str, int] = {"um": 400, "spot": 1000, "saving": 1500, "sprint": 50}
+SCRAPE_TOP_DEFAULTS: dict[str, int] = {"um": 400, "spot": 1000, "saving": 1500, "sprint": 100}
 SCRAPE_PAGE_SIZE = 100
 
 _running_processes: dict[str, subprocess.Popen] = {}
@@ -3694,7 +3694,7 @@ def api_create_sprint_jobs() -> Response:
 
     Uses sprintXResourceId/Start/End from the request body (unsaved modal
     values allowed), persists them onto the parent payload, then creates one
-    scrape job per round (top=50) whose activityStart/activityEnd are the real
+    scrape job per round (top=100) whose activityStart/activityEnd are the real
     round window (same semantics as any other task). Links are stored back as
     sprintJobIds on the parent.
     """
@@ -3772,7 +3772,7 @@ def api_create_sprint_jobs() -> Response:
             "symbol": snapshot["symbol"],
             "token": snapshot["token"],
             "proxy": snapshot["proxy"],
-            "top": 50,
+            "top": 100,
             "rewardToken": snapshot["rewardToken"],
             "rewardTiers": tiers,
             "activityStart": act_start,

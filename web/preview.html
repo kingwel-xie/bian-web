@@ -459,6 +459,7 @@ let _deltaShowAbs = false;
 let _statsCache = null;
 let _totalVolCache = 0;
 let _totalDelCache = 0;
+let _summaryCache = null;
 let _trendData = null;
 let _trendTierIdx = -1;
 let _trendMode = "volume";
@@ -1028,8 +1029,9 @@ function renderRewardPanel(data, rows, forceShow) {
         const pct = _totalVolCache ? (s.total / _totalVolCache * 100).toFixed(2) + "%" : "—";
         const dr = _totalDelCache ? (s.sumDelta / _totalDelCache * 100).toFixed(2) + "%" : "—";
         return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmt(s.avgDelta, s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmt(s.medDelta, s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmt(s.q1Delta, s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmt(s.lastDelta, s.lastDeltaPct)}</td></tr>`;
-      }).join("") + `
-         <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      }).join("") + (_summaryCache
+        ? `<tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>${escapeHtml(_summaryCache.label)}</td><td class="num">${fmtVolume(_summaryCache.total)}</td><td class="num">${_summaryCache.pct}</td><td class="num">${_summaryCache.dr}</td><td class="num">${fmtVolume(_summaryCache.avg)}</td><td class="num">${fmtVolume(_summaryCache.med)}</td><td class="num">${fmtVolume(_summaryCache.q1)}</td><td class="num">${fmtVolume(_summaryCache.last)}</td></tr>`
+        : `<tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`);
     }
 
     function fmtVolume(v) {
@@ -1103,6 +1105,26 @@ function renderRewardPanel(data, rows, forceShow) {
     const totalVolume = stats.reduce((s, st) => s + st.total, 0);
     const totalDelta = stats.reduce((s, st) => s + st.sumDelta, 0);
     _statsCache = stats; _totalVolCache = totalVolume; _totalDelCache = totalDelta;
+    _summaryCache = null;
+    if (Number(preview.sprintIndex) > 0) {
+      const rest = allRows.slice(5);
+      const restCount = rest.length;
+      const restVol = rest.reduce((s, r) => s + r._g, 0);
+      const restDel = rest.reduce((s, r) => s + r._dg, 0);
+      const grades = rest.map(r => r._g).sort((a, b) => a - b);
+      const avg = restCount ? restVol / restCount : 0;
+      const med = restCount ? (restCount % 2 ? grades[Math.floor(restCount / 2)] : (grades[restCount / 2 - 1] + grades[restCount / 2]) / 2) : 0;
+      const q1 = restCount ? grades[Math.min(Math.floor(restCount * 0.25), grades.length - 1)] : 0;
+      const last = restCount ? rest[restCount - 1]._g : 0;
+      const topN = Math.max(allRows.length, 6);
+      _summaryCache = {
+        label: `剩余用户 6~${topN}`,
+        total: restVol,
+        pct: (totalVolume + restVol) ? (restVol / (totalVolume + restVol) * 100).toFixed(2) + "%" : "—",
+        dr: (totalDelta + restDel) ? (restDel / (totalDelta + restDel) * 100).toFixed(2) + "%" : "—",
+        avg, med, q1, last,
+      };
+    }
     _deltaShowAbs = ((preview.market || "").toLowerCase() === "um" || (preview.market || "").toLowerCase() === "saving");
     // Sync button active state
     document.querySelectorAll("#deltaFmtToggle .df-btn").forEach(b => {
