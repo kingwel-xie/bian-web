@@ -667,9 +667,8 @@ function renderRewardPanel(data, rows, forceShow) {
       const ndUrl = preview.url;
       document.getElementById("title").innerHTML = `${escapeHtml(ndHeading)}${ndUrl ? ` <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
       const ndActS = preview.activityStart, ndActE = preview.activityEnd;
-      const ndSprintChild = Number(preview.sprintIndex) > 0 && (preview.sprintStart || preview.sprintEnd);
-      document.getElementById("actTime").textContent = ndSprintChild
-        ? `轮次时间：${String(preview.sprintStart || "—").slice(0, 16)} ~ ${String(preview.sprintEnd || "—").slice(0, 16)}`
+      document.getElementById("actTime").textContent = Number(preview.sprintIndex) > 0
+        ? `轮次时间：${String(ndActS || "—").slice(0, 16)} ~ ${String(ndActE || "—").slice(0, 16)}`
         : (ndActS || ndActE ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "");
       setLimitedRounds(preview);
       setSprintChips(preview);
@@ -730,9 +729,8 @@ function renderRewardPanel(data, rows, forceShow) {
     const actS = preview.activityStart, actE = preview.activityEnd;
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
-    const sprintChild = Number(preview.sprintIndex) > 0 && (preview.sprintStart || preview.sprintEnd);
-    actTimeEl.textContent = sprintChild
-      ? `轮次时间：${String(preview.sprintStart || "—").slice(0, 16)} ~ ${String(preview.sprintEnd || "—").slice(0, 16)}`
+    actTimeEl.textContent = Number(preview.sprintIndex) > 0
+      ? `轮次时间：${String(actS || "—").slice(0, 16)} ~ ${String(actE || "—").slice(0, 16)}`
       : (actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "");
     setLimitedRounds(preview);
       setSprintChips(preview);

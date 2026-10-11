@@ -801,19 +801,17 @@ function renderJobCard(job, now) {
   const displayName = rid ? `${jobName}  [${rid}]` : jobName;
   const activityEnd = payload.activityEnd;
   const activityStart = payload.activityStart;
-  const sprintChild = !!payload.sprintIndex && !!(payload.sprintStart || payload.sprintEnd);
-  const countdownEnd = (sprintChild && payload.sprintEnd) || activityEnd;
-  const endDate = countdownEnd ? new Date(String(countdownEnd).replace(" ", "T") + "+08:00") : null;
+  const sprintChild = !!payload.sprintIndex && !!payload.parentJobId;
+  const endDate = activityEnd ? new Date(String(activityEnd).replace(" ", "T") + "+08:00") : null;
   const isExpired = endDate && endDate <= new Date(now - 86400000);
   const expiredClass = isExpired ? " expired" : "";
-  const startSrc = sprintChild ? (payload.sprintStart || activityStart) : activityStart;
-  const startDate = startSrc ? new Date(String(startSrc).replace(" ", "T") + "+08:00") : null;
+  const startDate = activityStart ? new Date(String(activityStart).replace(" ", "T") + "+08:00") : null;
   const notStarted = !!startDate && startDate.getTime() > now;
   const preStartLabel = notStarted && job.status !== "running" && job.status !== "queued";
   const statusZh = preStartLabel ? "未开始" : ({ completed: "执行成功", running: "运行中", queued: "排队中", waiting: "待抓取", failed: "失败" }[job.status] || job.status);
   const snapshotTs = job.latestSnapshot;
-  const actTimeText = payload.sprintIndex && (payload.sprintStart || payload.sprintEnd)
-    ? `轮次时间：${String(payload.sprintStart || "—").slice(0, 16)} ~ ${String(payload.sprintEnd || "—").slice(0, 16)}`
+  const actTimeText = sprintChild
+    ? `轮次时间：${String(activityStart || "—").slice(0, 16)} ~ ${String(activityEnd || "—").slice(0, 16)}`
     : (activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "");
   let countdownText = "", countdownCls = "job-countdown";
   if (notStarted && startDate) {

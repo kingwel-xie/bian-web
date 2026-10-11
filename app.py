@@ -2855,8 +2855,6 @@ def _job_summary(job: dict) -> dict:
             "sprintJobIds": payload.get("sprintJobIds"),
             "parentJobId": payload.get("parentJobId"),
             "sprintIndex": payload.get("sprintIndex"),
-            "sprintStart": payload.get("sprintStart"),
-            "sprintEnd": payload.get("sprintEnd"),
             "top": payload.get("top"),
         },
         "snapshotCount": len(job.get("snapshots") or []),
@@ -3696,8 +3694,8 @@ def api_create_sprint_jobs() -> Response:
 
     Uses sprintXResourceId/Start/End from the request body (unsaved modal
     values allowed), persists them onto the parent payload, then creates one
-    scrape job per round (top=50, activityEnd=round end +1d so the daily
-    loop keeps it until the final state settles). Links are stored back as
+    scrape job per round (top=50) whose activityStart/activityEnd are the real
+    round window (same semantics as any other task). Links are stored back as
     sprintJobIds on the parent.
     """
     body = request.get_json(force=True) or {}
@@ -3761,9 +3759,10 @@ def api_create_sprint_jobs() -> Response:
         if not rid:
             continue
         tiers_by_round[si] = tiers
+        start_dt = _parse_sprint_dt(start)
         end_dt = _parse_sprint_dt(end)
-        sched_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d %H:%M") if end_dt else ""
-        sched_start = _parse_sprint_dt(start).strftime("%Y-%m-%d %H:%M") if _parse_sprint_dt(start) else ""
+        act_start = start_dt.strftime("%Y-%m-%d %H:%M:%S") if start_dt else (start or "")
+        act_end = end_dt.strftime("%Y-%m-%d %H:%M:%S") if end_dt else (end or "")
         sp_payload = {
             "mode": "scrape",
             "resourceId": rid,
@@ -3776,12 +3775,10 @@ def api_create_sprint_jobs() -> Response:
             "top": 50,
             "rewardToken": snapshot["rewardToken"],
             "rewardTiers": tiers,
-            "activityStart": sched_start,
-            "activityEnd": sched_end,
+            "activityStart": act_start,
+            "activityEnd": act_end,
             "parentJobId": job_id,
             "sprintIndex": si,
-            "sprintStart": start or "",
-            "sprintEnd": end or "",
         }
         try:
             job = create_job(sp_payload, source="sprint", queue=False)
@@ -4204,18 +4201,10 @@ def _build_preview_base(
     job_name = job.get("name") or payload.get("name") or payload.get("resourceId") or job.get("id", "")
     rid = str(payload.get("resourceId") or "").strip()
     preview["taskName"] = f"{job_name} [{rid}]" if rid else job_name
-    is_sprint = str(payload.get("market") or "").lower() == "sprint"
-    # sprint 子任务的 activityStart/End 是抓取调度窗（轮次止+1d），展示用真实轮次窗口
-    preview["activityStart"] = (
-        payload.get("sprintStart") or payload.get("activityStart")
-    ) if is_sprint else payload.get("activityStart")
+    preview["activityStart"] = payload.get("activityStart")
     for _k in SPRINT_FIELDS:
         preview[_k] = payload.get(_k)
-    preview["sprintStart"] = payload.get("sprintStart")
-    preview["sprintEnd"] = payload.get("sprintEnd")
-    preview["activityEnd"] = (
-        payload.get("sprintEnd") or payload.get("activityEnd")
-    ) if is_sprint else payload.get("activityEnd")
+    preview["activityEnd"] = payload.get("activityEnd")
     preview["snapshots"] = [
         {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
         for s in snapshots
@@ -4326,10 +4315,8 @@ def api_job_preview(job_id: str) -> Response:
                 "symbol": payload.get("symbol", []),
                 "token": payload.get("token", ""),
                 "url": payload.get("url", ""),
-                "activityStart": (payload.get("sprintStart") or payload.get("activityStart")) if str(payload.get("market") or "").lower() == "sprint" else payload.get("activityStart"),
-                "activityEnd": (payload.get("sprintEnd") or payload.get("activityEnd")) if str(payload.get("market") or "").lower() == "sprint" else payload.get("activityEnd"),
-                "sprintStart": payload.get("sprintStart"),
-                "sprintEnd": payload.get("sprintEnd"),
+                "activityStart": payload.get("activityStart"),
+                "activityEnd": payload.get("activityEnd"),
                 **{k: payload.get(k) for k in SPRINT_FIELDS},
                 "rewardToken": payload.get("rewardToken", ""),
                 "rewardAmount": payload.get("rewardAmount", ""),
@@ -4531,13 +4518,7 @@ def api_job_trend(job_id: str) -> Response:
     resp: dict[str, Any] = {"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]}
     # pctTrend: windowed analysis when hours param is given
     if hours_param and hours_param > 0 and result_snapshots:
-        # sprint 子任务用真实轮次止作为窗口基准（activityEnd 为调度窗=轮次止+1d）
-        act_end_str = (
-            payload.get("sprintEnd")
-            if str(payload.get("market") or "").lower() == "sprint" and payload.get("sprintEnd")
-            else payload.get("activityEnd")
-        ) or ""
-        act_end_str = str(act_end_str).strip()
+        act_end_str = str(payload.get("activityEnd") or "").strip()
         if act_end_str:
             try:
                 clean = act_end_str.replace("T", " ")
@@ -5724,12 +5705,7 @@ def api_job_delta_analysis(job_id: str) -> Response:
     symbols = [s.strip() for s in query_symbol.replace(",", " ").split() if s.strip()]
     market_type = str(payload.get("market") or "").lower()
     klines_url = SPOT_KLINES if market_type in ("spot", "sprint") else FAPI_KLINES
-    # sprint 子任务用真实轮次结束时间作为数据/预测边界（payload.activityEnd 是抓取调度窗）
-    act_end_source = (
-        payload.get("sprintEnd")
-        if market_type == "sprint" and payload.get("sprintEnd")
-        else payload.get("activityEnd")
-    )
+    act_end_source = payload.get("activityEnd")
 
     snapshots = job.get("snapshots") or []
     if len(snapshots) < 2:
