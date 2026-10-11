@@ -1118,7 +1118,7 @@ function renderRewardPanel(data, rows, forceShow) {
       const last = restCount ? rest[restCount - 1]._g : 0;
       const topN = Math.max(allRows.length, 6);
       _summaryCache = {
-        label: `剩余用户 6~${topN}`,
+        label: `6~${topN}`,
         total: restVol,
         pct: (totalVolume + restVol) ? (restVol / (totalVolume + restVol) * 100).toFixed(2) + "%" : "—",
         dr: (totalDelta + restDel) ? (restDel / (totalDelta + restDel) * 100).toFixed(2) + "%" : "—",
