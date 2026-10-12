@@ -4205,6 +4205,7 @@ def _build_preview_base(
     for _k in SPRINT_FIELDS:
         preview[_k] = payload.get(_k)
     preview["activityEnd"] = payload.get("activityEnd")
+    preview["top"] = payload.get("top") or preview.get("top")
     preview["snapshots"] = [
         {"timestamp": s["timestamp"], "rows": s.get("rows"), "sum": s.get("sum")}
         for s in snapshots
@@ -4220,7 +4221,12 @@ def _build_preview_base(
             r_tiers = payload.get("rewardTiers") or []
             r_eligible = int(payload.get("eligibleUsers") or 0)
             if r_mode in ("rank", "rank_last_volume") and r_tiers:
-                ranges = _ranges_from_tiers(r_tiers, str(payload.get("market") or "").lower() != "sprint")
+                is_sprint = str(payload.get("market") or "").lower() == "sprint"
+                ranges = _ranges_from_tiers(r_tiers, not is_sprint)
+                if is_sprint:
+                    top_n = int(payload.get("top") or 0)
+                    if top_n > 5:
+                        ranges.append((f"6~{top_n}", 6, top_n))
             elif r_mode == "total" and r_eligible > 0:
                 ranges = [(f"1~{r_eligible}", 1, r_eligible)]
             else:
