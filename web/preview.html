@@ -259,6 +259,43 @@
         </div>
       </div>
     </div>
+    <div id="prizeBoardPanel" class="reward-panel" style="display:none">
+      <h3>实时奖金榜 <span id="prizeBoardToken" style="font-weight:400;font-size:12px">—</span></h3>
+      <div class="reward-body" id="prizeBoardBody" style="flex-direction:column;align-items:stretch">
+        <div id="prizeBoardMeta" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
+        <table class="stats-table" id="prizeBoardTable" style="width:100%;min-width:auto">
+          <colgroup>
+            <col style="width:56px" />
+            <col style="width:180px" />
+            <col style="width:100px" />
+            <col style="width:70px" />
+            <col style="width:100px" />
+            <col style="width:70px" />
+            <col style="width:100px" />
+            <col style="width:110px" />
+            <col style="width:110px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>名次</th><th>昵称</th>
+              <th class="num">总成交量</th>
+              <th class="num">第1轮</th>
+              <th class="num">成交量</th>
+              <th class="num">第2轮</th>
+              <th class="num">成交量</th>
+              <th class="num">合计</th>
+              <th class="num">合计 USD</th>
+            </tr>
+          </thead>
+          <tbody id="prizeBoardRows"></tbody>
+        </table>
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:4px">
+          <div class="reward-item"><div class="label">前20名奖金总额</div><div class="value" id="prizeBoardTotal">—</div></div>
+          <div class="reward-item"><div class="label">当前价格</div><div class="value" id="prizeBoardPrice">—</div></div>
+          <button id="refreshPrizeBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+        </div>
+      </div>
+    </div>
     <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
       <h3>分团队统计</h3>
       <table class="stats-table">
@@ -636,6 +673,87 @@ function renderRewardPanel(data, rows, forceShow) {
     document.getElementById("refreshRewardBtn").addEventListener("click", () => updateReward(true));
     if (rewardToken && (useTotal || (useTiers ? rewardTiers.some(t => parseFloat(t.amount) > 0) : rewardAmount > 0))) updateReward(false);
 }
+
+function initPrizeBoard(jobId) {
+    const panel = document.getElementById("prizeBoardPanel");
+    if (!panel) return;
+    const fmtNum = (v, d) => {
+      if (v == null || !Number.isFinite(Number(v))) return "—";
+      return Number(v).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: d == null ? 2 : d });
+    };
+    const fmtVol = (v) => {
+      if (v == null || !Number.isFinite(Number(v))) return "—";
+      v = Number(v);
+      if (v >= 1000000000) return (v / 1000000000).toFixed(2) + "B";
+      if (v >= 1000000) return (v / 1000000).toFixed(2) + "M";
+      if (v >= 1000) return (v / 1000).toFixed(2) + "K";
+      return v.toFixed(2);
+    };
+    const fmtRound = (s) => {
+      if (!s || s.rank == null) return '<span style="color:var(--muted)">—</span>';
+      return String(s.rank);
+    };
+    async function load() {
+      panel.style.display = "";
+      document.getElementById("prizeBoardRows").innerHTML =
+        '<tr><td colspan="9" class="empty">加载中...</td></tr>';
+      let data;
+      try {
+        const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/prize-board");
+        data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.error || "加载失败");
+      } catch (err) {
+        document.getElementById("prizeBoardRows").innerHTML =
+          `<tr><td colspan="9" class="empty">加载失败：${escapeHtml(err.message)}</td></tr>`;
+        return;
+      }
+      const token = (data.rewardToken || "").toUpperCase();
+      const price = data.priceUsd != null ? Number(data.priceUsd) : null;
+      document.getElementById("prizeBoardToken").textContent = token || "—";
+
+      const rows = data.rows || [];
+      const maxRank = Math.min(20, rows.length);
+      const body = rows.map((r) => {
+        const isLast = r.rank === maxRank;
+        const style = isLast ? ' style="border-bottom:2px solid var(--accent)"' : "";
+        const usd = price != null ? r.total * price : null;
+        const round1 = (r.sprints || [])[0];
+        const round2 = (r.sprints || [])[1];
+        return `<tr${style}>`
+          + `<td>${r.rank}</td>`
+          + `<td title="${escapeHtml(r.userId || "")}">${escapeHtml(r.nickname || "")}</td>`
+          + `<td class="num">${fmtVol(r.grade)}</td>`
+          + `<td class="num">${fmtRound(round1)}</td>`
+          + `<td class="num">${fmtVol(round1 && round1.grade)}</td>`
+          + `<td class="num">${fmtRound(round2)}</td>`
+          + `<td class="num">${fmtVol(round2 && round2.grade)}</td>`
+          + `<td class="num" style="font-weight:700">${fmtNum(r.total, 2)}</td>`
+          + `<td class="num">${usd != null ? "$" + usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>`
+          + `</tr>`;
+      }).join("");
+      document.getElementById("prizeBoardRows").innerHTML = body || '<tr><td colspan="9" class="empty">暂无数据</td></tr>';
+
+      const totalUsd = price != null ? data.total * price : null;
+      document.getElementById("prizeBoardTotal").innerHTML =
+        fmtNum(data.total, 2) + " " + token
+        + (totalUsd != null ? ` <span style="color:var(--muted);font-weight:400">(≈ $${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>` : "");
+      document.getElementById("prizeBoardPrice").textContent =
+        price != null ? "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : "—";
+
+      const metas = [];
+      if (data.asOf) metas.push("主任务数据：" + String(data.asOf).replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1 $2:$3:$4"));
+      for (const s of (data.sprints || [])) {
+        if (!s.jobId) continue;
+        const ts = s.snapshotTs
+          ? String(s.snapshotTs).replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1 $2:$3:$4")
+          : (s.status === "running" || s.status === "queued" ? "抓取中" : "无快照");
+        metas.push(`第${s.index}轮数据：${ts}`);
+      }
+      document.getElementById("prizeBoardMeta").textContent = metas.join("　·　");
+    }
+    document.getElementById("refreshPrizeBtn").addEventListener("click", load);
+    load();
+  }
 
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -1553,6 +1671,11 @@ function renderRewardPanel(data, rows, forceShow) {
     loadDeltaBtn.addEventListener("click", loadDeltaAnalysis);
     deltaSymbolInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadDeltaAnalysis(); });
     renderRewardPanel(preview, allRows);
+
+    // --- Realtime prize leaderboard (tournament parent only) ---
+    if (preview.sprintJobIds && !preview.parentJobId) {
+      initPrizeBoard(jobId);
+    }
 
     // --- Trend chart ---
     const _activityEnd = preview.activityEnd;

@@ -4422,6 +4422,184 @@ def api_job_preview(job_id: str) -> Response:
         return jsonify({"error": str(exc)}), 500
 
 
+def _norm_nickname(value) -> str:
+    """Normalize a nickname for cross-leaderboard matching (drop all whitespace)."""
+    return re.sub(r"\s+", "", str(value or ""))
+
+
+def _latest_snapshot_entry(job: dict) -> dict | None:
+    """Return the snapshot entry backing the latest snapshot data."""
+    result = job.get("result")
+    if job.get("status") == "completed" and isinstance(result, list) and result:
+        return result[0] if isinstance(result[0], dict) else None
+    snaps = job.get("snapshots") or []
+    return snaps[-1] if snaps and isinstance(snaps[-1], dict) else None
+
+
+def _reward_share_for_rank(payload: dict, data: dict, rank: int, volume) -> float | None:
+    """Per-user reward for a rank based on payload reward tiers.
+
+    Fixed tiers share their pool evenly across the rank span; the last tier of a
+    rank_last_volume job is volume-proportional (per-10k rate, optional cap).
+    Returns None when no tiers are configured, 0.0 when the rank falls outside
+    all configured tiers.
+    """
+    tiers = [t for t in (payload.get("rewardTiers") or []) if isinstance(t, dict)]
+    if not tiers:
+        return None
+    mode = (payload.get("rewardMode") or "").strip()
+    last_idx = _last_tier_index(tiers)
+    for i, t in enumerate(tiers):
+        try:
+            rmin = int(t.get("rankMin") or 0)
+            rmax = int(t.get("rankMax") or 0)
+            amount = float(t.get("amount") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not (rmin <= rank <= rmax):
+            continue
+        if mode == "rank_last_volume" and i == last_idx:
+            rate = _compute_last_tier_rate(payload, data)
+            if rate and rate.get("per10k") is not None:
+                try:
+                    per = float(rate["per10k"]) * (float(volume or 0) / 10000.0)
+                except (TypeError, ValueError):
+                    return None
+                cap = rate.get("cap")
+                if cap is not None:
+                    per = min(per, float(cap))
+                return per
+            return None
+        count = rmax - rmin + 1
+        return (amount / count) if count > 0 else None
+    return 0.0
+
+
+@app.get("/api/jobs/<job_id>/prize-board")
+def api_job_prize_board(job_id: str) -> Response:
+    """Realtime prize leaderboard for a tournament's top-20 main leaderboard.
+
+    For each of the parent job's latest top-20 rows, sums the main leaderboard
+    reward (by rank from the tier config) with any subtask (sprint round) reward
+    where the same user appears in that round's latest ranking.
+    """
+    jobs = load_jobs()
+    job = next((j for j in jobs if j.get("id") == job_id), None)
+    if not job:
+        return jsonify({"error": "任务不存在"}), 404
+    payload = job.get("payload") or {}
+    data = _latest_job_snapshot_data(job)
+    rows = data.get("rows") if isinstance(data, dict) else []
+    if not isinstance(rows, list):
+        rows = []
+
+    def _seq(r):
+        try:
+            return int(r.get("sequence") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    rows = [r for r in rows if isinstance(r, dict)]
+    rows.sort(key=_seq)
+    top_n = 20
+    top_rows = rows[:top_n]
+
+    token = (payload.get("rewardToken", "") or "").strip().upper()
+    price = get_token_price(token, payload.get("activityEnd", ""))
+    entry = _latest_snapshot_entry(job)
+    as_of = entry.get("timestamp") if isinstance(entry, dict) else None
+
+    sprint_ids = payload.get("sprintJobIds") or {}
+    if not isinstance(sprint_ids, dict):
+        sprint_ids = {}
+    sprint_meta: list[dict] = []
+    sprint_maps: dict[int, tuple[dict, dict, dict]] = {}
+    for si in (1, 2):
+        sid = sprint_ids.get(f"sprint{si}")
+        info = {
+            "index": si,
+            "jobId": sid or None,
+            "status": None,
+            "snapshotTs": None,
+            "start": payload.get(f"sprint{si}Start"),
+            "end": payload.get(f"sprint{si}End"),
+        }
+        if sid:
+            child = next((j for j in jobs if j.get("id") == sid), None)
+            if child:
+                info["status"] = child.get("status")
+                cdata = _latest_job_snapshot_data(child)
+                centry = _latest_snapshot_entry(child)
+                info["snapshotTs"] = centry.get("timestamp") if isinstance(centry, dict) else None
+                crows = cdata.get("rows") if isinstance(cdata, dict) else []
+                cmap: dict[str, dict] = {}
+                if isinstance(crows, list):
+                    for cr in crows:
+                        if not isinstance(cr, dict):
+                            continue
+                        key = _norm_nickname(cr.get("nickName") or cr.get("nickname"))
+                        if key and key not in cmap:
+                            cmap[key] = cr
+                        uid = str(cr.get("userId") or "").strip()
+                        if uid:
+                            cmap.setdefault("uid:" + uid, cr)
+                sprint_maps[si] = (child, cdata, cmap)
+        sprint_meta.append(info)
+
+    out_rows: list[dict] = []
+    grand = 0.0
+    for r in top_rows:
+        rank = _seq(r)
+        volume = r.get("tradingVolume")
+        main = _reward_share_for_rank(payload, data, rank, volume)
+        if main is None:
+            main = 0.0
+        nickname = r.get("nickName") or r.get("nickname") or ""
+        user_id = r.get("userId") or ""
+        key = _norm_nickname(nickname)
+        uid_key = ("uid:" + str(user_id).strip()) if user_id else None
+
+        sprints = []
+        for si in (1, 2):
+            item = {"index": si, "rank": None, "prize": None, "grade": None}
+            if si in sprint_maps:
+                child, cdata, cmap = sprint_maps[si]
+                cr = (cmap.get(key) if key else None) or (cmap.get(uid_key) if uid_key else None)
+                if cr:
+                    crank = _seq(cr)
+                    prize = _reward_share_for_rank(child.get("payload") or {}, cdata, crank, cr.get("tradingVolume"))
+                    item["rank"] = crank
+                    item["prize"] = prize if prize is not None else 0.0
+                    item["grade"] = cr.get("grade", cr.get("tradingVolume"))
+            sprints.append(item)
+
+        total = main + sum((s["prize"] or 0.0) for s in sprints)
+        grand += total
+        out_rows.append({
+            "rank": rank,
+            "nickname": nickname,
+            "userId": user_id,
+            "volume": volume,
+            "grade": r.get("grade", volume),
+            "main": main,
+            "sprints": sprints,
+            "total": total,
+        })
+
+    return jsonify({
+        "jobId": job.get("id"),
+        "name": job.get("name") or payload.get("name") or "",
+        "rewardToken": token,
+        "rewardMode": payload.get("rewardMode"),
+        "priceUsd": price,
+        "asOf": as_of,
+        "topN": top_n,
+        "total": grand,
+        "sprints": sprint_meta,
+        "rows": out_rows,
+    })
+
+
 @app.get("/api/jobs/<job_id>/trend")
 def api_job_trend(job_id: str) -> Response:
     """Return per-tier statistics across all snapshots for a job.
