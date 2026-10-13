@@ -23,6 +23,7 @@ email.env
 *.csv
 *.xlsx
 *.log
+user_identity_db.json
 .chromium-temp/
 nul
 playwright.tgz
