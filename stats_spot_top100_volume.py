@@ -63,14 +63,37 @@ def volume_of(r):
     return r.get("tradingVolume") or r.get("grade") or 0
 
 
+def load_user_map(path):
+    """读取 stats_spot_users.csv，返回 {(userId, 昵称): (userId, 用户序号, 全部昵称列表)}。
+
+    用于把脱敏 userId（掩码）按真实用户拆分：同一掩码下不同用户，靠昵称区分。
+    """
+    if not path or not os.path.exists(path):
+        return {}
+    m = {}
+    with open(path, encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            uid = row.get("用户ID(掩码)") or ""
+            gi = row.get("用户序号") or ""
+            nicks = [n for n in (row.get("昵称列表(按首次出现)") or "").split(" | ") if n]
+            for n in nicks:
+                m[(uid, n)] = (uid, gi, nicks)
+    return m
+
+
 def main():
     ap = argparse.ArgumentParser(description="SPOT 榜单前 N 名成交量统计")
     ap.add_argument("--after", default="2026-09-18", help="结束日期下限(含当天 18:00 之后), 空串=不限")
     ap.add_argument("--top", type=int, default=100, help="每榜统计前多少名")
     ap.add_argument("--market", default="spot", help="market 过滤, 默认 spot")
+    ap.add_argument("--users-csv", default="stats_spot_users.csv", help="用户拆分表(默认 stats_spot_users.csv)")
     ap.add_argument("--outdir", default=".", help="CSV 输出目录")
     ap.add_argument("--data-root", default=os.environ.get("DATA_ROOT", DEFAULT_DATA_ROOT))
     args = ap.parse_args()
+
+    users_csv = args.users_csv if os.path.isabs(args.users_csv) else os.path.join(args.outdir, args.users_csv)
+    user_map = load_user_map(users_csv)
+    print(f"载入用户拆分表: {users_csv}  ({len(user_map)} 个(用户ID,昵称)映射)")
 
     end_after = None
     if args.after:
@@ -89,12 +112,28 @@ def main():
         task_rows.append((q, len(rows), sum(volume_of(r) for r in rows)))
         for r in rows:
             uid = r.get("userId") or ""
+            nick = r.get("nickName") or ""
             v = volume_of(r)
-            cur = user_vol.setdefault(uid, {"vol": 0.0, "nick": "", "peak": -1.0})
+            ent = user_map.get((uid, nick))
+            if ent:
+                key_uid, key_gi = ent[0], ent[1]
+                ukey = f"{key_uid}#{key_gi}"
+            else:
+                key_uid, key_gi, ukey = uid, "0", uid
+            cur = user_vol.setdefault(
+                ukey,
+                {"uid": key_uid, "gi": key_gi, "vol": 0.0, "boards": set(), "nicks": set(),
+                 "all_nicks": set(), "peak": -1.0, "nick": ""},
+            )
             cur["vol"] += v
+            cur["boards"].add(q["name"])
+            if nick:
+                cur["nicks"].add(nick)
+            if ent:
+                cur["all_nicks"].update(ent[2])
             if v > cur["peak"]:
                 cur["peak"] = v
-                cur["nick"] = r.get("nickName") or cur["nick"]
+                cur["nick"] = nick or cur["nick"]
 
     total = sum(t[2] for t in task_rows)
     ranking = sorted(user_vol.items(), key=lambda kv: -kv[1]["vol"])
@@ -108,10 +147,10 @@ def main():
 
     print()
     print(f"=== 按用户合计排名（共 {len(ranking)} 个用户）===")
-    print(f"{'排名':>5}  {'用户ID':<16}{'昵称':<24}{'总成交量':>18}{'占比':>8}")
-    print("-" * 76)
-    for i, (uid, cu) in enumerate(ranking, 1):
-        print(f"{i:>5}  {uid:<16}{cu['nick'][:22]:<24}{cu['vol']:>18,.0f}{cu['vol'] / total * 100:>7.2f}%")
+    print(f"{'排名':>5}  {'用户ID':<14}{'用户#':>5}  {'昵称':<24}{'总成交量':>18}{'占比':>8}")
+    print("-" * 80)
+    for i, (ukey, cu) in enumerate(ranking, 1):
+        print(f"{i:>5}  {cu['uid']:<14}{cu['gi']:>5}  {cu['nick'][:22]:<24}{cu['vol']:>18,.0f}{cu['vol'] / total * 100:>7.2f}%")
 
     os.makedirs(args.outdir, exist_ok=True)
     task_csv = os.path.join(args.outdir, "stats_spot_top100_tasks.csv")
@@ -125,9 +164,15 @@ def main():
     user_csv = os.path.join(args.outdir, "stats_spot_top100_user_volume.csv")
     with open(user_csv, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["排名", "用户ID", "昵称", "总成交量", "占比"])
-        for i, (uid, cu) in enumerate(ranking, 1):
-            w.writerow([i, uid, cu["nick"], round(cu["vol"], 2), f"{cu['vol'] / total * 100:.2f}%"])
+        w.writerow(["排名", "用户ID", "用户序号", "昵称", "全部昵称", "本期昵称", "总成交量", "榜单数", "占比"])
+        for i, (ukey, cu) in enumerate(ranking, 1):
+            w.writerow([
+                i, cu["uid"], cu["gi"], cu["nick"],
+                " | ".join(sorted(cu["all_nicks"])) or cu["nick"],
+                " | ".join(sorted(cu["nicks"])),
+                round(cu["vol"], 2), len(cu["boards"]),
+                f"{cu['vol'] / total * 100:.2f}%",
+            ])
 
     print(f"\n按榜单已写入 {task_csv}\n按用户排名已写入 {user_csv}")
 
