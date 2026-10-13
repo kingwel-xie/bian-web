@@ -4564,7 +4564,8 @@ def api_job_prize_board(job_id: str) -> Response:
             item = {"index": si, "rank": None, "prize": None, "grade": None}
             if si in sprint_maps:
                 child, cdata, cmap = sprint_maps[si]
-                cr = (cmap.get(key) if key else None) or (cmap.get(uid_key) if uid_key else None)
+                # Match by userId first (users rename between rounds), nickname as fallback.
+                cr = (cmap.get(uid_key) if uid_key else None) or (cmap.get(key) if key else None)
                 if cr:
                     crank = _seq(cr)
                     prize = _reward_share_for_rank(child.get("payload") or {}, cdata, crank, cr.get("tradingVolume"))
