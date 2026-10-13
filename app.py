@@ -4543,6 +4543,9 @@ def api_job_prize_board(job_id: str) -> Response:
                         uid = str(cr.get("userId") or "").strip()
                         if uid:
                             cmap.setdefault("uid:" + uid, cr)
+                        opt = str(cr.get("optInId") or "").strip()
+                        if opt:
+                            cmap.setdefault("opt:" + opt, cr)
                 sprint_maps[si] = (child, cdata, cmap)
         sprint_meta.append(info)
 
@@ -4556,16 +4559,21 @@ def api_job_prize_board(job_id: str) -> Response:
             main = 0.0
         nickname = r.get("nickName") or r.get("nickname") or ""
         user_id = r.get("userId") or ""
+        opt_id = str(r.get("optInId") or "").strip()
         key = _norm_nickname(nickname)
         uid_key = ("uid:" + str(user_id).strip()) if user_id else None
+        opt_key = ("opt:" + opt_id) if opt_id else None
 
         sprints = []
         for si in (1, 2):
             item = {"index": si, "rank": None, "prize": None, "grade": None}
             if si in sprint_maps:
                 child, cdata, cmap = sprint_maps[si]
-                # Match by userId first (users rename between rounds), nickname as fallback.
-                cr = (cmap.get(uid_key) if uid_key else None) or (cmap.get(key) if key else None)
+                # Match by optInId first (stable & collision-free within a competition),
+                # then userId (users rename between rounds), then nickname.
+                cr = (cmap.get(opt_key) if opt_key else None) \
+                    or (cmap.get(uid_key) if uid_key else None) \
+                    or (cmap.get(key) if key else None)
                 if cr:
                     crank = _seq(cr)
                     prize = _reward_share_for_rank(child.get("payload") or {}, cdata, crank, cr.get("tradingVolume"))
