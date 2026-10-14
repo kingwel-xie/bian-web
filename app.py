@@ -3999,6 +3999,49 @@ def _last_tier_index(tiers: list) -> int:
     return best
 
 
+def _resolve_tier_index(tiers: list, rec: dict) -> int:
+    """把一个奖励记录解析为当前 rewardTiers 的下标。
+
+    记录里存的是创建时刻的 tierIndex（数组下标），当后来在数组前部插入新档
+    （例如给锦标赛补 1~5 名奖励）时下标会整体偏移，导致记录错位。因此优先用记录
+    自带的 rankMin/rankMax 按档位区间匹配；匹配不到再退回原 tierIndex。
+    """
+    tiers = tiers or []
+    try:
+        rmin = int(rec.get("rankMin"))
+        rmax = int(rec.get("rankMax"))
+    except (TypeError, ValueError):
+        rmin = rmax = None
+    if rmin is not None and rmax is not None:
+        for i, t in enumerate(tiers):
+            if not isinstance(t, dict):
+                continue
+            try:
+                if int(t.get("rankMin", 0) or 0) == rmin and int(t.get("rankMax", 0) or 0) == rmax:
+                    return i
+            except (TypeError, ValueError):
+                continue
+        for i, t in enumerate(tiers):
+            if not isinstance(t, dict):
+                continue
+            try:
+                if int(t.get("rankMin", 0) or 0) == rmin:
+                    return i
+            except (TypeError, ValueError):
+                continue
+    try:
+        ti = int(rec.get("tierIndex"))
+    except (TypeError, ValueError):
+        return -1
+    if 0 <= ti < len(tiers) and isinstance(tiers[ti], dict):
+        try:
+            if rmin is None or int(tiers[ti].get("rankMin", 0) or 0) == rmin:
+                return ti
+        except (TypeError, ValueError):
+            return ti
+    return ti
+
+
 def _normalize_tier_ranges(tiers: list, exclude_top5: bool = True) -> list[tuple[int, int]]:
     """归一奖励档用于区间统计。
 
@@ -5519,6 +5562,14 @@ def api_rewards() -> Response:
         job_id = request.args.get("jobId", "").strip()
         db = load_rewards_db()
         records = db.get("records", [])
+        jobs_map = {j.get("id"): j for j in load_jobs()}
+        # 记录里的 tierIndex 是创建时的数组下标；若档位被插入/调整（如前部补 1~5 名），
+        # 下标会偏移。这里按 rankMin/rankMax 重新解析为当前档位下标，保证展示与合计正确。
+        for r in records:
+            job = jobs_map.get(r.get("jobId"))
+            tiers = ((job or {}).get("payload") or {}).get("rewardTiers") or []
+            if tiers:
+                r["tierIndex"] = _resolve_tier_index(tiers, r)
         if job_id:
             team = request.args.get("team", "").strip()
             if team:
@@ -5530,7 +5581,6 @@ def api_rewards() -> Response:
                 ti = r.get("tierIndex", 0)
                 tiers[ti] = tiers.get(ti, 0) + 1
             return jsonify({"tiers": tiers, "records": records, "cost": _get_cost(db, job_id, team)})
-        jobs_map = {j.get("id"): j for j in load_jobs()}
         grouped: dict[str, Any] = {}
         for r in records:
             jid = r.get("jobId", "")
