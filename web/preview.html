@@ -1198,22 +1198,52 @@ function initPrizeBoard(jobId) {
     const rMode = preview.rewardMode || "rank";
     const rTiers = preview.rewardTiers || [];
     const rEligible = parseInt(preview.eligibleUsers) || 0;
+    const isSprintJob = String(preview.market || "").toLowerCase() === "sprint" || Number(preview.sprintIndex) > 0;
+    // 非 sprint（spot/um/saving）分档统计排除前5名：<=5 的档并成 1~5，跨越前5的档从 6 起
+    const normalizeTop5 = !isSprintJob;
     const ranges =
       (rMode === "rank" || rMode === "rank_last_volume") && rTiers.length > 0
         ? (() => {
-      const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
+            const sorted = [...rTiers].sort((a, b) => a.rankMin - b.rankMin);
+            const seen = new Set();
+            const uniq = [];
+            for (const t of sorted) {
+              let rmin = t.rankMin;
+              let rmax = t.rankMax;
+              if (normalizeTop5) {
+                if (rmax <= 5) {
+                  rmin = 1;
+                  rmax = 5;
+                } else if (rmin < 6) {
+                  rmin = 6;
+                }
+              }
+              if (rmin >= 1 && rmax >= rmin) {
+                const key = rmin + "~" + rmax;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  uniq.push([rmin, rmax]);
+                }
+              }
+            }
+            uniq.sort((a, b) => {
+              if (a[0] !== b[0]) return a[0] - b[0];
+              return a[1] - b[1];
+            });
             const result = [];
             let cursor = 1;
-            for (const t of sorted) {
-              if (t.rankMin > cursor) {
-                result.push([`${cursor}~${t.rankMin - 1}`, cursor, t.rankMin - 1]);
+            for (const [rmin, rmax] of uniq) {
+              if (rmin > cursor) {
+                result.push([`${cursor}~${rmin - 1}`, cursor, rmin - 1]);
               }
-              result.push([`${t.rankMin}~${t.rankMax}`, t.rankMin, t.rankMax]);
-              cursor = t.rankMax + 1;
+              result.push([`${rmin}~${rmax}`, rmin, rmax]);
+              cursor = rmax + 1;
             }
-            if (Number(preview.sprintIndex) > 0) {
+            if (isSprintJob) {
               const topN = parseInt(preview.top) || allRows.length;
-              if (topN > 5) result.push([`6~${topN}`, 6, topN]);
+              if (topN > 5) {
+                result.push([`6~${topN}`, 6, topN]);
+              }
             }
             return result;
           })()
@@ -2170,6 +2200,7 @@ function initPrizeBoard(jobId) {
     if (hasRewardTiers) {
       const sorted = [...calcRewardTiers].sort((a, b) => a.rankMin - b.rankMin);
       for (const t of sorted) {
+        if (normalizeTop5 && t.rankMax <= 5) continue; // 前五名不必显示
         const statsLabel = t.rankMin + "~" + t.rankMax;
         const projectedEntry = initPcts.find(s => s.label === statsLabel);
         const pct = projectedEntry ? projectedEntry.pct : 0;
