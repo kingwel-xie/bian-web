@@ -461,18 +461,8 @@ function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLoc
 function setLimitedRounds(preview) {
   const el = document.getElementById("limitedRounds");
   if (!el) return;
-  if (Number(preview.sprintIndex) > 0) {
-    el.style.display = "none";
-    el.textContent = "";
-    return;
-  }
-  const sh = (s) => String(s || "").slice(5, 16);
-  const seg = [];
-  if (preview.sprint1Start || preview.sprint1End) seg.push(`S1 ${sh(preview.sprint1Start)}~${sh(preview.sprint1End)}`);
-  if (preview.sprint2Start || preview.sprint2End) seg.push(`S2 ${sh(preview.sprint2Start)}~${sh(preview.sprint2End)}`);
-  const txt = seg.length ? "⏳ 限时池：" + seg.join(" / ") : "";
-  el.textContent = txt;
-  el.style.display = txt ? "" : "none";
+  el.style.display = "none";
+  el.textContent = "";
 }
 function setSprintChips(preview) {
   const el = document.getElementById("sprintChips");
