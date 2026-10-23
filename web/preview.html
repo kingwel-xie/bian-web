@@ -785,9 +785,7 @@ function initPrizeBoard(jobId) {
       const ndUrl = preview.url;
       document.getElementById("title").innerHTML = `${escapeHtml(ndHeading)}${ndUrl ? ` <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
       const ndActS = preview.activityStart, ndActE = preview.activityEnd;
-      document.getElementById("actTime").textContent = Number(preview.sprintIndex) > 0
-        ? `轮次时间：${String(ndActS || "—").slice(0, 16)} ~ ${String(ndActE || "—").slice(0, 16)}`
-        : (ndActS || ndActE ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "");
+      document.getElementById("actTime").textContent = (ndActS || ndActE) ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "";
       setLimitedRounds(preview);
       setSprintChips(preview);
       const ndMsg = preview.status && preview.status !== "completed" ? "任务进行中，暂无快照数据。" : "没有快照数据。请在主页重新抓取，或上传快照文件。";
@@ -847,9 +845,7 @@ function initPrizeBoard(jobId) {
     const actS = preview.activityStart, actE = preview.activityEnd;
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
-    actTimeEl.textContent = Number(preview.sprintIndex) > 0
-      ? `轮次时间：${String(actS || "—").slice(0, 16)} ~ ${String(actE || "—").slice(0, 16)}`
-      : (actS || actE ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "");
+    actTimeEl.textContent = (actS || actE) ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
     setLimitedRounds(preview);
       setSprintChips(preview);
     let endDt = null;
