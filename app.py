@@ -3732,6 +3732,8 @@ def api_create_sprint_jobs() -> Response:
         pp.pop("limitedRounds", None)
         parent["updatedAt"] = datetime.now(timezone.utc).isoformat()
         save_jobs(jobs)
+        # 名称优先使用前端传入的「未落盘」任务名（拉取公告后可能已在 modal 中修改）
+        base_name = str(body.get("name") or "").strip() or parent.get("name") or pp.get("name") or pp.get("resourceId") or job_id
         snapshot = {
             "url": pp.get("url", ""),
             "market": pp.get("market", ""),
@@ -3739,7 +3741,7 @@ def api_create_sprint_jobs() -> Response:
             "token": pp.get("token", ""),
             "proxy": pp.get("proxy", "auto"),
             "rewardToken": pp.get("rewardToken", ""),
-            "name": parent.get("name") or pp.get("name") or pp.get("resourceId") or job_id,
+            "name": base_name,
             "rid1": pp.get("sprint1ResourceId"),
             "rid2": pp.get("sprint2ResourceId"),
             "t1s": pp.get("sprint1Start"), "t1e": pp.get("sprint1End"),
