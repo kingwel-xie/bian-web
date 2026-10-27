@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
-"""统计 SPOT（不含 SPRINT）任务榜单成交量。
+"""统计 SPOT（不含 SPRINT）任务成交量（9/18-10/17 期间）。
 
-默认口径：结束日期在 2026-09-18 18:00 之后、market=spot、非 SPRINT 子任务，
-取每个榜单最后一次快照的前 100 名，统计成交量（tradingVolume）。
-
-输出：控制台表格 + 两份 CSV（按榜单、按用户合计排名）。
-
-用法示例（均可选，默认值即上述口径）:
-  python3 stats_spot_top100_volume.py
-  python3 stats_spot_top100_volume.py --after 2026-09-18 --top 100 --outdir .
-  DATA_ROOT=/path/to/data python3 stats_spot_top100_volume.py --market spot
+规则：
+- 活动结束时间 activityEnd >= 2026-09-18 18:00 且 activityEnd <= 2026-10-17 18:00（9/18-10/17期间比赛）
+- 10/17之前结束的（activityEnd <= 2026-10-17 18:00）：用最后一次快照
+- 10/17之后结束的（activityEnd > 2026-10-17 18:00）：用10/17当天的快照数据
 """
 import argparse
 import csv
@@ -18,14 +13,38 @@ import os
 from datetime import datetime
 
 DEFAULT_DATA_ROOT = "/home/xjw/bian-web/data"
+WINDOW_START = datetime(2026, 9, 18, 18, 0)
+CUTOFF_1017 = datetime(2026, 10, 17, 18, 0)
+SNAP_DATE_1017 = "2026-10-17"
 
 
 def to_host(data_root, p):
     return os.path.join(data_root, p[len("/data/") :]) if p.startswith("/data/") else p
 
 
-def load_qualified(jobs, market, end_after):
-    """返回符合条件的任务：最后一次快照的行 + 元数据。"""
+def pick_snapshot(snaps, end_dt):
+    """根据结束时间选取快照：
+    - 10/17之前结束（end_dt <= 10/17 18:00）：用最后一次快照
+    - 10/17之后结束（end_dt > 10/17 18:00）：用10/17当天的快照
+    """
+    if not snaps:
+        return None
+    if end_dt <= CUTOFF_1017:
+        return snaps[-1]
+    # 10/17之后结束的，用10/17当天的快照（优先选最靠近当天的，通常取最后一份当天快照）
+    candidates = []
+    for s in snaps:
+        ts = s.get("timestamp") or ""
+        if SNAP_DATE_1017 in ts:
+            candidates.append(s)
+    if candidates:
+        return candidates[-1]
+    # 如果当天没有快照，回退到最后一次快照
+    return snaps[-1]
+
+
+def load_qualified(jobs, market):
+    """返回符合条件的任务：选定的快照 + 元数据。"""
     out = []
     for o in jobs:
         p = o.get("payload") or {}
@@ -38,21 +57,24 @@ def load_qualified(jobs, market, end_after):
             end_dt = datetime.fromisoformat(end.replace(" ", "T"))
         except ValueError:
             continue
-        if end_after and end_dt <= end_after:
+        if end_dt < WINDOW_START:
+            continue
+        if end_dt > CUTOFF_1017:
             continue
         snaps = o.get("snapshots") or []
         if not snaps:
             continue
-        last = snaps[-1]
-        if not last.get("json"):
+        picked = pick_snapshot(snaps, end_dt)
+        if not picked or not picked.get("json"):
             continue
         out.append(
             {
                 "resourceId": p.get("resourceId"),
                 "name": o.get("name", ""),
                 "end": end,
-                "snapshot": last.get("timestamp"),
-                "json": last["json"],
+                "snapshot": picked.get("timestamp"),
+                "json": picked["json"],
+                "end_dt": end_dt,
             }
         )
     out.sort(key=lambda r: int(r["resourceId"]) if str(r["resourceId"]).isdigit() else 0)
@@ -82,8 +104,7 @@ def load_user_map(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="SPOT 榜单前 N 名成交量统计")
-    ap.add_argument("--after", default="2026-09-18", help="结束日期下限(含当天 18:00 之后), 空串=不限")
+    ap = argparse.ArgumentParser(description="SPOT 榜单成交量统计（9/18-10/17期间）")
     ap.add_argument("--top", type=int, default=100, help="每榜统计前多少名")
     ap.add_argument("--market", default="spot", help="market 过滤, 默认 spot")
     ap.add_argument("--users-csv", default="stats_spot_users.csv", help="用户拆分表(默认 stats_spot_users.csv)")
@@ -95,14 +116,8 @@ def main():
     user_map = load_user_map(users_csv)
     print(f"载入用户拆分表: {users_csv}  ({len(user_map)} 个(用户ID,昵称)映射)")
 
-    end_after = None
-    if args.after:
-        end_after = datetime.fromisoformat(args.after.replace(" ", "T"))
-        if end_after.hour == 0 and end_after.minute == 0:
-            end_after = end_after.replace(hour=18)  # 只给日期时按当天 18:00 计
-
     jobs = json.load(open(os.path.join(args.data_root, ".workflow", "jobs.json")))
-    qual = load_qualified(jobs, args.market, end_after)
+    qual = load_qualified(jobs, args.market)
 
     task_rows = []
     user_vol = {}
