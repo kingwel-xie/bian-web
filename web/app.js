@@ -553,9 +553,37 @@ function articleExtractSummary(data) {
   return parts.join(" · ");
 }
 
+function _coinsFromPairs(pairs) {
+  const quotes = ["USDT", "USDC", "FDUSD", "BUSD", "DAI", "TUSD", "BTC", "ETH", "BNB", "EUR", "TRY", "BRL", "XRP", "SOL", "DOGE"];
+  const out = [];
+  const seen = new Set();
+  for (const p of pairs || []) {
+    let base = String(p || "").toUpperCase().trim();
+    if (!base) continue;
+    for (const q of quotes) {
+      if (base.length > q.length && base.endsWith(q)) {
+        base = base.slice(0, -q.length);
+        break;
+      }
+    }
+    if (base && !seen.has(base)) {
+      seen.add(base);
+      out.push(base);
+    }
+  }
+  return out;
+}
+
+function _nameWithCoinSuffix(title, pairs) {
+  const coins = _coinsFromPairs(pairs);
+  if (!coins.length) return title;
+  const shown = coins.slice(0, 2).join("|");
+  return `${title}（${shown}${coins.length > 2 ? "…" : ""}）`;
+}
+
 function fillFromArticle(data) {
   const title = (data.title || "").split(/[：:]/)[0].trim();
-  if (title) document.getElementById("editName").value = title;
+  if (title) document.getElementById("editName").value = _nameWithCoinSuffix(title, data.pairs);
   if (data.token) document.getElementById("editToken").value = data.token;
   if (data.market) document.getElementById("editMarket").value = data.market;
   if (data.pairs && data.pairs.length) document.getElementById("editSymbol").value = data.pairs.join(", ");
