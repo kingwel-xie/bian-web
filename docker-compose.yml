@@ -8,6 +8,7 @@ services:
       WEB_HOST: 127.0.0.1
       WEB_PORT: "48234"
       ACCESS_KEY: "0021271"
+      SECRET_KEY: "bian-web-secret-20261016-001"
     volumes:
       - ./data:/data
       - ./web:/app/web:ro
