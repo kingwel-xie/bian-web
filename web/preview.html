@@ -471,17 +471,17 @@ function setSprintChips(preview) {
   const si = Number(preview.sprintIndex) || 0;
   const isChild = si === 1 || si === 2;
   if (!isChild && !ids.sprint1 && !ids.sprint2) { el.innerHTML = ""; return; }
-  const cur = new URLSearchParams(location.search).get("job") || "";
-  const pill = (label, jobId) => {
-    const active = !jobId || jobId === cur;
-    const href = jobId ? `preview.html?job=${encodeURIComponent(jobId)}` : "";
-    return href
-      ? `<a class="sprint-chip" href="${href}">${label}</a>`
-      : `<span class="sprint-chip on">${label}</span>`;
-  };
-  const out = [isChild ? `<a class="sprint-chip" href="preview.html?job=${encodeURIComponent(preview.parentJobId || "")}">← 主榜</a>` : pill("主榜", "")];
-  if (ids.sprint1) out.push(pill("S1", ids.sprint1));
-  if (ids.sprint2) out.push(pill("S2", ids.sprint2));
+  const mainId = preview.parentJobId || "";
+  const entries = [
+    { label: "主榜", jobId: mainId, current: !isChild },
+    { label: "S1", jobId: ids.sprint1 || "", current: si === 1 },
+    { label: "S2", jobId: ids.sprint2 || "", current: si === 2 },
+  ];
+  const out = entries
+    .filter(e => e.label === "主榜" || e.jobId)
+    .map(e => e.current
+      ? `<span class="sprint-chip on" title="当前页面：${e.label}" aria-current="page">${e.label}</span>`
+      : `<a class="sprint-chip" href="preview.html?job=${encodeURIComponent(e.jobId)}" title="切换到${e.label}">${e.label}</a>`);
   el.innerHTML = out.join("");
 }
 function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
