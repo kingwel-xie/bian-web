@@ -4706,6 +4706,7 @@ def api_job_trend(job_id: str) -> Response:
 
     result_snapshots = []
     prev_grade_map: dict[int, float] = {}
+    prev_user_map: dict[str, float] = {}
     for snap in sorted_snaps:
         json_path_str = snap.get("json")
         if not json_path_str:
@@ -4724,6 +4725,14 @@ def api_job_trend(job_id: str) -> Response:
         for r in limited:
             seq = int(r.get("sequence") or 0)
             cur_map[seq] = float(r.get("grade", 0) or 0)
+        # 全榜总量/增量：不受奖励档位区间限制（子任务只配前5档时也按全榜统计）
+        board_vol = sum(float(r.get("grade", 0) or 0) for r in limited)
+        board_delta = 0.0
+        for r in limited:
+            cur_grade = float(r.get("grade", 0) or 0)
+            prev_grade = prev_user_map.get(str(r.get("userId") or "")) if r.get("userId") else None
+            if prev_grade is not None:
+                board_delta += cur_grade - prev_grade
         range_out = []
         for label, rmin, rmax in ranges:
             items = [r for r in limited if r.get("sequence") and rmin <= int(r["sequence"]) <= rmax]
@@ -4746,13 +4755,18 @@ def api_job_trend(job_id: str) -> Response:
                 if prev_grade is not None:
                     sumDelta += cur_grade - prev_grade
             range_out.append({"label": label, "total": total, "avg": avg, "med": med, "q1": q1, "last": last, "sumDelta": sumDelta})
-        total_vol = sum(rs["total"] for rs in range_out)
-        total_delta = sum(rs["sumDelta"] for rs in range_out)
+        total_vol = board_vol
+        total_delta = board_delta
         for rs in range_out:
             rs["pct"] = round(rs["total"] / total_vol * 100, 2) if total_vol else 0
             rs["dratio"] = round(rs["sumDelta"] / total_delta * 100, 2) if total_delta else 0
         result_snapshots.append({"timestamp": snap["timestamp"], "rows": len(limited), "totalVol": total_vol, "ranges": range_out})
         prev_grade_map = cur_map
+        prev_user_map = {
+            str(r.get("userId")): float(r.get("grade", 0) or 0)
+            for r in limited
+            if r.get("userId")
+        }
     resp: dict[str, Any] = {"snapshots": result_snapshots, "rangeLabels": [r[0] for r in ranges]}
     # pctTrend: windowed analysis when hours param is given
     if hours_param and hours_param > 0 and result_snapshots:
