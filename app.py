@@ -5969,6 +5969,9 @@ def api_job_delta_analysis(job_id: str) -> Response:
                 max_tier_rank = int(eligible)
             except (TypeError, ValueError):
                 pass
+    # 子任务（sprint）的增量按全榜统计，不按奖励档位截断
+    if market_type == "sprint":
+        max_tier_rank = None
 
     try:
         proxy = choose_binance_proxy("auto", timeout=8)
