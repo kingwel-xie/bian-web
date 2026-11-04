@@ -1200,6 +1200,9 @@ function initPrizeBoard(jobId) {
         const token = (preview.rewardToken || "").trim().toUpperCase();
         const per10k = pool > 0 && tierVol > 0 ? pool * 10000 / tierVol : null;
         const needVol = pool > 0 && tierVol > 0 ? lastCap * tierVol / pool : null;
+        const price = preview.rewardPriceUsd != null ? parseFloat(preview.rewardPriceUsd) : null;
+        const priceOk = price != null && Number.isFinite(price) && price > 0;
+        const capUsd = priceOk ? lastCap * price : null;
         const nf = (v, d) => (v != null && Number.isFinite(v)
           ? Number(v).toLocaleString("en-US", { maximumFractionDigits: d })
           : "—");
@@ -1207,15 +1210,16 @@ function initPrizeBoard(jobId) {
           `预测档位总量 ${nf(tierVol, 0)} U`,
           `末档奖池 ${nf(pool, 2)} ${token}`,
           per10k != null ? `每万U ${nf(per10k, 4)} ${token}` : null,
-          `个人上限 ${nf(lastCap, 6)} ${token}`,
+          `个人上限 ${nf(lastCap, 6)} ${token}` + (capUsd != null ? ` ≈ $${nf(capUsd, 2)}` : ""),
         ].filter(Boolean).join(" · ") + (needVol != null ? ` → 达到上限需成交 ${nf(needVol, 0)} U` : "");
         html +=
           '<div style="margin:10px 0 4px;font-size:12px;color:var(--muted)">末档（按量奖励）：按预测档位总量与个人上限反推所需成交量</div>' +
-          '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">预测档位总量</th><th class="num">每万U奖励</th><th class="num">个人上限</th><th class="num" style="color:#d0312d;font-weight:700">所需成交量</th></tr></thead><tbody>' +
+          '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">预测档位总量</th><th class="num">每万U奖励</th><th class="num">个人上限</th><th class="num">USD价值</th><th class="num" style="color:#d0312d;font-weight:700">所需成交量</th></tr></thead><tbody>' +
           `<tr title="${escapeHtml(tip)}"><td>${escapeHtml(lastTier.name)}</td><td class="num">${pct}%</td>` +
           `<td class="num">${fmtVolume(tierVol)}</td>` +
           `<td class="num">${nf(per10k, 4)} ${escapeHtml(token)}</td>` +
           `<td class="num">${nf(lastCap, 6)} ${escapeHtml(token)}</td>` +
+          `<td class="num">${capUsd != null ? "$" + nf(capUsd, 2) : "—"}</td>` +
           `<td class="num" style="color:#d0312d;font-weight:700">${fmtVolume(needVol)}</td></tr>` +
           "</tbody></table>";
       }
