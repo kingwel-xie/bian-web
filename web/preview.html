@@ -1168,12 +1168,18 @@ function initPrizeBoard(jobId) {
       const totalVol = parseFloat(tvEl.value.replace(/,/g, "")) * 1_000_000;
       if (!totalVol || totalVol <= 0) { showToast("请输入总成交量"); return; }
       const tiers = _calcTiers || [];
+      const rModeCalc = preview.rewardMode || "rank";
+      const lastVolReward = rModeCalc === "rank_last_volume" ? preview.lastTierReward : null;
+      const lastCap = preview.lastTierCap != null && preview.lastTierCap !== "" ? parseFloat(preview.lastTierCap) : null;
+      const useLastVol = !!(lastVolReward && lastCap != null && Number.isFinite(lastCap));
+      const lastTier = useLastVol ? tiers.find(t => t.isLast) : null;
       const rows = [];
       for (const t of tiers) {
         const el = document.getElementById(t.inputId);
         if (!el) continue;
         const pct = parseFloat(el.value);
         if (!pct || pct <= 0 || pct > 100) { showToast(t.name + " 占比无效 (0~100)"); return; }
+        if (useLastVol && t === lastTier) continue; // 末档按量奖励模式单独测算
         const cnt = t.max - t.min + 1;
         const tierVol = totalVol * pct / 100;
         const avg = tierVol / cnt;
@@ -1182,8 +1188,38 @@ function initPrizeBoard(jobId) {
         const target = (medEst + q1Est) / 2;
         rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\" style=\"color:#d0312d;font-weight:700\">" + fmtVolume(target) + "</td></tr>");
       }
-      document.getElementById("calcResult").innerHTML =
+      let html =
         '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num" style="color:#d0312d;font-weight:700">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
+
+      if (useLastVol && lastTier) {
+        const el = document.getElementById(lastTier.inputId);
+        const pct = el ? parseFloat(el.value) : NaN;
+        if (!pct || pct <= 0 || pct > 100) { showToast(lastTier.name + " 占比无效 (0~100)"); return; }
+        const tierVol = totalVol * pct / 100;
+        const pool = Number(lastVolReward.pool) || Number(lastTier.pool) || 0;
+        const token = (preview.rewardToken || "").trim().toUpperCase();
+        const per10k = pool > 0 && tierVol > 0 ? pool * 10000 / tierVol : null;
+        const needVol = pool > 0 && tierVol > 0 ? lastCap * tierVol / pool : null;
+        const nf = (v, d) => (v != null && Number.isFinite(v)
+          ? Number(v).toLocaleString("en-US", { maximumFractionDigits: d })
+          : "—");
+        const tip = [
+          `预测档位总量 ${nf(tierVol, 0)} U`,
+          `末档奖池 ${nf(pool, 2)} ${token}`,
+          per10k != null ? `每万U ${nf(per10k, 4)} ${token}` : null,
+          `个人上限 ${nf(lastCap, 6)} ${token}`,
+        ].filter(Boolean).join(" · ") + (needVol != null ? ` → 达到上限需成交 ${nf(needVol, 0)} U` : "");
+        html +=
+          '<div style="margin:10px 0 4px;font-size:12px;color:var(--muted)">末档（按量奖励）：按预测档位总量与个人上限反推所需成交量</div>' +
+          '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">预测档位总量</th><th class="num">每万U奖励</th><th class="num">个人上限</th><th class="num" style="color:#d0312d;font-weight:700">所需成交量</th></tr></thead><tbody>' +
+          `<tr title="${escapeHtml(tip)}"><td>${escapeHtml(lastTier.name)}</td><td class="num">${pct}%</td>` +
+          `<td class="num">${fmtVolume(tierVol)}</td>` +
+          `<td class="num">${nf(per10k, 4)} ${escapeHtml(token)}</td>` +
+          `<td class="num">${nf(lastCap, 6)} ${escapeHtml(token)}</td>` +
+          `<td class="num" style="color:#d0312d;font-weight:700">${fmtVolume(needVol)}</td></tr>` +
+          "</tbody></table>";
+      }
+      document.getElementById("calcResult").innerHTML = html;
     }
 
     const rMode = preview.rewardMode || "rank";
@@ -2190,6 +2226,7 @@ function initPrizeBoard(jobId) {
     const initPcts = projectTierPcts(initCurrent, _statsCache, _totalVolCache, _totalDelCache);
     if (hasRewardTiers) {
       const sorted = [...calcRewardTiers].sort((a, b) => a.rankMin - b.rankMin);
+      const lastRewardCfg = preview.rewardMode === "rank_last_volume" ? preview.lastTierReward : null;
       for (const t of sorted) {
         if (normalizeTop5 && t.rankMax <= 5) continue; // 前五名不必显示
         const statsLabel = t.rankMin + "~" + t.rankMax;
@@ -2197,7 +2234,8 @@ function initPrizeBoard(jobId) {
         const pct = projectedEntry ? projectedEntry.pct : 0;
         const id = "calcPct_" + t.rankMin + "_" + t.rankMax;
         const name = t.rankMin + "~" + t.rankMax + "名";
-        _calcTiers.push({ name, min: t.rankMin, max: t.rankMax, inputId: id });
+        const isLast = !!(lastRewardCfg && t.rankMin === lastRewardCfg.rankMin && t.rankMax === lastRewardCfg.rankMax);
+        _calcTiers.push({ name, min: t.rankMin, max: t.rankMax, inputId: id, isLast, pool: parseFloat(t.amount) || 0 });
         const label = document.createElement("label");
         label.style.cssText = "font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px";
         label.innerHTML = name + "占比%";
