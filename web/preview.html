@@ -253,10 +253,11 @@
   .snap-item .snap-delete:hover { border-color: rgba(176, 42, 36, 0.4); background: rgba(176, 42, 36, 0.06); }
 
   /* ---------- 表格列宽 / 工具条 ---------- */
-  .col-rank { width: 6%; } .col-rank-change { width: 7%; } .col-nick { width: 18%; } .col-user { width: 14%; }
-  .col-score { width: 11%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
-  .stats-table .c-rank { width: 9%; } .stats-table .c-total { width: 12%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; }
-  .stats-table .c-avg { width: 16%; } .stats-table .c-median { width: 14%; } .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 14%; }
+  .col-rank { width: 6%; } .col-rank-change { width: 10%; } .col-nick { width: 18%; } .col-user { width: 12%; }
+  .col-score { width: 10%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
+  .table-wrap > table { min-width: 1200px; }
+  .stats-table .c-rank { width: 11%; } .stats-table .c-total { width: 15%; } .stats-table .c-pct { width: 9%; } .stats-table .c-dratio { width: 10%; }
+  .stats-table .c-avg { width: 15%; } .stats-table .c-median { width: 13%; } .stats-table .c-q1 { width: 13%; } .stats-table .c-last { width: 14%; }
   #deltaStatBar { display: none; margin-left: auto; gap: 4px; align-items: center; }
   .sortable { cursor: pointer; }
   .thead-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -265,8 +266,11 @@
   .muted-note { font-size: 12px; color: var(--muted); }
   .delta-chart { display: flex; gap: 6px; align-items: flex-end; min-height: 140px; padding: 4px 0; overflow-x: auto; }
   .calc-result { padding: 0 16px 12px; font-size: 12px; color: var(--ink-2); }
-  .calc-tier-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: none; }
+  .calc-tier-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: none; white-space: nowrap; }
   .calc-tier-input { width: 88px; }
+  .calc-toolbar { align-items: flex-end; gap: 12px 16px; }
+  .calc-total-input { width: 120px; }
+  .calc-submit { margin-left: 0; }
   .calc-result:empty { display: none; }
   .btn-secondary { background: var(--surface); }
   .page-head.expired h1 { color: var(--muted); }
@@ -288,9 +292,15 @@
   .sprint-group, .sprint-toggle { display: none; }
 
   /* ---------- 窄屏 ---------- */
-  @media (max-width: 1080px) {
+  @media (max-width: 1240px) {
     .split { flex-direction: column; }
     .split > .wide { flex: 1 1 auto; }
+  }
+  @media (max-width: 900px) {
+    #statsSection .stats-panel { overflow-x: auto; }
+    #statsSection .stats-table { min-width: 960px; }
+    .reward-body { overflow-x: auto; }
+    .reward-body > .stats-table { min-width: 860px; }
   }
   @media (max-width: 640px) {
     .shell { padding: 0 12px 32px; }
@@ -455,11 +465,10 @@
 
     <div class="card stats-panel" id="calcToolPanel" style="display:none">
       <h3>计算工具</h3>
-      <div class="card-pad toolbar">
-        <label class="field-label" for="calcTotalVol" style="align-self:center">总成交量 (M)</label>
-        <input id="calcTotalVol" type="text" inputmode="numeric" pattern="[0-9]*" style="width:120px" placeholder="100" />
+      <div class="card-pad toolbar calc-toolbar">
+        <label class="calc-tier-label calc-total-label" for="calcTotalVol">总成交量 (M)<input id="calcTotalVol" class="calc-tier-input calc-total-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="100" /></label>
         <div id="calcTierInputs" class="toolbar"></div>
-        <button id="calcBtn" class="btn-primary" type="button">计算预估均值</button>
+        <button id="calcBtn" class="btn-primary calc-submit" type="button">计算预估均值</button>
       </div>
       <div id="calcResult" class="calc-result"></div>
     </div>
