@@ -128,18 +128,23 @@
     .modal-footer { padding:8px 10px; }
   }
 </style>
+<link rel="stylesheet" href="/css888/theme.css?v=20261112" />
 </head>
-<body>
+<body class="app rewards">
 <main class="shell">
-  <header class="hero">
-    <div>
-      <p class="eyebrow">BIAN-WEB REWARDS</p>
+  <header class="page-head">
+    <div class="head-main">
+      <p class="kicker">Binance Leaderboard Capture · 奖励</p>
       <h1>奖励记录管理</h1>
-      <p class="subtitle">管理已结束任务的奖励发放记录。选择任务、配置各档位发放人数，系统自动计算人均价值。</p>
-      <p style="margin:10px 0 0;font-size:13px;display:flex;gap:14px;flex-wrap:wrap">
-        <a href="/" style="color:var(--accent-2)">← 返回主页</a>
-      </p>
+      <p class="lede">管理已结束任务的奖励发放记录。选择任务、配置各档位发放人数，自动计算人均价值与盈亏。</p>
     </div>
+    <nav class="head-nav" aria-label="其他页面">
+      <a href="/"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-list"/></svg>任务台</a>
+      <a href="teams.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-users"/></svg>团队管理</a>
+      <a href="analysis.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-chart"/></svg>任务分析</a>
+      <a href="growth.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-trend-up"/></svg>增长对比</a>
+      <a href="activity.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-news"/></svg>最新活动</a>
+    </nav>
   </header>
 
   <section class="grid">
@@ -149,9 +154,9 @@
         <b id="jobCount">0</b>
       </div>
       <div class="filter-bar">
-        <button id="openAddModalBtn" type="button" class="mini" style="background:var(--accent-2);color:#fff;border:0;border-radius:999px;line-height:1">+ 添加奖励</button>
-        <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" style="margin-left:8px" />
-        <a id="statsSummary" href="javascript:void(0)" style="margin-left:auto;margin-right:24px;font-size:13px;color:var(--accent);white-space:nowrap;border-bottom:1px dashed var(--line)">奖励详细</a>
+        <button id="openAddModalBtn" type="button">+ 添加奖励</button>
+        <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" />
+        <a id="statsSummary" href="javascript:void(0)">奖励详细</a>
       </div>
       <div id="jobList" class="job-list"></div>
       <div id="msg" class="msg"></div>
@@ -160,10 +165,10 @@
 </main>
 
 <div id="addModal" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="min-width:420px;max-width:500px;padding:0">
+  <div class="modal-box">
     <div class="modal-header">
       <h3>添加奖励</h3>
-      <button class="modal-close-btn" id="modalCloseBtn">&times;</button>
+      <button class="modal-close-btn" id="modalCloseBtn" aria-label="关闭"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body">
       <select id="modalJobSelect" class="modal-job-select">
@@ -181,17 +186,17 @@
     </div>
     <div id="modalMsg" class="modal-msg"></div>
     <div class="modal-footer" style="padding:8px 14px;border-top:1px solid rgba(46,42,36,0.08);display:flex;justify-content:flex-end;gap:8px">
-      <button id="modalCancelBtn" type="button" class="modal-close-btn" style="font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-weight:700">取消</button>
-      <button id="modalConfirmBtn" type="button" style="font-size:12px;padding:5px 18px;border:0;border-radius:6px;background:var(--accent-2);color:#fff;cursor:pointer;font-weight:700">确认提交</button>
+      <button id="modalCancelBtn" type="button">取消</button>
+      <button id="modalConfirmBtn" type="button" class="primary">确认提交</button>
     </div>
   </div>
 </div>
 
 <div id="statsModal" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="min-width:420px;max-width:540px;padding:0">
+  <div class="modal-box">
     <div class="modal-header">
       <h3>统计详情</h3>
-      <button class="modal-close-btn" id="statsModalCloseBtn">&times;</button>
+      <button class="modal-close-btn" id="statsModalCloseBtn" aria-label="关闭"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-x"/></svg></button>
     </div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -202,13 +207,13 @@
       <div id="statsSummaryBar" style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;align-items:center;margin-bottom:10px"></div>
       <div id="statsTableWrap" style="max-height:360px;overflow-y:auto;border:1px solid var(--line);border-radius:6px">
         <table id="statsTable" class="stats-table">
-          <thead><tr><th>任务</th><th class="num">成本</th><th>代币</th><th class="num">数量</th><th class="num">收盘价</th><th class="num">收盘奖励</th><th class="num">盈利</th><th class="num">即时价格<button id="refreshPricesBtn" class="refresh-price-btn" title="刷新即时价格">↻</button></th><th class="num">即时奖励</th><th class="num">即时盈利</th></tr></thead>
+          <thead><tr><th>任务</th><th class="num">成本</th><th>代币</th><th class="num">数量</th><th class="num">收盘价</th><th class="num">收盘奖励</th><th class="num">盈利</th><th class="num">即时价格<button id="refreshPricesBtn" class="refresh-price-btn" title="刷新即时价格">刷新</button></th><th class="num">即时奖励</th><th class="num">即时盈利</th></tr></thead>
           <tbody id="statsTbody"></tbody>
         </table>
       </div>
     </div>
     <div class="modal-footer" style="padding:8px 14px;border-top:1px solid rgba(46,42,36,0.08);display:flex;justify-content:flex-end;gap:8px">
-      <button id="statsModalCloseBtn2" type="button" class="modal-close-btn" style="font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-weight:700">关闭</button>
+      <button id="statsModalCloseBtn2" type="button">关闭</button>
     </div>
   </div>
 </div>
@@ -243,16 +248,6 @@ let _statsJobDetails = [];
 let _statsTeamDetail = {};
 
 function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-const _badgeColors = [
-  { bg:"#e6f0f2", border:"#4a7c8c", text:"#4a7c8c" },
-  { bg:"#f5eee6", border:"#d4933a", text:"#d4933a" },
-  { bg:"#f3e8f5", border:"#8e44ad", text:"#8e44ad" },
-  { bg:"#e6f5ec", border:"#27ae60", text:"#27ae60" },
-  { bg:"#f5e6e6", border:"#c0392b", text:"#c0392b" },
-  { bg:"#e6ecf5", border:"#2980b9", text:"#2980b9" },
-  { bg:"#f5f0e6", border:"#f39c12", text:"#f39c12" },
-  { bg:"#e6f5f0", border:"#16a085", text:"#16a085" },
-];
 
 function fmtNum(v) {
   if (!Number.isFinite(v)) return "0";
@@ -350,8 +345,7 @@ function renderJobs() {
           totalTokens += lastVolSum;
           const uVal = price != null ? lastVolSum * price : null;
           if (uVal != null) totalUSD += uVal;
-          const c = _badgeColors[i % _badgeColors.length];
-          badges += '<span class="badge" style="background:#eef0f3;border-color:#9aa4af;color:#5a6570" title="成交量 ' + lastVolumeSum.toFixed(2) + ' · 奖励 ' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">末位<sup class="badge-count">' + cnt + "</sup></span>";
+          badges += '<span class="badge" title="成交量 ' + lastVolumeSum.toFixed(2) + ' · 奖励 ' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">末位<sup class="badge-count">' + cnt + "</sup></span>";
         } else {
           if (!cnt) continue;
           const amt = parseFloat(t.amount) || 0;
@@ -361,8 +355,7 @@ function renderJobs() {
           totalTokens += totalTok;
           const uVal = price != null ? totalTok * price : null;
           if (uVal != null) totalUSD += uVal;
-          const c = _badgeColors[i % _badgeColors.length];
-          badges += '<span class="badge" style="background:' + c.bg + ';border-color:' + c.border + ';color:' + c.text + '" title="' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
+          badges += '<span class="badge" title="' + perPerson.toFixed(4) + ' ' + escapeHtml(token) + '">' + (t.rankMax || "?") + "名" + '<sup class="badge-count">' + cnt + "</sup></span>";
         }
       }
       return badges;
@@ -394,18 +387,18 @@ function renderJobs() {
           if (tCost !== 0) tTotal += '<span class="total-cost" style="color:var(--muted)">成本 $' + fmtValue(tCost) + '</span>';
           if (tCost !== 0 && tUsd > 0) {
             const tProfit = tUsd - tCost;
-            tTotal += '<span class="total-profit" style="color:' + (tProfit >= 0 ? 'var(--good)' : 'var(--bad)') + ';font-weight:700">盈利 ~$' + fmtValue(tProfit) + '</span>';
+            tTotal += '<span class="total-profit ' + (tProfit >= 0 ? 'profit-pos' : 'profit-neg') + '">盈利 ~$' + fmtValue(tProfit) + '</span>';
           }
           tTotal += "</div>";
         }
         let tPaid = "";
         if (tg.totalRecords > 0 && tg.allPaid) {
-          tPaid = '<div class="paid-bar"><span class="paid-ok">✅ 已发放 ' + escapeHtml(tg.paidAt || "") + "</span></div>";
+          tPaid = '<div class="paid-bar"><span class="paid-ok">已发放 ' + escapeHtml(tg.paidAt || "") + "</span></div>";
         }
         const teamPaidCls = tg.totalRecords > 0 && tg.allPaid ? " t-paid" : "";
         teamsHtml += '<div class="team-group' + teamPaidCls + '">' +
           '<div class="team-hd">' +
-            '<button class="team-toggle" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '">▸</button>' +
+            '<button class="team-toggle open" data-jid="' + escapeHtml(jid) + '" data-team="' + escapeHtml(tg.team || "") + '" aria-label="展开/收起"><svg class="i i-xs" aria-hidden="true"><use href="/css888/icons.svg#i-chevron-right"/></svg></button>' +
             '<span class="team-name">' + teamName + '</span>' +
             '<span class="team-meta">' + (tg.totalRecords || 0) + ' 条</span>' +
           '</div>' +
@@ -456,14 +449,14 @@ function renderJobs() {
       }
       if (totalCost !== 0 && totalUsdVal > 0) {
         const profit = totalUsdVal - totalCost;
-        totalStr += '<span class="total-profit" style="color:' + (profit >= 0 ? 'var(--good)' : 'var(--bad)') + ';font-weight:700">盈利 ~$' + fmtValue(profit) + '</span>';
+        totalStr += '<span class="total-profit ' + (profit >= 0 ? 'profit-pos' : 'profit-neg') + '">盈利 ~$' + fmtValue(profit) + '</span>';
       }
       totalStr += "</div>";
     }
     let paidStr = "";
     let paidCls = "";
     if (jRecords.totalRecords > 0 && jRecords.allPaid) {
-      paidStr = '<div class="paid-bar"><span class="paid-ok">✅ 已发放 ' + escapeHtml(jRecords.paidAt || "") + "</span></div>";
+      paidStr = '<div class="paid-bar"><span class="paid-ok">已发放 ' + escapeHtml(jRecords.paidAt || "") + "</span></div>";
       paidCls = ' paid';
     }
     const actStr = (jRecords.activityStart || "") && (jRecords.activityEnd || "")
@@ -473,7 +466,7 @@ function renderJobs() {
     const tokenBadgeCls = (token === "USDT" || token === "USDC" || token === "BNB") ? " t-hot" : "";
     html += '<div class="job' + paidCls + '">' +
       '<div class="job-hd">' +
-        '<a class="job-name" href="/preview.html?job=' + escapeHtml(jid) + '" target="_blank" style="font-weight:700;color:var(--accent-2);text-decoration:underline;text-decoration-style:dashed;text-underline-offset:3px">' + escapeHtml(jRecords.jobName || "") + '</a>' +
+        '<a class="job-name" href="/preview.html?job=' + escapeHtml(jid) + '" target="_blank" >' + escapeHtml(jRecords.jobName || "") + '</a>' +
         (jRecords.resourceId ? '<span class="job-rid"> [' + escapeHtml(jRecords.resourceId) + ']</span>' : "") +
         (actStr ? '<span class="job-act-time">' + actStr + "</span>" : "") +
         '<span class="token-badge' + tokenBadgeCls + '">' + escapeHtml(token) + '</span>' +
@@ -552,7 +545,7 @@ function renderJobs() {
       const body = this.closest(".team-group").querySelector(".team-body");
       const isHidden = !body || body.style.display === "none";
       if (body) body.style.display = isHidden ? "" : "none";
-      this.textContent = isHidden ? "▾" : "▸";
+      this.classList.toggle("open", isHidden);
     });
   });
   jobListEl.querySelectorAll(".add-team-btn").forEach(btn => {
@@ -574,7 +567,7 @@ function renderJobs() {
         if (!resp.ok) throw new Error("删除失败");
         await loadAll();
       } catch (e) {
-        msgEl.textContent = "❌ " + e.message;
+        msgEl.textContent = "失败：" + e.message;
       }
     });
   });
@@ -607,7 +600,7 @@ function renderJobs() {
         });
         if (!resp.ok) throw new Error("操作失败");
         await loadAll();
-      } catch (e) { msgEl.textContent = "❌ " + e.message; }
+      } catch (e) { msgEl.textContent = "失败：" + e.message; }
     });
   });
 }
@@ -751,7 +744,7 @@ async function loadTotalCandidates(jobId) {
     }
     renderTotalCandidates();
   } catch (e) {
-    modalMsg.textContent = "❌ " + e.message;
+    modalMsg.textContent = "失败：" + e.message;
     _totalCandidates = null;
   }
 }
@@ -1048,7 +1041,7 @@ async function modalSubmit() {
     closeModal();
     await loadAll();
   } catch (e) {
-    modalMsg.textContent = "❌ " + e.message;
+    modalMsg.textContent = "失败：" + e.message;
   }
 }
 

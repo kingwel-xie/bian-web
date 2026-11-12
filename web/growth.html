@@ -43,17 +43,29 @@
   .chart-axis-label { font-size: 11px; fill: #333; text-anchor: middle; }
   .chart-tooltip { position: fixed; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 4px 8px; border-radius: 4px; pointer-events: none; white-space: nowrap; z-index: 100; }
 </style>
+<link rel="stylesheet" href="/css888/theme.css?v=20261112" />
 </head>
-<body>
+<body class="app growth">
+<main class="shell">
 <div id="app">
-  <div class="page-head">
-    <h2>已完成任务分档成交量增长对比 <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:12px">← 返回主页</a></h2>
-    <div>
-      <button class="market-btn active" data-market="spot">SPOT</button>
-      <button class="market-btn" data-market="um">UM</button>
+  <header class="page-head">
+    <div class="head-main">
+      <p class="kicker">Binance Leaderboard Capture · 增长</p>
+      <h1>已完成任务增长对比</h1>
+      <p class="lede">按排名分档对比已结束任务的成交量增长；切换市场，选择任务叠加查看。</p>
     </div>
+    <nav class="head-nav" aria-label="其他页面">
+      <a href="/"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-list"/></svg>任务台</a>
+      <a href="teams.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-users"/></svg>团队管理</a>
+      <a href="analysis.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-chart"/></svg>任务分析</a>
+      <a href="activity.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-news"/></svg>最新活动</a>
+      <a href="rewards.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-medal"/></svg>奖励记录</a>
+    </nav>
+  </header>
+  <div class="seg" style="margin:0 0 12px">
+    <button class="market-btn active" data-market="spot">SPOT</button>
+    <button class="market-btn" data-market="um">UM</button>
   </div>
-  <hr class="sep" />
   <div id="summary" class="summary">加载中...</div>
   <div id="jobSelector" class="job-selector" style="display:none"></div>
   <div class="table-wrap">
@@ -64,7 +76,7 @@
   </div>
   <div class="analysis-panel" id="pctTrendPanel" style="display:none">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px">
-      <h3 style="margin:0;font-size:13px;color:var(--accent)">最后 4h：增量占比 vs 占比变化</h3>
+      <h3 style="margin:0;font-size:13px">最后 4h：增量占比 vs 占比变化</h3>
       <div id="pctTrendHours" class="btn-group">
         <button class="chart-group-btn" data-hours="2">2h</button>
         <button class="chart-group-btn active" data-hours="4">4h</button>
@@ -74,7 +86,7 @@
         <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
         <button class="chart-group-btn" data-mode="job">按任务分组</button>
       </div>
-      <button id="loadPctTrendBtn" style="font-size:12px;padding:2px 14px;min-height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);cursor:pointer;font-weight:700;user-select:none">加载趋势数据</button>
+      <button id="loadPctTrendBtn" class="market-btn">加载趋势数据</button>
       <span id="pctTrendStatus" style="font-size:11px;color:var(--muted)"></span>
     </div>
     <div class="chart-wrap">
@@ -82,6 +94,7 @@
     </div>
   </div>
 </div>
+</main>
 
 <script>
 function escapeHtml(s) {
@@ -130,8 +143,10 @@ function renderGrowth(data) {
     document.getElementById("summary").textContent = "没有符合条件的已完成任务。";
     document.getElementById("jobSelector").style.display = "none";
     document.getElementById("pctTrendPanel").style.display = "none";
+    document.querySelector(".table-wrap").style.display = "none";
     return;
   }
+  document.querySelector(".table-wrap").style.display = "";
   selectedJobIds = allJobs.slice(0, 3).map(j => j.id);
   renderJobSelector();
   updateGrowthTable();
@@ -283,7 +298,7 @@ function renderPctTrendChart() {
   const points = _pctTrendPoints;
   const groupBy = _pctTrendGroupBy;
   if (!points.length) {
-    chartEl.innerHTML = '<text x="280" y="180" text-anchor="middle" fill="#999" font-size="13">无趋势数据</text>';
+    chartEl.innerHTML = '<text x="280" y="180" text-anchor="middle" fill="#6b6255" font-size="13">无趋势数据</text>';
     chartEl.setAttribute("width", 560);
     chartEl.setAttribute("height", 360);
     return;
@@ -309,32 +324,32 @@ function renderPctTrendChart() {
 
   function sy(v) { return MT + PH - (v / maxY) * PH; }
   function pctColor(v) {
-    if (v === 0) return '#999';
+    if (v === 0) return '#6b6255';
     const t = Math.abs(v) / maxAbs;
     const o = (0.2 + t * 0.8).toFixed(2);
-    return v > 0 ? `rgba(39,174,96,${o})` : `rgba(192,57,43,${o})`;
+    return v > 0 ? `rgba(26,127,75,${o})` : `rgba(176,42,36,${o})`;
   }
   function pctTextColor(v) {
-    if (Math.abs(v) < 0.05) return '#999';
-    return v > 0 ? '#27ae60' : '#c0392b';
+    if (Math.abs(v) < 0.05) return '#6b6255';
+    return v > 0 ? '#1a7f4b' : '#b02a24';
   }
 
   let svg = '<defs><linearGradient id="pctGrad" x1="0" y1="0" x2="1" y2="0">';
-  svg += '<stop offset="0%" stop-color="rgba(192,57,43,0.85)"/>';
-  svg += '<stop offset="50%" stop-color="#bbb"/>';
-  svg += '<stop offset="100%" stop-color="rgba(39,174,96,0.85)"/>';
+  svg += '<stop offset="0%" stop-color="rgba(176,42,36,0.85)"/>';
+  svg += '<stop offset="50%" stop-color="#c9c2b6"/>';
+  svg += '<stop offset="100%" stop-color="rgba(26,127,75,0.85)"/>';
   svg += '</linearGradient></defs>';
 
-  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
   for (let i = 0; i <= 4; i++) {
     const v = maxY * i / 4;
     const y = sy(v);
-    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
-    svg += `<text x="${ML - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${v.toFixed(1)}</text>`;
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#d6cfc2"/>`;
+    svg += `<text x="${ML - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#6b6255">${v.toFixed(1)}</text>`;
   }
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">增量占比 (%)</text>`;
 
-  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
 
   for (let ri = 0; ri < rows.length; ri++) {
     const r = rows[ri];
@@ -364,9 +379,9 @@ function renderPctTrendChart() {
   const Lx = ML + PW + 10, Ly = MT + 8;
   svg += `<rect x="${Lx}" y="${Ly}" width="110" height="12" fill="url(#pctGrad)" rx="2"/>`;
   const lc = Lx + 55;
-  svg += `<text x="${Lx + 4}" y="${Ly + 24}" font-size="10" fill="#c0392b">下降</text>`;
-  svg += `<text x="${lc}" y="${Ly + 24}" text-anchor="middle" font-size="10" fill="#999">0</text>`;
-  svg += `<text x="${Lx + 106}" y="${Ly + 24}" text-anchor="end" font-size="10" fill="#27ae60">增长</text>`;
+  svg += `<text x="${Lx + 4}" y="${Ly + 24}" font-size="10" fill="#b02a24">下降</text>`;
+  svg += `<text x="${lc}" y="${Ly + 24}" text-anchor="middle" font-size="10" fill="#6b6255">0</text>`;
+  svg += `<text x="${Lx + 106}" y="${Ly + 24}" text-anchor="end" font-size="10" fill="#1a7f4b">增长</text>`;
 
   const W2 = Lx + 120 + MR;
 

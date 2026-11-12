@@ -58,23 +58,34 @@
   .c-green { color:var(--good); font-weight:600; }
   .c-red { color:var(--bad); font-weight:600; }
 </style>
+<link rel="stylesheet" href="/css888/theme.css?v=20261112" />
 </head>
-<body>
+<body class="app analysis">
 <main class="shell">
-  <div class="page-head">
-    <h2 style="margin-bottom:0">任务分析 <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:12px">← 返回主页</a></h2>
-    <hr class="sep">
-    <div style="display:flex;gap:6px">
-      <button class="market-btn active" data-market="spot" id="btnSpot">SPOT</button>
-      <button class="market-btn" data-market="um" id="btnUm">UM</button>
-      <button class="market-btn" data-market="sprint" id="btnSprint">SPRINT</button>
+  <header class="page-head">
+    <div class="head-main">
+      <p class="kicker">Binance Leaderboard Capture · 分析</p>
+      <h1>任务分析</h1>
+      <p class="lede">对比已结束任务的成交量、分档占比、奖励效率与趋势；按市场切换口径。</p>
     </div>
+    <nav class="head-nav" aria-label="其他页面">
+      <a href="/"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-list"/></svg>任务台</a>
+      <a href="teams.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-users"/></svg>团队管理</a>
+      <a href="growth.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-trend-up"/></svg>增长对比</a>
+      <a href="activity.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-news"/></svg>最新活动</a>
+      <a href="rewards.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-medal"/></svg>奖励记录</a>
+    </nav>
+  </header>
+  <div class="seg" style="margin:0 0 12px">
+    <button class="market-btn active" data-market="spot" id="btnSpot">SPOT</button>
+    <button class="market-btn" data-market="um" id="btnUm">UM</button>
+    <button class="market-btn" data-market="sprint" id="btnSprint">SPRINT</button>
   </div>
 
   <div id="jobSelector" class="job-selector" style="display:none"></div>
 
-  <div id="similarBar" style="display:none; margin-top:8px; align-items:center; gap:12px">
-    <button id="findSimilarBtn" class="market-btn" style="font-size:12px;padding:2px 14px;min-height:30px">查找相似任务</button>
+  <div id="similarBar" style="display:none; margin-top:10px; align-items:center; gap:12px">
+    <button id="findSimilarBtn" class="market-btn" >查找相似任务</button>
     <span id="similarStatus" style="font-size:11px;color:var(--muted)"></span>
   </div>
 
@@ -97,7 +108,7 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">每 $1 奖励所需<span id="chartStatLabel">均值</span>成交量</h3>
+        <h3 style="margin:0;font-size:13px">每 $1 奖励所需<span id="chartStatLabel">均值</span>成交量</h3>
         <div id="chartStatToggle" class="btn-group">
           <button class="chart-group-btn active" data-stat="avg">均值</button>
           <button class="chart-group-btn" data-stat="med">中位数</button>
@@ -119,7 +130,7 @@
     <div class="analysis-panel">
       <div id="ratioSection">
         <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-          <h3 style="margin:0;font-size:13px;color:var(--accent)">分档成交占比</h3>
+          <h3 style="margin:0;font-size:13px">分档成交占比</h3>
           <div id="ratioGroupToggle" class="btn-group" style="margin-left:auto">
             <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
             <button class="chart-group-btn" data-mode="job">按任务分组</button>
@@ -131,7 +142,7 @@
       </div>
       <div id="dailyGradeSection" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-          <h3 style="margin:0;font-size:13px;color:var(--accent)">日均分数</h3>
+          <h3 style="margin:0;font-size:13px">日均分数</h3>
           <span style="font-size:11px;color:var(--muted)">活动天数 = (结束 - 开始) 天数</span>
           <div id="dailyGradeStatToggle" class="btn-group">
             <button class="chart-group-btn active" data-stat="avg">均值</button>
@@ -154,7 +165,7 @@
 
     <div class="analysis-panel">
       <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">分档 <span id="distStatLabel">中位数</span> / 均值 (%)</h3>
+        <h3 style="margin:0;font-size:13px">分档 <span id="distStatLabel">中位数</span> / 均值 (%)</h3>
         <div id="distStatToggle" class="btn-group">
           <button class="chart-group-btn active" data-stat="med">中位数</button>
           <button class="chart-group-btn" data-stat="q1">Q1</button>
@@ -173,7 +184,7 @@
     <hr class="page-sep">
 
     <div class="analysis-panel">
-      <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">奖励效率</h3>
+      <h3 style="margin:0 0 8px;font-size:13px">奖励效率</h3>
       <p id="rewardEffDesc" style="margin:0 0 12px;font-size:11px;color:var(--muted)">排除前5名后，占比% = 该档成交量占6~1000总量百分比、奖励% = 该档奖励占6~1000总奖励百分比、效率 = 占比% ÷ 奖励%，&gt;1 高效、&lt;1 低效</p>
       <div class="table-wrap">
         <table id="rewardEffTable" style="width:auto;min-width:auto">
@@ -186,7 +197,7 @@
     <hr class="page-sep">
 
     <div class="analysis-panel">
-      <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">弹力系数</h3>
+      <h3 style="margin:0 0 8px;font-size:13px">弹力系数</h3>
       <div class="table-wrap">
         <table id="elasticityTable" style="width:auto;min-width:auto">
           <caption style="caption-side:top;font-size:11px;color:var(--muted);padding:0 0 8px;text-align:left">相邻档位成交量比值（&gt;100% 排名升高量反大，&lt;100% 正常衰减）</caption>
@@ -200,7 +211,7 @@
 
     <div class="analysis-panel" id="pctTrendPanel" style="display:none">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px">
-        <h3 style="margin:0;font-size:13px;color:var(--accent)">最后 4h：增量占比 vs 占比变化</h3>
+        <h3 style="margin:0;font-size:13px">最后 4h：增量占比 vs 占比变化</h3>
         <div id="pctTrendHours" class="btn-group">
           <button class="chart-group-btn" data-hours="2">2h</button>
           <button class="chart-group-btn active" data-hours="4">4h</button>
@@ -210,7 +221,7 @@
           <button class="chart-group-btn active" data-mode="tier">按排名分档</button>
           <button class="chart-group-btn" data-mode="job">按任务分组</button>
         </div>
-        <button id="loadPctTrendBtn" class="market-btn" style="font-size:12px;padding:2px 14px;min-height:30px">加载趋势数据</button>
+        <button id="loadPctTrendBtn" class="market-btn" >加载趋势数据</button>
         <span id="pctTrendStatus" style="font-size:11px;color:var(--muted)"></span>
       </div>
       <div class="chart-wrap">
@@ -541,7 +552,7 @@ function renderTable(jobs, ranges) {
       let sub = `奖励: ${escapeHtml(j.rewardToken)}`;
       if (j.rewardPriceUsd != null) {
         const priceStr = j.rewardPriceUsd.toLocaleString("en-US", {minimumFractionDigits:4, maximumFractionDigits:8});
-        const tagCls = j.rewardPriceIsLive ? ' style="color:#c0392b;font-weight:700"' : '';
+        const tagCls = j.rewardPriceIsLive ? ' style="color:var(--up);font-weight:500"' : '';
         const tag = j.rewardPriceIsLive ? "实时" : "收盘";
         sub += ` (@ $${priceStr} <span${tagCls}>${tag}</span>)`;
       }
@@ -625,8 +636,8 @@ function renderEfficiencyChart(jobs, ranges) {
   if (!visible.length) { document.getElementById("efficiencyChart").innerHTML = ""; return; }
   document.getElementById("chartStatLabel").textContent = STAT_LABELS[_chartStat];
 
-  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
-  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+  const JOB_COLORS = ["#0e747a","#8a6d3b","#3f6f8a","#8c5a4a","#5d7a5a","#6b6255","#4a4f7a","#a06a3a"];
+  const TIER_COLORS = ["#0a5d62","#1a7f4b","#6b7a3a","#8a6d3b","#a0603a","#8c4a4a","#5a5f7a","#574e43"];
 
   const groupBy = _chartGroupBy;
 
@@ -687,18 +698,18 @@ function renderEfficiencyChart(jobs, ranges) {
   let svg = `<g class="chart-axis">`;
 
   // Y axis
-  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
   const yTicks = 5;
   for (let i = 0; i <= yTicks; i++) {
     const v = (maxEff * i / yTicks);
     const y = sy(v);
-    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#d6cfc2"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${fmtVolume(v)}</text>`;
   }
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">每 $1 奖励所需${STAT_LABELS[_chartStat]}成交量</text>`;
 
   // X axis
-  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
 
   // Groups + bars
   for (let gi = 0; gi < groups.length; gi++) {
@@ -730,8 +741,8 @@ function renderEfficiencyChart(jobs, ranges) {
       const avgVal = g.bars.reduce((s, b) => s + b.eff, 0) / g.bars.length;
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
-      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${fmtVolume(avgVal)}</text>`;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#b02a24" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#b02a24">均: ${fmtVolume(avgVal)}</text>`;
     }
   }
 
@@ -762,7 +773,7 @@ function renderEfficiencyChart(jobs, ranges) {
     const e = legendEntries[li];
     const yy = MT + 10 + li * 18;
     svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
-    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#574e43">${e.label}</text>`;
   }
   const W2 = ML + PW + 10 + legendW + MR;
 
@@ -779,8 +790,8 @@ function renderRatioChart(jobs, ranges) {
   const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   if (!visible.length) { document.getElementById("ratioChart").innerHTML = ""; return; }
 
-  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
-  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+  const JOB_COLORS = ["#0e747a","#8a6d3b","#3f6f8a","#8c5a4a","#5d7a5a","#6b6255","#4a4f7a","#a06a3a"];
+  const TIER_COLORS = ["#0a5d62","#1a7f4b","#6b7a3a","#8a6d3b","#a0603a","#8c4a4a","#5a5f7a","#574e43"];
   const groupBy = _ratioGroupBy;
 
   // Compute per-job total volume
@@ -841,17 +852,17 @@ function renderRatioChart(jobs, ranges) {
 
   let svg = `<g class="chart-axis">`;
 
-  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
   const yTicks = 5;
   for (let i = 0; i <= yTicks; i++) {
     const v = (maxPct * i / yTicks);
     const y = sy(v);
-    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#d6cfc2"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${v.toFixed(1)}%</text>`;
   }
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">成交占比 (%)</text>`;
 
-  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
 
   for (let gi = 0; gi < groups.length; gi++) {
     const g = groups[gi];
@@ -881,8 +892,8 @@ function renderRatioChart(jobs, ranges) {
       const avgVal = g.bars.reduce((s, b) => s + b.pct, 0) / g.bars.length;
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
-      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#b02a24" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#b02a24">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
@@ -912,7 +923,7 @@ function renderRatioChart(jobs, ranges) {
     const e = legendEntries[li];
     const yy = MT + 10 + li * 18;
     svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
-    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#574e43">${e.label}</text>`;
   }
   const W2 = ML + PW + 10 + legendW + MR;
 
@@ -948,8 +959,8 @@ function renderDailyGradeChart(jobs, ranges) {
   const visible = jobs.filter(j => selectedJobIds.includes(j.id));
   if (!visible.length) { document.getElementById("dailyGradeChart").innerHTML = ""; return; }
 
-  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
-  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+  const JOB_COLORS = ["#0e747a","#8a6d3b","#3f6f8a","#8c5a4a","#5d7a5a","#6b6255","#4a4f7a","#a06a3a"];
+  const TIER_COLORS = ["#0a5d62","#1a7f4b","#6b7a3a","#8a6d3b","#a0603a","#8c4a4a","#5a5f7a","#574e43"];
 
   function parseDate(s) {
     if (!s) return null;
@@ -1085,7 +1096,7 @@ function renderDailyGradeChart(jobs, ranges) {
     const e = legendEntries[li];
     const yy = MT + 10 + li * 18;
     svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
-    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#574e43">${e.label}</text>`;
   }
   const W2 = ML + PW + 10 + legendW + MR;
 
@@ -1141,8 +1152,8 @@ function renderDistributionChart(jobs, ranges) {
   document.getElementById("distStatLabel").textContent = DIST_STAT_LABELS[_distStat];
 
   const groupBy = _distGroupBy;
-  const JOB_COLORS = ["#2980b9","#e67e22","#27ae60","#c0392b","#8e44ad","#16a085","#d35400","#2c3e50"];
-  const TIER_COLORS = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6","#1abc9c","#34495e"];
+  const JOB_COLORS = ["#0e747a","#8a6d3b","#3f6f8a","#8c5a4a","#5d7a5a","#6b6255","#4a4f7a","#a06a3a"];
+  const TIER_COLORS = ["#0a5d62","#1a7f4b","#6b7a3a","#8a6d3b","#a0603a","#8c4a4a","#5a5f7a","#574e43"];
   const STAT_LABEL = { med: "中位数", q1: "Q1", last: "末位" };
 
   const groups = [];
@@ -1195,14 +1206,14 @@ function renderDistributionChart(jobs, ranges) {
   function fmtLabel(s) { return s.length > 10 ? escapeHtml(s.slice(0, 9)) + "⋯" : escapeHtml(s); }
 
   let svg = `<g class="chart-axis">`;
-  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
   for (let i = 0; i <= 5; i++) {
     const v = (maxPct * i / 5), y = sy(v);
-    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#d6cfc2"/>`;
     svg += `<text x="${ML - 6}" y="${y + 3}" text-anchor="end">${v.toFixed(1)}%</text>`;
   }
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">${DIST_STAT_LABELS[_distStat]} / 均值 (%)</text>`;
-  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
 
   for (let gi = 0; gi < groups.length; gi++) {
     const g = groups[gi];
@@ -1231,8 +1242,8 @@ function renderDistributionChart(jobs, ranges) {
       const avgVal = g.bars.reduce((s, b) => s + b.pct, 0) / g.bars.length;
       const ay = sy(avgVal);
       const lx2 = startX + g.bars.length * barW + (g.bars.length - 1) * 2;
-      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#e74c3c">均: ${avgVal.toFixed(1)}%</text>`;
+      svg += `<line x1="${startX}" y1="${ay}" x2="${lx2}" y2="${ay}" stroke="#b02a24" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${lx2 + 4}" y="${ay + 3}" font-size="11" fill="#b02a24">均: ${avgVal.toFixed(1)}%</text>`;
     }
   }
 
@@ -1262,7 +1273,7 @@ function renderDistributionChart(jobs, ranges) {
     const e = legendEntries[li];
     const yy = MT + 10 + li * 18;
     svg += `<rect x="${Lx}" y="${yy - 8}" width="10" height="10" fill="${e.color}" rx="2"/>`;
-    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#444">${e.label}</text>`;
+    svg += `<text x="${Lx + 16}" y="${yy}" font-size="11" fill="#574e43">${e.label}</text>`;
   }
   const W2 = ML + PW + 10 + legendW + MR;
 
@@ -1527,17 +1538,17 @@ function renderPctTrendChart() {
   svg += '</linearGradient></defs>';
 
   // Y axis
-  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
   for (let i = 0; i <= 4; i++) {
     const v = maxY * i / 4;
     const y = sy(v);
-    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#ccc"/>`;
+    svg += `<line x1="${ML - 4}" y1="${y}" x2="${ML}" y2="${y}" stroke="#d6cfc2"/>`;
     svg += `<text x="${ML - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#666">${v.toFixed(1)}</text>`;
   }
   svg += `<text class="chart-axis-label" x="14" y="${MT + PH / 2}" transform="rotate(-90,14,${MT + PH / 2})">增量占比 (%)</text>`;
 
   // X axis
-  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#ccc"/>`;
+  svg += `<line x1="${ML}" y1="${MT + PH}" x2="${ML + PW}" y2="${MT + PH}" stroke="#d6cfc2"/>`;
 
   // Groups + bars
   for (let ri = 0; ri < rows.length; ri++) {

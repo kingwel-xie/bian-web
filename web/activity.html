@@ -38,20 +38,35 @@
   .act-more { text-align: center; color: var(--muted); font-size: 12px; padding: 14px 0 24px; cursor: pointer; user-select: none; }
   .act-more:hover { color: var(--accent); }
 </style>
+<link rel="stylesheet" href="/css888/theme.css?v=20261112" />
 </head>
-<body>
+<body class="app activity">
 <main class="shell">
+  <header class="page-head">
+    <div class="head-main">
+      <p class="kicker">Binance Leaderboard Capture · 公告</p>
+      <h1>最新活动</h1>
+      <p class="lede">自动跟随币安公告更新，可按类型与代币筛选；有新增公告时刷新按钮会显示数量。</p>
+    </div>
+    <nav class="head-nav" aria-label="其他页面">
+      <a href="/"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-list"/></svg>任务台</a>
+      <a href="teams.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-users"/></svg>团队管理</a>
+      <a href="analysis.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-chart"/></svg>任务分析</a>
+      <a href="growth.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-trend-up"/></svg>增长对比</a>
+      <a href="rewards.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-medal"/></svg>奖励记录</a>
+    </nav>
+  </header>
+
   <div class="act-head">
-    <h2>币安最新活动 <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:12px">← 返回主页</a></h2>
     <div class="act-actions">
       <input id="searchInput" type="text" placeholder="搜索活动标题…" />
-      <button id="refreshBtn" class="act-refresh">🔄 刷新</button>
+      <button id="refreshBtn" class="act-refresh"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-refresh"/></svg>刷新</button>
     </div>
   </div>
   <div class="act-filters" id="filters"></div>
   <div class="act-count" id="count">加载中...</div>
   <div id="grid" class="act-grid"></div>
-  <div id="lazyMore" class="act-more" hidden>↓ 加载更多</div>
+  <div id="lazyMore" class="act-more" hidden>加载更多</div>
 </main>
 
 <script>
@@ -91,11 +106,7 @@
     if (!allTypes.length) { document.getElementById("filters").innerHTML = ""; return; }
     document.getElementById("filters").innerHTML = allTypes.map(t => {
       const excluded = excludedTypes.has(t);
-      const h = tagHue(t);
-      const style = excluded
-        ? `color:#888;border-color:#888;text-decoration:line-through`
-        : `--flt-bg:${tagBg(h)};--flt-fg:${tagFg(h)};--flt-border:${tagBorder(h)}`;
-      return `<span class="flt${excluded ? " ex" : " on"}" style="${style}" data-type="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
+      return `<span class="flt${excluded ? " ex" : " on"}" data-type="${escapeHtml(t)}">${escapeHtml(t)}</span>`;
     }).join("");
     document.getElementById("filters").querySelectorAll(".flt").forEach(el => {
       el.addEventListener("click", () => {
@@ -110,12 +121,12 @@
     return `
       <div class="act-card${newIds.has(a.id) ? " act-new" : ""}">
         <div class="act-title">${escapeHtml(a.title)}</div>
-        ${a.tags && !Array.isArray(a.tags) ? `<div class="act-tags">${[...(a.tags.types || []).map(t => { const h=tagHue(t); return `<span class="tag type" style="--tag-bg:${tagBg(h)};--tag-fg:${tagFg(h)};--tag-border:${tagBorder(h)}">${escapeHtml(t)}</span>`; }), ...(a.tags.tokens || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`)].join("")}</div>` : ""}
+        ${a.tags && !Array.isArray(a.tags) ? `<div class="act-tags">${[...(a.tags.types || []).map(t => `<span class="tag type">${escapeHtml(t)}</span>`), ...(a.tags.tokens || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`)].join("")}</div>` : ""}
         <div class="act-meta">
           <span>${fmtDate(a.releaseDate)}</span>
           <div class="act-links">
             <a class="act-link" href="https://${DOMAIN.OFFICIAL}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">查看详情</a>
-            <a class="act-link" href="https://${DOMAIN.MIRROR}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">🇨🇳 国内</a>
+            <a class="act-link" href="https://${DOMAIN.MIRROR}/zh-CN/support/announcement/detail/${encodeURIComponent(a.code)}" target="_blank" rel="noopener">国内</a>
           </div>
         </div>
       </div>`;
@@ -173,15 +184,6 @@
   }, { rootMargin: "600px" });
   _lazyIO.observe(lazyMore);
   lazyMore.addEventListener("click", () => { renderMore(); maybeFill(); });
-
-  function tagHue(kw) {
-    let h = 0;
-    for (let i = 0; i < kw.length; i++) h = ((h << 5) - h) + kw.charCodeAt(i);
-    return Math.abs(h) % 360;
-  }
-  function tagBg(h) { return `hsla(${h}, 55%, 45%, 0.12)`; }
-  function tagFg(h) { return `hsla(${h}, 55%, 40%, 1)`; }
-  function tagBorder(h) { return `hsla(${h}, 55%, 45%, 0.25)`; }
 
   const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.bsmkweb.cc" };
   function escapeHtml(v) {

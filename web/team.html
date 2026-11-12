@@ -52,18 +52,30 @@
     .team-card-header { flex-direction: column; gap: 4px; }
   }
 </style>
+<link rel="stylesheet" href="/css888/theme.css?v=20261112" />
 </head>
-<body>
-<div class="panel" style="padding:14px">
-  <div class="team-head">
-    <h2>团队检测</h2>
-    <a href="/" style="color:var(--accent-2);font-size:12px">← 返回主页</a>
-  </div>
+<body class="app team">
+<main class="shell">
+  <header class="page-head">
+    <div class="head-main">
+      <p class="kicker">Binance Leaderboard Capture · 检测</p>
+      <h1>团队检测</h1>
+      <p class="lede">用快照对比或跨任务重合度识别同团队成员；结果可一键保存为团队。</p>
+    </div>
+    <nav class="head-nav" aria-label="其他页面">
+      <a href="/"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-list"/></svg>任务台</a>
+      <a href="teams.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-users"/></svg>团队管理</a>
+      <a href="analysis.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-chart"/></svg>任务分析</a>
+      <a href="growth.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-trend-up"/></svg>增长对比</a>
+      <a href="activity.html"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-news"/></svg>最新活动</a>
+    </nav>
+  </header>
+  <div class="panel">
   <div id="meta" class="preview-meta">加载中...</div>
 
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="snap">📸 快照检测</button>
-    <button class="mode-tab" data-mode="cross">🔗 跨任务检测</button>
+    <button class="mode-tab active" data-mode="snap"><svg class="i i-xs" aria-hidden="true"><use href="/css888/icons.svg#i-camera"/></svg>快照检测</button>
+    <button class="mode-tab" data-mode="cross"><svg class="i i-xs" aria-hidden="true"><use href="/css888/icons.svg#i-link"/></svg>跨任务检测</button>
   </div>
 
   <div id="snapPanel" class="params-panel">
@@ -74,7 +86,7 @@
     <label>排名差距 <input type="number" id="paramMaxRankGap" value="20" min="1" /></label>
     <label>增量容差 <input type="number" id="paramDeltaErr" value="300" min="0" step="100" /></label>
     <label>忽略小增量 <input type="number" id="paramMinDelta" value="500" min="0" step="100" /></label>
-    <button id="teamBtn" type="button" onclick="runTeamAnalysis()">📊 开始检测</button>
+    <button id="teamBtn" type="button" onclick="runTeamAnalysis()"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-play"/></svg>开始检测</button>
   </div>
 
   <div id="crossPanel" class="params-panel" style="display:none">
@@ -86,14 +98,15 @@
     <label style="flex:1;min-width:200px">SPOT已完成任务
       <div id="crossJobList" class="job-list-panel">加载中...</div>
     </label>
-    <button id="crossBtn" type="button">🚀 跨任务检测</button>
+    <button id="crossBtn" type="button"><svg class="i i-sm" aria-hidden="true"><use href="/css888/icons.svg#i-play"/></svg>跨任务检测</button>
   </div>
 
   <div id="teamPanel" class="team-panel" style="display:none">
     <h3>检测结果 <span id="teamSummary" style="font-weight:400;font-size:12px"></span></h3>
     <div id="teamBody"></div>
   </div>
-</div>
+  </div>
+</main>
 <script>
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtNumber(v) { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
@@ -143,12 +156,12 @@ function saveOneTeam(idx) {
     return r.json();
   }).then(data => {
     dbExists = true;
-    msgEl.textContent = "✓ 已添加";
+    msgEl.textContent = "已添加";
     msgEl.style.color = "var(--good)";
-    btn.textContent = "✓ 已添加";
+    btn.textContent = "已添加";
     btn.disabled = true;
   }).catch(err => {
-    msgEl.textContent = "✗ " + err.message;
+    msgEl.textContent = "失败：" + err.message;
     msgEl.style.color = "var(--bad)";
     btn.disabled = false;
   });
@@ -244,7 +257,7 @@ function runCrossTeamAnalysis() {
 
   const selected = Array.from(document.querySelectorAll(".job-btn.selected")).map(btn => btn.dataset.jid);
   if (!selected.length) {
-    btn.disabled = false; btn.textContent = "🚀 跨任务检测";
+    btn.disabled = false; btn.textContent = "跨任务检测";
     document.getElementById("teamSummary").textContent = "请至少选择一个任务";
     document.getElementById("teamPanel").style.display = "";
     return;
@@ -275,7 +288,7 @@ function runCrossTeamAnalysis() {
     })
     .then(data => {
       btn.disabled = false;
-      btn.textContent = "🚀 跨任务检测";
+      btn.textContent = "跨任务检测";
       if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
       const teams = data.teams || [];
       lastTeams = teams;
@@ -329,7 +342,7 @@ function runCrossTeamAnalysis() {
     })
     .catch(err => {
       btn.disabled = false;
-      btn.textContent = "🚀 跨任务检测";
+      btn.textContent = "跨任务检测";
       teamSummary.textContent = "请求失败";
       teamBody.innerHTML = '<div class="team-empty">错误: ' + escapeHtml(err.message) + '</div>';
       teamPanel.style.display = "";
@@ -364,7 +377,7 @@ function runTeamAnalysis() {
     })
     .then(data => {
       btn.disabled = false;
-      btn.textContent = "📊 开始检测";
+      btn.textContent = "开始检测";
       if (data.error) { teamSummary.textContent = "错误: " + data.error; teamPanel.style.display = ""; return; }
       const teams = data.teams || [];
       lastTeams = teams;
@@ -404,7 +417,7 @@ function runTeamAnalysis() {
     })
     .catch(err => {
       btn.disabled = false;
-      btn.textContent = "📊 开始检测";
+      btn.textContent = "开始检测";
       teamSummary.textContent = "请求失败";
       teamBody.innerHTML = '<div class="team-empty">错误: ' + escapeHtml(err.message) + '</div>';
       teamPanel.style.display = "";
