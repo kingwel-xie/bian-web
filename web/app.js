@@ -210,10 +210,11 @@ function renderDiscoveryCards(result, inferred) {
       ${candidates.map((c) => {
         const rid = c.resourceId;
         const cls = c.hasJob ? "discovery-card used" : "discovery-card fresh";
-        const nameText = c.hasJob ? escapeHtml(c.jobName) : "未启动";
+        const nameText = c.hasJob ? escapeHtml(c.jobName) : "未绑定任务";
+        const stateText = c.hasJob ? "已建任务" : "未启动";
         return `
           <button class="${cls}" data-rid="${escapeHtml(String(rid))}">
-            <span class="dc-name">${nameText}</span>
+            <span class="dc-top"><span class="dc-name">${nameText}</span><span class="dc-state">${stateText}</span></span>
             <span class="dc-id">${escapeHtml(String(rid))}</span>
             <span class="dc-meta">${escapeHtml(inferred.market.toUpperCase())} · ${escapeHtml(inferred.symbol)}</span>
           </button>
@@ -303,7 +304,7 @@ function renderSprintTiersPreview() {
   const segs = [];
   if (fmt(t.t1)) segs.push("S1: " + fmt(t.t1));
   if (fmt(t.t2)) segs.push("S2: " + fmt(t.t2));
-  el.textContent = segs.length ? "🎁 轮次奖励（提取自公告，可在子任务配置中编辑） " + segs.join("　/　") : "";
+  el.textContent = segs.length ? "轮次奖励（提取自公告，可在子任务配置中编辑） " + segs.join("　/　") : "";
 }
 
 function openEditModal(job) {
@@ -339,7 +340,7 @@ function openEditModal(job) {
     const parts = [];
     if (link.sprint1) parts.push("S1");
     if (link.sprint2) parts.push("S2");
-    hintEl.textContent = parts.length ? "✓ 已建轮次：" + parts.join("/") : "";
+    hintEl.textContent = parts.length ? "已建轮次：" + parts.join("/") : "";
   }
   document.getElementById("editMarket").value = (p.market || "um").toLowerCase();
   const symVal = Array.isArray(p.symbol) ? p.symbol[0] : (p.symbol || "");
@@ -394,7 +395,7 @@ function addTierRow(tier) {
     `<input class="tier-max" type="number" min="1" value="${t.rankMax != null ? t.rankMax : ""}" />` +
     `<span class="tier-arrow">奖励</span>` +
     `<input class="tier-amt" type="text" inputmode="numeric" placeholder="0" value="${t.amount != null ? addCommas(t.amount) : ""}" />` +
-    `<button type="button" class="tier-del-btn" title="删除档位">×</button>`;
+    `<button type="button" class="tier-del-btn" title="删除档位" aria-label="删除档位"><svg class="i i-sm" aria-hidden="true"><use href="#i-x"/></svg></button>`;
   const amtEl = row.querySelector(".tier-amt");
   amtEl.addEventListener("blur", () => { const v = amtEl.value.trim(); if (v) amtEl.value = addCommas(v.replace(/,/g, "")); });
   row.querySelector(".tier-del-btn").addEventListener("click", () => {
@@ -468,10 +469,10 @@ document.getElementById("syncSprintsBtn").addEventListener("click", async () => 
     if (data.error) throw new Error(data.error);
     const ok = (data.jobs || []).map((j) => `S${j.sprintIndex}已建`).join(" ");
     const errs = (data.errors || []).join("; ");
-    hint.textContent = "✓ " + (ok || "无可建轮次") + (errs ? " ⚠ " + errs : "");
+    hint.textContent = (ok || "无可建轮次") + (errs ? "；" + errs : "");
     await loadJobs(state.page);
   } catch (e) {
-    hint.textContent = "❌ " + e.message;
+    hint.textContent = "同步失败：" + e.message;
   } finally {
     btn.disabled = false;
   }
@@ -826,7 +827,6 @@ function renderJobCard(job, now) {
   const mirrorUrl = withDomain(url, DOMAIN.MIRROR);
   const jobName = job.name || payload.name || payload.resourceId || job.id;
   const rid = payload.resourceId ? String(payload.resourceId) : "";
-  const displayName = rid ? `${jobName}  [${rid}]` : jobName;
   const activityEnd = payload.activityEnd;
   const activityStart = payload.activityStart;
   const sprintChild = !!payload.sprintIndex && !!payload.parentJobId;
@@ -838,9 +838,9 @@ function renderJobCard(job, now) {
   const preStartLabel = notStarted && job.status !== "running" && job.status !== "queued";
   const statusZh = preStartLabel ? "未开始" : ({ completed: "执行成功", running: "运行中", queued: "排队中", waiting: "待抓取", failed: "失败" }[job.status] || job.status);
   const snapshotTs = job.latestSnapshot;
-  const actTimeText = sprintChild
-    ? `轮次时间：${String(activityStart || "—").slice(0, 16)} ~ ${String(activityEnd || "—").slice(0, 16)}`
-    : (activityStart || activityEnd ? `活动时间：${activityStart || "—"} ~ ${activityEnd || "—"}` : "");
+  const actRange = activityStart || activityEnd ? `${activityStart || "—"} ~ ${activityEnd || "—"}` : "";
+  const actLabel = sprintChild ? "轮次" : "活动";
+  const showProgress = job.status === "running" || job.status === "queued" || job.status === "waiting";
   let countdownText = "", countdownCls = "job-countdown";
   if (notStarted && startDate) {
     const dt = startDate - now;
@@ -864,34 +864,41 @@ function renderJobCard(job, now) {
   }
   return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
-        <div>
-          <strong>
-            <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(displayName))}</span>
+        <div class="job-main">
+          <div class="job-title-row">
+            <span class="job-name" data-preview="${escapeHtml(job.id)}">${escapeHtml(String(jobName))}</span>
             ${payload.sprintIndex ? `<span class="sprint-badge" title="轮次任务">S${escapeHtml(String(payload.sprintIndex))}</span>` : ""}
-            ${actTimeText ? `<span class="job-act-time">${escapeHtml(actTimeText)}</span>` : ""}
+            ${rid ? `<span class="job-rid">#${escapeHtml(rid)}</span>` : ""}
+          </div>
+          <div class="job-meta">
+            ${actRange ? `<span class="job-time"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg>${escapeHtml(actLabel)} ${escapeHtml(actRange)}</span>` : ""}
             ${countdownText ? `<span class="${countdownCls}">${escapeHtml(countdownText)}</span>` : ""}
-          </strong>
-          ${sprintChild ? "" : `<div class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">🔗 官网</a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">🇨🇳 国内</a>` : `<span class="muted">无 URL</span>`}</div>`}
-          <small>${escapeHtml(statusZh)}${job.finishedAt && !preStartLabel ? ` · ${escapeHtml(fmtTime(job.finishedAt))}` : ""}</small>
-          ${snapshotTs ? `<div class="snapshot-ts">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> (北京时间)</div>` : ""}
+            ${isExpired ? `<span class="job-expired-tag">已到期</span>` : ""}
+            ${sprintChild ? "" : `<span class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">官网<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">国内<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a>` : `<span class="muted">无 URL</span>`}</span>`}
+          </div>
+          <div class="job-state">
+            <span class="job-status"><span class="st-dot" aria-hidden="true"></span>${escapeHtml(statusZh)}</span>
+            ${job.finishedAt && !preStartLabel ? `<span class="job-finished">${escapeHtml(fmtTime(job.finishedAt))}</span>` : ""}
+            ${snapshotTs ? `<span class="job-snapshot">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> 北京时间</span>` : ""}
+          </div>
         </div>
         <div class="job-actions">
           ${job.status === "running" || job.status === "queued"
-            ? `<button class="ghost mini danger" type="button" data-kill="${escapeHtml(job.id)}">终止任务</button>`
-            : `<button class="ghost mini" type="button" data-rerun="${escapeHtml(job.id)}">执行</button>`
+            ? `<button class="danger" type="button" data-kill="${escapeHtml(job.id)}">终止</button>`
+            : `<button class="act-run" type="button" data-rerun="${escapeHtml(job.id)}">执行</button>`
           }
-           <button class="ghost mini" type="button" data-rename="${escapeHtml(job.id)}">配置</button>
-          <button class="ghost mini danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
+          <button type="button" data-rename="${escapeHtml(job.id)}">配置</button>
+          <button class="danger" type="button" data-delete="${escapeHtml(job.id)}">删除</button>
         </div>
-        <div class="progress">
-          <div class="progress-line">
+        ${showProgress ? `<div class="job-progress">
+          <div class="jp-line">
             <span>${escapeHtml(progress.label || "等待进度")}${escapeHtml(pagesText)}${escapeHtml(rowsText)}</span>
             <b>${escapeHtml(percent)}%</b>
           </div>
-          <div class="progress-track"><i style="width:${percent}%"></i></div>
-        </div>
-          ${errorReason ? `<div class="job-error">${escapeHtml(errorReason)}</div>` : ""}
-          ${job.stderr ? `<details class="stderr"><summary>详情</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
+          <div class="jp-track"><i style="width:${percent}%"></i></div>
+        </div>` : ""}
+        ${errorReason ? `<div class="job-error">${escapeHtml(errorReason)}</div>` : ""}
+        ${job.stderr ? `<details class="stderr"><summary>详情</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
       </article>
     `;
 }
@@ -909,7 +916,7 @@ function renderJobs(jobs) {
       const anyActive = kids.some((k) => k.status === "running" || k.status === "queued");
       const open = state._sprintOpen.has(job.id) || anyActive;
       html += `<div class="sprint-group" data-parent="${escapeHtml(job.id)}">
-        <button class="sprint-toggle" type="button"><span class="st-arrow">${open ? "▾" : "▸"}</span>轮次任务 (${kids.length})</button>
+        <button class="sprint-toggle" type="button"><span class="st-arrow${open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>轮次任务 <span class="sprint-count">${kids.length}</span></button>
         <div class="sprint-kids" style="${open ? "" : "display:none"}">${kids.map((k) => renderJobCard(k, now)).join("")}</div>
       </div>`;
     }
@@ -924,7 +931,7 @@ function renderJobs(jobs) {
       const arrow = this.querySelector(".st-arrow");
       const open = kids.style.display !== "none";
       kids.style.display = open ? "none" : "";
-      if (arrow) arrow.textContent = open ? "▸" : "▾";
+      if (arrow) arrow.classList.toggle("open", !open);
       if (pid) { if (open) state._sprintOpen.delete(pid); else state._sprintOpen.add(pid); }
     });
   });
@@ -948,18 +955,21 @@ function renderPagination() {
   }
 
   const pages = paginationRange(page, totalPages, 2);
+  const iconButton = (target, icon, label, disabled) =>
+    `<button data-page="${target}" title="${label}" aria-label="${label}" ${disabled ? "disabled" : ""}><svg class="i" aria-hidden="true"><use href="#${icon}"/></svg></button>`;
   let html = `<span class="page-info">共 ${total} 条 · 第 ${page}/${totalPages} 页</span><div class="page-buttons">`;
-  html += `<button class="ghost mini" data-page="1" ${page <= 1 ? "disabled" : ""}>«</button>`;
-  html += `<button class="ghost mini" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹</button>`;
+  html += iconButton(1, "i-chevrons-left", "第一页", page <= 1);
+  html += iconButton(page - 1, "i-chevron-left", "上一页", page <= 1);
   for (const p of pages) {
     if (p === null) {
       html += `<span class="page-ellipsis">…</span>`;
     } else {
-      html += `<button class="ghost mini ${p === page ? "active" : ""}" data-page="${p}">${p}</button>`;
+      const active = p === page;
+      html += `<button class="${active ? "active" : ""}" data-page="${p}" ${active ? 'aria-current="page"' : ""}>${p}</button>`;
     }
   }
-  html += `<button class="ghost mini" data-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>›</button>`;
-  html += `<button class="ghost mini" data-page="${totalPages}" ${page >= totalPages ? "disabled" : ""}>»</button>`;
+  html += iconButton(page + 1, "i-chevron-right", "下一页", page >= totalPages);
+  html += iconButton(totalPages, "i-chevrons-right", "最后一页", page >= totalPages);
   html += "</div>";
   existing.innerHTML = html;
 
@@ -1013,7 +1023,7 @@ function buildSuggestions(entries) {
         <span class="si-label">${escapeHtml(label)}</span>
         <span class="si-url">${escapeHtml(url)}</span>
       </button>
-      <button class="suggestion-del" type="button" data-key="${escapeHtml(e.key || url)}" title="删除">×</button>
+      <button class="suggestion-del" type="button" data-key="${escapeHtml(e.key || url)}" title="删除" aria-label="删除"><svg class="i i-sm" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>`;
   }).join("");
   el.querySelectorAll(".suggestion-item").forEach((btn) => {

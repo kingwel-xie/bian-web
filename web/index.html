@@ -5,56 +5,1230 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Binance Leaderboard Capture</title>
     <link rel="stylesheet" href="/css888/styles.css?v=20260906f" />
+    <style>
+      /* ============================================================
+         抓榜任务台 · 设计标尺
+         暖纸 + 墨色 + 一条青色信号；台账式任务行是本页的主视觉。
+         仅作用于 body.taskdesk，避免影响 styles.css 的其他页面。
+         ============================================================ */
+      body.taskdesk {
+        --paper: #f3f0e8;
+        --surface: #fffdf8;
+        --surface-2: #f7f2e7;
+        --ink: #2b2721;
+        --ink-2: #574e43;
+        --muted: #6b6255;
+        --line: rgba(46, 42, 36, 0.12);
+        --line-strong: rgba(46, 42, 36, 0.24);
+        --accent: #0e747a;
+        --accent-ink: #0a5d62;
+        --accent-soft: rgba(14, 116, 122, 0.09);
+        --up: #b02a24;
+        --down: #1a7f4b;
+        --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+        --r-card: 12px;
+        --r-ctl: 6px;
+        --r-tag: 4px;
+        /* 兼容 styles.css 里的旧变量 */
+        --bg: var(--paper);
+        --panel: var(--surface);
+        --panel-soft: var(--surface-2);
+        --accent-2: var(--accent);
+        --bad: var(--up);
+        --good: var(--down);
+
+        margin: 0;
+        min-height: 100vh;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .taskdesk * { box-sizing: border-box; }
+      .taskdesk .sprite { display: none; }
+      .taskdesk .i {
+        width: 16px; height: 16px; flex: none;
+        stroke: currentColor; fill: none; stroke-width: 1.5;
+        stroke-linecap: round; stroke-linejoin: round;
+      }
+      .taskdesk .i-sm { width: 14px; height: 14px; }
+      .taskdesk .i-xs { width: 12px; height: 12px; }
+      .taskdesk .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+      .taskdesk label {
+        display: inline-block;
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 12px;
+      }
+
+      .taskdesk .shell {
+        width: min(1600px, 100%);
+        margin: 0 auto;
+        padding: 0 24px 48px;
+      }
+
+      /* ---------- 页头 ---------- */
+      .taskdesk .page-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 24px 0 18px;
+      }
+      .taskdesk .head-main { min-width: 0; }
+      .taskdesk .kicker {
+        margin: 0 0 6px;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+      }
+      .taskdesk h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.25;
+        font-weight: 500;
+        letter-spacing: 0;
+        color: var(--ink);
+      }
+      .taskdesk .lede {
+        max-width: 680px;
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .taskdesk .lede .mono { color: var(--ink-2); }
+      .taskdesk .head-nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 2px;
+        flex: none;
+        max-width: 520px;
+      }
+      .taskdesk .head-nav a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 9px;
+        border-radius: var(--r-ctl);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background 140ms ease, color 140ms ease;
+      }
+      .taskdesk .head-nav a:hover { background: var(--surface-2); color: var(--ink); }
+
+      /* ---------- 通用控件 ---------- */
+      .taskdesk input,
+      .taskdesk select {
+        height: 34px;
+        width: 100%;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 13px;
+        outline: none;
+      }
+      .taskdesk input::placeholder { color: var(--muted); }
+      .taskdesk input:focus,
+      .taskdesk select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .taskdesk :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+      .taskdesk button {
+        font-family: inherit;
+        font-weight: 500;
+        letter-spacing: 0;
+        border-radius: var(--r-ctl);
+      }
+      .taskdesk .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 12px;
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+      }
+      .taskdesk .btn:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+      .taskdesk .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .taskdesk .btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+      .taskdesk .btn:disabled,
+      .taskdesk button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+      /* ---------- URL 发现 ---------- */
+      .taskdesk .capture {
+        margin: 0 0 16px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-card);
+        background: var(--surface);
+      }
+      .taskdesk .capture-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+      }
+      .taskdesk .url-field {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+      }
+      .taskdesk .field-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+      .taskdesk #discoverBtn { min-width: 138px; }
+
+      .taskdesk .discovery-section { margin: 14px 0 0; }
+      .taskdesk .discovery-section:empty { display: none; }
+      .taskdesk .discovery-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        margin: 0 0 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .taskdesk .discovery-meta strong,
+      .taskdesk .discovery-meta span {
+        border: 0;
+        border-radius: 0;
+        background: none;
+        padding: 0;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .taskdesk .discovery-meta code {
+        border: 0;
+        border-radius: 0;
+        background: none;
+        padding: 0;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .taskdesk .discovery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px;
+      }
+      .taskdesk .discovery-card {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        text-align: left;
+        cursor: pointer;
+        box-shadow: none;
+        transition: border-color 140ms ease, background 140ms ease;
+      }
+      .taskdesk .discovery-card:hover { border-color: var(--accent); background: var(--surface-2); box-shadow: none; }
+      .taskdesk .discovery-card.used { opacity: 1; }
+      .taskdesk .dc-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+      }
+      .taskdesk .dc-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: var(--ink);
+      }
+      .taskdesk .discovery-card.fresh .dc-name { color: var(--ink-2); }
+      .taskdesk .dc-state {
+        flex: none;
+        padding: 0 4px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        font-size: 10px;
+        line-height: 16px;
+        color: var(--muted);
+      }
+      .taskdesk .discovery-card.used .dc-state {
+        border-color: rgba(14, 116, 122, 0.3);
+        background: var(--accent-soft);
+        color: var(--accent-ink);
+      }
+      .taskdesk .dc-id {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .dc-meta { font-size: 11px; color: var(--muted); }
+
+      /* ---------- 任务列表 ---------- */
+      .taskdesk .board {
+        border: 1px solid var(--line);
+        border-radius: var(--r-card);
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .taskdesk .board-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .taskdesk .board-head h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .taskdesk #jobCount {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 20px;
+        padding: 0 6px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        background: var(--surface-2);
+        color: var(--ink-2);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .taskdesk .filter-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .taskdesk #marketFilter {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface-2);
+      }
+      .taskdesk .filter-btn {
+        min-height: 26px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .taskdesk .filter-btn:hover { background: transparent; color: var(--ink); }
+      .taskdesk .filter-btn.active { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+      .taskdesk .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        cursor: pointer;
+        text-transform: none;
+      }
+      .taskdesk .switch input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        accent-color: var(--accent);
+      }
+      .taskdesk .search {
+        position: relative;
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+        width: 240px;
+        max-width: 100%;
+      }
+      .taskdesk .search .i {
+        position: absolute;
+        left: 9px;
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .taskdesk .filter-search {
+        height: 30px;
+        width: 100%;
+        padding: 0 10px 0 30px;
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        font-size: 12px;
+      }
+
+      /* ---------- 台账任务行 ---------- */
+      .taskdesk .job-list {
+        display: block;
+        gap: 0;
+        background: var(--surface);
+      }
+      .taskdesk .job {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0 20px;
+        margin: 0;
+        padding: 14px 16px 14px 18px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        background: var(--surface);
+        box-shadow: none;
+        color: var(--ink);
+        opacity: 1;
+        filter: none;
+        transition: background 120ms ease;
+      }
+      .taskdesk .job:last-child { border-bottom: 0; }
+      .taskdesk .job:hover { background: #fbf8f2; }
+      .taskdesk .job.run { background: var(--surface); }
+      .taskdesk .job.run:hover { background: #fbf8f2; }
+      .taskdesk .job.expired { opacity: 1; filter: none; }
+      .taskdesk .job.expired .job-name::after { content: none; }
+      .taskdesk .job::before { display: none; }
+      .taskdesk .job.run::before,
+      .taskdesk .job.fail::before,
+      .taskdesk .job.pending::before {
+        content: "";
+        display: block;
+        position: absolute;
+        left: 0;
+        top: 12px;
+        bottom: 12px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--line-strong);
+      }
+      .taskdesk .job.run::before { background: var(--accent); }
+      .taskdesk .job.fail::before { background: var(--up); }
+
+      .taskdesk .job-title-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        min-width: 0;
+      }
+      .taskdesk .job-name {
+        font-size: 15px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: var(--ink);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+        cursor: pointer;
+      }
+      .taskdesk .job-name:hover {
+        color: var(--accent-ink);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+      .taskdesk .job-rid {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .sprint-badge {
+        margin: 0;
+        padding: 0 4px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        background: var(--surface-2);
+        color: var(--ink-2);
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 16px;
+      }
+
+      .taskdesk .job-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        min-width: 0;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .taskdesk .job-time {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .job-time .i { width: 12px; height: 12px; color: var(--muted); }
+      .taskdesk .job-countdown {
+        margin: 0;
+        padding: 0 5px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        background: transparent;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 17px;
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .job-countdown.urgent {
+        border-color: rgba(176, 42, 36, 0.35);
+        background: rgba(176, 42, 36, 0.07);
+        color: var(--up);
+      }
+      .taskdesk .job-countdown.pre,
+      .taskdesk .job-countdown.ended {
+        border-color: var(--line);
+        background: transparent;
+        color: var(--muted);
+      }
+      .taskdesk .job-expired-tag {
+        display: inline-flex;
+        align-items: center;
+        height: 17px;
+        padding: 0 5px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 10px;
+        line-height: 1;
+      }
+      .taskdesk .job-urls { display: inline-flex; gap: 10px; margin: 0; }
+      .taskdesk .job-urls .job-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        color: var(--accent-ink);
+        font-size: 11px;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .taskdesk .job-urls .job-link:hover {
+        background: none;
+        color: var(--accent-ink);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .taskdesk .job-urls .muted { font-size: 11px; color: var(--muted); }
+
+      .taskdesk .job-state {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        margin-top: 5px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .taskdesk .job-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-weight: 500;
+        color: var(--ink-2);
+      }
+      .taskdesk .job.run .job-status { color: var(--accent-ink); }
+      .taskdesk .job.fail .job-status { color: var(--up); }
+      .taskdesk .job.pending .job-status { color: var(--muted); }
+      .taskdesk .st-dot {
+        display: none;
+        width: 6px;
+        height: 6px;
+        border-radius: 1px;
+        background: var(--accent);
+      }
+      .taskdesk .job.run .st-dot { display: inline-block; }
+      .taskdesk .job-finished {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .job-finished::before { content: "·"; margin-right: 10px; color: var(--line-strong); }
+      .taskdesk .job-snapshot {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .job-snapshot::before { content: "·"; margin-right: 10px; color: var(--line-strong); }
+      .taskdesk .job-snapshot b { font-weight: 500; color: var(--ink-2); }
+
+      .taskdesk .job-progress {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 5px;
+        max-width: 560px;
+        margin-top: 8px;
+      }
+      .taskdesk .jp-line {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .jp-line b { font-weight: 500; color: var(--ink-2); }
+      .taskdesk .jp-track {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--surface-2);
+        overflow: hidden;
+      }
+      .taskdesk .jp-track i {
+        display: block;
+        height: 100%;
+        border-radius: 2px;
+        background: var(--accent);
+        transition: width 240ms ease;
+      }
+
+      .taskdesk .job-actions {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0;
+      }
+      .taskdesk .job-actions button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+      }
+      .taskdesk .job-actions button:hover {
+        background: var(--surface-2);
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+      .taskdesk .job-actions button.act-run {
+        border-color: rgba(14, 116, 122, 0.35);
+        color: var(--accent-ink);
+      }
+      .taskdesk .job-actions button.act-run:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+      .taskdesk .job-actions button.danger:hover {
+        border-color: rgba(176, 42, 36, 0.35);
+        background: rgba(176, 42, 36, 0.06);
+        color: var(--up);
+      }
+
+      .taskdesk .job-error {
+        grid-column: 1 / -1;
+        margin-top: 8px;
+        padding: 7px 10px;
+        border-left: 2px solid var(--up);
+        border-radius: 0 var(--r-tag) var(--r-tag) 0;
+        background: rgba(176, 42, 36, 0.06);
+        color: var(--up);
+        font-family: var(--mono);
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+      .taskdesk .job details.stderr { grid-column: 1 / -1; margin-top: 6px; }
+      .taskdesk .job details.stderr summary {
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted);
+        user-select: none;
+      }
+      .taskdesk .job details.stderr summary:hover { color: var(--up); }
+      .taskdesk .job details.stderr pre {
+        max-height: 160px;
+        overflow: auto;
+        margin: 4px 0 0;
+        padding: 10px;
+        border: 1px solid rgba(176, 42, 36, 0.16);
+        border-radius: var(--r-ctl);
+        background: rgba(176, 42, 36, 0.06);
+        color: var(--up);
+        font-size: 11px;
+        white-space: pre-wrap;
+      }
+
+      /* ---------- 轮次任务折叠 ---------- */
+      .taskdesk .sprint-group { margin: 0; border-bottom: 1px solid var(--line); }
+      .taskdesk .sprint-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        margin: 0;
+        padding: 8px 16px 8px 18px;
+        border: 0;
+        border-radius: 0;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 500;
+        text-align: left;
+        cursor: pointer;
+      }
+      .taskdesk .sprint-toggle:hover { background: var(--surface-2); color: var(--ink); }
+      .taskdesk .st-arrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 12px;
+        height: 12px;
+        transition: transform 140ms ease;
+      }
+      .taskdesk .st-arrow.open { transform: rotate(90deg); }
+      .taskdesk .sprint-count {
+        font-family: var(--mono);
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .taskdesk .sprint-kids {
+        display: block;
+        margin: 0 0 0 24px;
+        padding: 0;
+        border-left: 2px solid var(--line);
+      }
+      .taskdesk .sprint-kids .job {
+        padding-left: 14px;
+        background: #fcfaf4;
+        border-bottom: 1px solid var(--line);
+      }
+      .taskdesk .sprint-kids .job:last-child { border-bottom: 0; }
+      .taskdesk .sprint-kids .job-name { font-size: 13px; }
+
+      /* ---------- 分页 ---------- */
+      .taskdesk .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px 12px;
+        margin: 0;
+        padding: 12px 16px;
+        border-top: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .taskdesk .page-info {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        white-space: normal;
+      }
+      .taskdesk .page-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+      .taskdesk .page-buttons button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        padding: 0 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+      }
+      .taskdesk .page-buttons button:hover:not(:disabled) {
+        background: var(--surface-2);
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+      .taskdesk .page-buttons button.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .taskdesk .page-buttons button:disabled {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--ink-2);
+        opacity: 0.35;
+        cursor: default;
+      }
+      .taskdesk .page-buttons .i { width: 13px; height: 13px; }
+      .taskdesk .page-ellipsis { padding: 0 2px; color: var(--muted); font-size: 11px; }
+
+      /* ---------- 空状态 / 报错 ---------- */
+      .taskdesk .empty {
+        height: auto;
+        padding: 32px 16px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 12px;
+      }
+      .taskdesk .empty.box { border: 0; border-radius: 0; padding: 32px 16px; }
+      .taskdesk .err { color: var(--up); font-weight: 500; }
+
+      /* ---------- URL 历史建议 ---------- */
+      .taskdesk .suggestions {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 100;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: 0 12px 28px rgba(43, 39, 33, 0.12);
+        max-height: 280px;
+        overflow-y: auto;
+      }
+      .taskdesk .suggestion-row { display: flex; align-items: stretch; }
+      .taskdesk .suggestion-item {
+        display: grid;
+        gap: 2px;
+        flex: 1;
+        min-width: 0;
+        min-height: auto;
+        padding: 9px 12px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+      .taskdesk .suggestion-item:hover { background: var(--surface-2); }
+      .taskdesk .suggestion-row:last-child .suggestion-item,
+      .taskdesk .suggestion-row:last-child .suggestion-del { border-bottom: 0; }
+      .taskdesk .si-label { font-size: 12px; font-weight: 500; color: var(--ink); }
+      .taskdesk .si-url {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .taskdesk .suggestion-del {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 36px;
+        width: 36px;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .taskdesk .suggestion-del:hover { background: rgba(176, 42, 36, 0.06); color: var(--up); }
+
+      /* ---------- 配置弹窗 ---------- */
+      .taskdesk .modal-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(43, 39, 33, 0.34);
+        z-index: 100;
+      }
+      .taskdesk .modal-box {
+        width: min(920px, 100%);
+        min-width: 0;
+        max-width: none;
+        max-height: min(88vh, 860px);
+        overflow: auto;
+        padding: 20px 24px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-card);
+        background: var(--surface);
+        box-shadow: 0 24px 60px rgba(43, 39, 33, 0.18);
+      }
+      .taskdesk .modal-header { margin: 0 0 10px; }
+      .taskdesk .modal-header h3 {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.4;
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .taskdesk .modal-title-suffix { font-size: 12px; font-weight: 400; color: var(--muted); }
+      .taskdesk .modal-title-suffix code {
+        padding: 0;
+        background: none;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted);
+      }
+      .taskdesk .modal-tabs {
+        display: flex;
+        gap: 16px;
+        margin: 0 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .taskdesk .modal-tab {
+        min-height: 32px;
+        margin-bottom: -1px;
+        padding: 0 0 2px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .taskdesk .modal-tab:hover { background: transparent; color: var(--ink); }
+      .taskdesk .modal-tab.active {
+        border-bottom-color: var(--accent);
+        background: transparent;
+        color: var(--ink);
+      }
+      .taskdesk .modal-form { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+      .taskdesk .tab-content { display: flex; flex-direction: column; gap: 12px; }
+      .taskdesk .form-row { display: flex; align-items: flex-start; gap: 12px; }
+      .taskdesk .form-row label {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        flex: 1;
+        min-width: 0;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+      .taskdesk .form-divider { margin: 2px 0; border: 0; border-top: 1px solid var(--line); }
+      .taskdesk .modal-form input,
+      .taskdesk .modal-form select {
+        height: 32px;
+        padding: 0 9px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 12px;
+      }
+      .taskdesk .modal-form input:focus,
+      .taskdesk .modal-form select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+      .taskdesk .article-picker-line { display: flex; align-items: stretch; gap: 8px; }
+      .taskdesk .article-picker-line .article-pick-select { flex: 1; min-width: 0; }
+      .taskdesk .article-picker-line button {
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--accent);
+        border-radius: var(--r-ctl);
+        background: var(--accent);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .taskdesk .article-picker-line button:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+      .taskdesk .article-picker-line button:disabled { opacity: 0.6; cursor: default; }
+      .taskdesk .article-extract-status {
+        margin: 0;
+        min-height: 1.2em;
+        font-size: 11px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .taskdesk .article-extract-status.ok { color: var(--accent-ink); }
+      .taskdesk .article-extract-status.err { color: var(--up); font-weight: 500; }
+
+      .taskdesk #sprintSection { display: flex; flex-direction: column; gap: 10px; }
+      .taskdesk #sprintSection .form-row + .form-row { margin-top: 0; }
+      .taskdesk #sprintTiersPreview { font-size: 11px; line-height: 1.6; color: var(--muted); margin-top: 0; }
+
+      .taskdesk .tier-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0 4px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .taskdesk .tier-header span:first-child { width: 56px; text-align: right; }
+      .taskdesk .tier-header span:nth-child(2) { width: 72px; text-align: center; }
+      .taskdesk .tier-header span:nth-child(4) { width: 72px; text-align: center; }
+      .taskdesk .tier-header span:nth-child(5) { margin: 0 4px 0 8px; }
+      .taskdesk .tier-header span:nth-child(6) { width: 100px; text-align: right; }
+      .taskdesk .tier-header span:nth-child(7) { width: 24px; }
+      .taskdesk .tier-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+      .taskdesk .tier-row:first-child { margin-top: 2px; }
+      .taskdesk .tier-row .tier-label { width: 56px; text-align: right; font-size: 11px; color: var(--muted); }
+      .taskdesk .tier-row .tier-min,
+      .taskdesk .tier-row .tier-max { width: 72px; height: 30px; padding: 0 8px !important; text-align: center; }
+      .taskdesk .tier-row .tier-sep { color: var(--muted); font-size: 12px; }
+      .taskdesk .tier-row .tier-arrow { margin: 0 4px 0 8px; color: var(--muted); font-size: 11px; }
+      .taskdesk .tier-row .tier-amt { width: 100px; height: 30px; padding: 0 8px !important; text-align: right; }
+      .taskdesk .tier-row .tier-del-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 26px;
+        height: 26px;
+        min-height: 26px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
+        background: var(--surface);
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .taskdesk .tier-row .tier-del-btn:hover {
+        border-color: rgba(176, 42, 36, 0.35);
+        background: rgba(176, 42, 36, 0.06);
+        color: var(--up);
+      }
+      .taskdesk .tier-add-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 30px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .taskdesk .tier-add-btn:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+      .taskdesk .modal-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .taskdesk .modal-actions button {
+        min-height: 32px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-ctl);
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .taskdesk .modal-actions button:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+      .taskdesk .modal-actions button#editSaveBtn { border-color: var(--accent); background: var(--accent); color: #fff; }
+      .taskdesk .modal-actions button#editSaveBtn:hover { border-color: var(--accent-ink); background: var(--accent-ink); color: #fff; }
+
+      /* ---------- 响应式 ---------- */
+      @media (max-width: 1024px) {
+        .taskdesk .page-head { flex-direction: column; gap: 12px; }
+        .taskdesk .head-nav { justify-content: flex-start; max-width: none; }
+      }
+
+      @media (max-width: 760px) {
+        .taskdesk .shell { padding: 0 14px 40px; }
+        .taskdesk .page-head { padding: 18px 0 14px; }
+        .taskdesk h1 { font-size: 20px; }
+        .taskdesk .capture { padding: 14px; }
+        .taskdesk .capture-row { flex-direction: column; align-items: stretch; }
+        .taskdesk .capture-row .btn { width: 100%; }
+        .taskdesk .head-nav { gap: 0; }
+        .taskdesk .head-nav a { padding: 0 8px; }
+        .taskdesk .filter-bar { padding: 10px 14px; }
+        .taskdesk .search { flex: 1 1 100%; width: 100%; margin-left: 0; }
+        .taskdesk .board-head { padding: 0 14px; }
+        .taskdesk .job {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+          padding: 12px 14px 12px 16px;
+        }
+        .taskdesk .job-actions {
+          grid-row: 2;
+          justify-content: flex-start;
+          margin-top: 10px;
+          padding-top: 10px;
+          border-top: 1px solid var(--line);
+        }
+        .taskdesk .sprint-kids { margin-left: 16px; }
+        .taskdesk .pagination { padding: 10px 14px; }
+        .taskdesk .modal-box { padding: 16px; }
+        .taskdesk .form-row { flex-direction: column; align-items: stretch; gap: 10px; }
+        .taskdesk .tier-row { flex-wrap: wrap; }
+        .taskdesk .tier-row .tier-label { width: 40px; }
+        .taskdesk .tier-row .tier-min,
+        .taskdesk .tier-row .tier-max { width: auto; flex: 1 1 0; min-width: 0; }
+        .taskdesk .tier-row .tier-amt { width: auto; flex: 1.4 1 0; min-width: 0; }
+        .taskdesk .tier-header span:first-child { width: 40px; }
+        .taskdesk .tier-header span:nth-child(2),
+        .taskdesk .tier-header span:nth-child(4) { width: auto; flex: 1 1 0; }
+        .taskdesk .tier-header span:nth-child(6) { width: auto; flex: 1.4 1 0; }
+        .taskdesk .modal-actions button { flex: 1; }
+      }
+
+      @media (max-width: 520px) {
+        .taskdesk .job-meta { gap: 4px 8px; }
+        .taskdesk .job-actions button { flex: 1 1 0; }
+        .taskdesk .pagination { flex-direction: column; align-items: flex-start; }
+        .taskdesk .page-buttons { width: 100%; }
+      }
+    </style>
   </head>
-  <body>
+  <body class="taskdesk">
+    <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></symbol>
+      <symbol id="i-trend-up" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+      <symbol id="i-news" viewBox="0 0 24 24"><path d="M4 4h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4z"/><path d="M19 8h2a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2h-1"/><path d="M8 8h6M8 12h6M8 16h4"/></symbol>
+      <symbol id="i-medal" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6"/><path d="M12 12.5l1 2 2 .3-1.5 1.5.4 2-1.9-1-1.9 1 .4-2L9 14.8l2-.3z"/><path d="M8 3l4 5 4-5"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+      <symbol id="i-chevrons-left" viewBox="0 0 24 24"><path d="M11 5L4 12l7 7"/><path d="M20 5l-7 7 7 7"/></symbol>
+      <symbol id="i-chevrons-right" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7"/><path d="M4 5l7 7-7 7"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.1"/><path d="M20 5v6h-6"/></symbol>
+    </svg>
+
     <main class="shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">BINANCE LEADBOARD CAPTURE</p>
+      <header class="page-head">
+        <div class="head-main">
+          <p class="kicker">Binance Leaderboard Capture</p>
           <h1>纯抓榜任务台</h1>
-          <p class="subtitle">粘贴 Binance 活动 URL 发现 resourceId，点击后抓取排行榜并在线预览。默认行数：UM 400 / SPOT 1000 / SAVING 1500。</p>
-          <p style="margin:10px 0 0;font-size:13px;display:flex;gap:14px;flex-wrap:wrap">
-            <a href="teams.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">🏆 团队管理</a>
-            <a href="analysis.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">📊 任务分析</a>
-            <a href="growth.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">📈 增长对比</a>
-            <a href="activity.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">📰 最新活动</a>
-            <a href="rewards.html" target="_blank" rel="noopener noreferrer" style="color:var(--accent-2)">🎖️ 奖励记录</a>
-          </p>
+          <p class="lede">粘贴 Binance 活动 URL 发现 resourceId，抓取排行榜并在线预览。默认行数 <span class="mono">UM 400</span> / <span class="mono">SPOT 1000</span> / <span class="mono">SAVING 1500</span>。</p>
         </div>
+        <nav class="head-nav" aria-label="其他页面">
+          <a href="teams.html" target="_blank" rel="noopener noreferrer"><svg class="i i-sm" aria-hidden="true"><use href="#i-users"/></svg>团队管理</a>
+          <a href="analysis.html" target="_blank" rel="noopener noreferrer"><svg class="i i-sm" aria-hidden="true"><use href="#i-chart"/></svg>任务分析</a>
+          <a href="growth.html" target="_blank" rel="noopener noreferrer"><svg class="i i-sm" aria-hidden="true"><use href="#i-trend-up"/></svg>增长对比</a>
+          <a href="activity.html" target="_blank" rel="noopener noreferrer"><svg class="i i-sm" aria-hidden="true"><use href="#i-news"/></svg>最新活动</a>
+          <a href="rewards.html" target="_blank" rel="noopener noreferrer"><svg class="i i-sm" aria-hidden="true"><use href="#i-medal"/></svg>奖励记录</a>
+        </nav>
       </header>
 
-      <section class="capture-card">
-        <div class="capture-form">
-          <label style="position:relative">
-            <span>活动 URL</span>
+      <section class="capture" aria-labelledby="captureLabel">
+        <div class="capture-row">
+          <label class="url-field">
+            <span class="field-label" id="captureLabel"><svg class="i i-xs" aria-hidden="true"><use href="#i-link"/></svg>活动 URL</span>
             <input id="urlInput" autocomplete="off" placeholder="https://www.binance.com/zh-CN/activity/trading-competition/..." />
             <div id="urlSuggestions" class="suggestions"></div>
           </label>
-          <button id="discoverBtn" type="button">发现 resourceId</button>
+          <button id="discoverBtn" class="btn btn-primary" type="button">发现 resourceId</button>
         </div>
         <div id="discoveryResults" class="discovery-section"></div>
       </section>
 
-      <section class="grid">
-        <section class="panel jobs-panel">
-          <div class="jobs-header">
-            <span>任务列表</span>
-            <b id="jobCount">0</b>
-          </div>
-          <div class="filter-bar">
-            <span class="filter-group" id="marketFilter">
-              <button class="filter-btn" data-market="">全部</button>
-              <button class="filter-btn" data-market="um">UM</button>
-              <button class="filter-btn" data-market="spot">SPOT</button>
-              <button class="filter-btn" data-market="saving">SAVING</button>
-            </span>
-            <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;text-transform:none;font-weight:400;cursor:pointer;white-space:nowrap">
-              <input id="activeFilter" type="checkbox" checked /> 仅显示未到期
-            </label>
+      <section class="board" aria-labelledby="jobsTitle">
+        <div class="board-head">
+          <h2 id="jobsTitle">任务列表</h2>
+          <b id="jobCount">0</b>
+        </div>
+        <div class="filter-bar">
+          <span class="filter-group" id="marketFilter" role="group" aria-label="市场筛选">
+            <button class="filter-btn" data-market="">全部</button>
+            <button class="filter-btn" data-market="um">UM</button>
+            <button class="filter-btn" data-market="spot">SPOT</button>
+            <button class="filter-btn" data-market="saving">SAVING</button>
+          </span>
+          <label class="switch">
+            <input id="activeFilter" type="checkbox" checked /> 仅显示未到期
+          </label>
+          <label class="search">
+            <svg class="i i-sm" aria-hidden="true"><use href="#i-search"/></svg>
             <input id="searchInput" class="filter-search" type="text" placeholder="搜索任务名…" />
-          </div>
-          <div id="jobList" class="job-list"></div>
-        </section>
+          </label>
+        </div>
+        <div id="jobList" class="job-list"></div>
       </section>
     </main>
 
@@ -133,7 +1307,7 @@
               </div>
               <div id="sprintTiersPreview" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
               <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-                <button id="syncSprintsBtn" type="button" class="tier-add-btn">🔄 同步轮次任务</button>
+                <button id="syncSprintsBtn" type="button" class="tier-add-btn"><svg class="i i-sm" aria-hidden="true"><use href="#i-refresh"/></svg>同步轮次任务</button>
                 <span id="syncSprintsHint" style="font-size:11px;color:var(--muted)"></span>
               </div>
             </div>
@@ -157,7 +1331,7 @@
               <div class="tier-header"><span>档位</span><span>下限</span><span>~</span><span>上限</span><span> </span><span>奖励数量</span><span style="width:24px"></span></div>
               <div id="editTierRows"></div>
               <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-                <button id="addTierBtn" type="button" class="tier-add-btn">➕ 添加档位</button>
+                <button id="addTierBtn" type="button" class="tier-add-btn"><svg class="i i-sm" aria-hidden="true"><use href="#i-plus"/></svg>添加档位</button>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:0">
                   <select id="tierPresetSelect" style="padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fffdf8;color:var(--ink);font-size:12px">
                     <option value="">选择预设...</option>
