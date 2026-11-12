@@ -45,6 +45,8 @@
 
   /* styles.css 把 label 设成 900 + uppercase，这里统一收回 */
   label { display: inline-block; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  /* .status/.head-meta 自带 display，hidden 属性需要强制生效 */
+  [hidden] { display: none !important; }
 
   .sprite { display: none; }
   .i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -55,13 +57,14 @@
   /* ---------- 页头 ---------- */
   .page-head { display: flex; gap: 24px; justify-content: space-between; align-items: flex-start; padding: 24px 0 16px; }
   .head-main { min-width: 0; }
-  .head-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .head-line { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+  .head-tags { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
   h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 500; color: var(--ink); }
   .head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin-top: 6px; font-size: 12px; color: var(--muted); }
   .head-meta:empty { display: none; }
   .head-meta .sep { color: var(--line-strong); }
   .head-meta .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); text-decoration: none; }
+  .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); text-decoration: none; white-space: nowrap; }
   .back-link:hover { color: var(--accent-ink); }
   .link-quiet { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-ink); text-decoration: none; }
   .link-quiet:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -296,6 +299,11 @@
     .split { flex-direction: column; }
     .split > .wide { flex: 1 1 auto; }
   }
+  @media (max-width: 1024px) {
+    .page-head { flex-direction: column; gap: 16px; }
+    .head-actions { align-items: flex-start; width: 100%; max-width: none; }
+    .downloads { justify-content: flex-start; }
+  }
   @media (max-width: 900px) {
     #statsSection .stats-panel { overflow-x: auto; }
     #statsSection .stats-table { min-width: 960px; }
@@ -304,9 +312,7 @@
   }
   @media (max-width: 640px) {
     .shell { padding: 0 12px 32px; }
-    .page-head { flex-direction: column; gap: 12px; padding: 16px 0 12px; }
-    .head-actions { align-items: flex-start; }
-    .downloads { justify-content: flex-start; }
+    .page-head { padding: 16px 0 12px; }
     h1 { font-size: 18px; }
     .subnav { gap: 16px; }
     .snap-stamp { display: none; }
@@ -350,16 +356,18 @@
     <div class="head-main">
       <div class="head-line">
         <h1 id="title">排行榜预览</h1>
-        <span id="titleStatus" class="status" hidden></span>
-        <span id="countdownChip" class="status" hidden></span>
+        <span class="head-tags">
+          <span id="titleStatus" class="status" hidden></span>
+          <span id="countdownChip" class="status" hidden></span>
+        </span>
       </div>
       <div id="titleMeta" class="head-meta"></div>
       <div id="actTime" class="head-meta"></div>
       <div id="limitedRounds" class="head-meta" style="display:none"></div>
       <div id="sprintChips" class="head-meta"></div>
-      <a href="/" class="back-link"><svg class="i i-sm" aria-hidden="true"><use href="#i-arrow-left"/></svg>返回主页</a>
     </div>
     <div class="head-actions">
+      <a href="/" class="back-link"><svg class="i i-sm" aria-hidden="true"><use href="#i-arrow-left"/></svg>返回主页</a>
       <div class="downloads" id="downloadLinks"></div>
     </div>
   </header>
@@ -686,6 +694,7 @@ function renderScrapingState(jobId, hint) {
   if (st) { st.hidden = true; st.textContent = ""; }
   const cd = document.getElementById("countdownChip");
   if (cd) { cd.hidden = true; cd.textContent = ""; }
+  syncTitleTags();
   const stamp = document.getElementById("snapStamp");
   if (stamp) stamp.textContent = "";
   const _dl = document.getElementById("downloadLinks");
@@ -1024,6 +1033,13 @@ function initPrizeBoard(jobId) {
   }
 
 function stripIdSuffix(text) { return String(text || "").replace(/\s*\[\d{5,}\]\s*$/, ""); }
+function syncTitleTags() {
+  const wrap = document.querySelector(".head-tags");
+  if (!wrap) return;
+  const st = document.getElementById("titleStatus");
+  const cd = document.getElementById("countdownChip");
+  wrap.hidden = (!st || st.hidden) && (!cd || cd.hidden);
+}
 function renderTitle(heading, url, opts = {}) {
   const clean = stripIdSuffix(heading) || "排行榜预览";
   document.title = clean + " — 排行榜预览";
@@ -1052,15 +1068,17 @@ function renderTitle(heading, url, opts = {}) {
     meta.innerHTML = parts.join("");
     meta.hidden = !parts.length;
   }
+  syncTitleTags();
   return clean;
 }
 function setCountdown(text, urgent) {
   const el = document.getElementById("countdownChip");
   if (!el) return;
-  if (!text) { el.hidden = true; el.textContent = ""; el.className = "status"; return; }
+  if (!text) { el.hidden = true; el.textContent = ""; el.className = "status"; syncTitleTags(); return; }
   el.hidden = false;
   el.textContent = text;
   el.className = "status " + (urgent ? "urgent" : "live");
+  syncTitleTags();
 }
 
 (async () => {
@@ -1154,31 +1172,41 @@ function setCountdown(text, urgent) {
     const restoredSum = "";
     const heading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || preview.name || "排行榜预览";
     const _actUrl = preview.url;
-    renderTitle(heading, _actUrl, { resourceId: preview.resourceId });
     const actS = preview.activityStart, actE = preview.activityEnd;
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
     actTimeEl.textContent = (actS || actE) ? `活动时间 ${actS || "—"} ~ ${actE || "—"}` : "";
     setLimitedRounds(preview);
     setSprintChips(preview);
-    let endDt = null;
-    if (actE) {
-      endDt = new Date(actE.replace(" ", "T") + "+08:00");
-      const diff = endDt - now;
-      let cd = "";
-      if (diff > 0) {
-        const d = Math.floor(diff / 864e5);
-        const h = Math.floor((diff % 864e5) / 36e5);
-        const m = Math.floor((diff % 36e5) / 6e4);
-        cd = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
-      }
-      if (cd) setCountdown(cd, diff <= 864e5);
-    }
-    const expired = endDt && endDt <= new Date(now - 86400000);
-    if (expired) {
-      document.querySelector(".page-head")?.classList.add("expired");
+    const parseActTime = (s) => {
+      if (!s) return null;
+      const dt = new Date(String(s).replace(" ", "T") + "+08:00");
+      return isNaN(dt.getTime()) ? null : dt;
+    };
+    const startDt = parseActTime(actS);
+    const endDt = parseActTime(actE);
+    let statusText = "", statusKind = "";
+    if (endDt && now >= endDt.getTime()) statusText = "已结束";
+    else if (startDt && now < startDt.getTime()) statusText = "未开始";
+    else if (startDt || endDt) { statusText = "进行中"; statusKind = "live"; }
+    renderTitle(heading, _actUrl, { resourceId: preview.resourceId, status: statusText, kind: statusKind });
+    const fmtCountdown = (diff, prefix) => {
+      const d = Math.floor(diff / 864e5);
+      const h = Math.floor((diff % 864e5) / 36e5);
+      const m = Math.floor((diff % 36e5) / 6e4);
+      return `${prefix} ${d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`}`;
+    };
+    if (startDt && now < startDt.getTime()) {
+      const diff = startDt.getTime() - now;
+      setCountdown(fmtCountdown(diff, "距开始"), diff <= 864e5);
+    } else if (endDt && now < endDt.getTime()) {
+      const diff = endDt.getTime() - now;
+      setCountdown(fmtCountdown(diff, "剩余"), diff <= 864e5);
+    } else {
       setCountdown("", false);
-      renderTitle(heading, _actUrl, { resourceId: preview.resourceId, status: "已结束" });
+    }
+    if (endDt && endDt.getTime() <= now - 864e5) {
+      document.querySelector(".page-head")?.classList.add("expired");
     }
     const eligibleVolume = preview.meta?.eligibleTradingVolume;
     const eligibleText = eligibleVolume ? fmtNumber(eligibleVolume) : "—";
