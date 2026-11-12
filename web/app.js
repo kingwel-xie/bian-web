@@ -867,7 +867,7 @@ function renderJobCard(job, now, sprint) {
     }
   }
   const sprintToggle = sprint && sprint.count
-    ? `<button class="sprint-toggle" type="button" title="展开/收起轮次任务" aria-expanded="${sprint.open ? "true" : "false"}" aria-controls="sprint-kids-${escapeHtml(job.id)}" data-kids="${sprint.count}"><span class="st-arrow${sprint.open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>轮次 <span class="sprint-count">${sprint.count}</span></button>`
+    ? `<div class="job-sprint"><button class="sprint-toggle" type="button" title="展开/收起轮次任务" aria-expanded="${sprint.open ? "true" : "false"}" aria-controls="sprint-kids-${escapeHtml(job.id)}" data-kids="${sprint.count}"><span class="st-arrow${sprint.open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span><span class="st-text"><span class="st-label">${sprint.open ? "收起" : "展开"}</span> <span class="sprint-count">${sprint.count}</span> 个轮次</span></button></div>`
     : "";
   return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
@@ -884,11 +884,11 @@ function renderJobCard(job, now, sprint) {
             ${sprintChild ? "" : `<span class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">官网<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">国内<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a>` : `<span class="muted">无 URL</span>`}</span>`}
           </div>
           <div class="job-state">
-            ${sprintToggle}
             <span class="job-status"><span class="st-dot" aria-hidden="true"></span>${escapeHtml(statusZh)}</span>
             ${job.finishedAt && !preStartLabel ? `<span class="job-finished">${escapeHtml(fmtTime(job.finishedAt))}</span>` : ""}
             ${snapshotTs ? `<span class="job-snapshot">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> 北京时间</span>` : ""}
           </div>
+          ${sprintToggle}
         </div>
         <div class="job-actions">
           ${job.status === "running" || job.status === "queued"
@@ -942,6 +942,8 @@ $("#jobList").addEventListener("click", (event) => {
   btn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
   const arrow = btn.querySelector(".st-arrow");
   if (arrow) arrow.classList.toggle("open", nextOpen);
+  const label = btn.querySelector(".st-label");
+  if (label) label.textContent = nextOpen ? "收起" : "展开";
   if (pid) {
     if (nextOpen) state._sprintOpen.add(pid);
     else state._sprintOpen.delete(pid);
