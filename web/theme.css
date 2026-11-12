@@ -61,6 +61,7 @@ body.app .shell {
 /* ---------- 页头与导航 ---------- */
 body.app .page-head {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
