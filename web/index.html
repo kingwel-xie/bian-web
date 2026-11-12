@@ -728,49 +728,69 @@
 
       /* ---------- 轮次任务折叠 ---------- */
       .taskdesk .sprint-group { margin: 0; border-bottom: 1px solid var(--line); }
+      .taskdesk .sprint-group > .job { border-bottom: 0; }
       .taskdesk .sprint-toggle {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 6px;
-        width: 100%;
+        gap: 4px;
+        min-height: 21px;
         margin: 0;
-        padding: 8px 16px 8px 18px;
-        border: 0;
-        border-radius: 0;
+        padding: 0 6px 0 4px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-tag);
         background: var(--surface);
-        color: var(--muted);
+        color: var(--ink-2);
         font-size: 11px;
         font-weight: 500;
-        text-align: left;
+        line-height: 1;
+        white-space: nowrap;
         cursor: pointer;
+        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
       }
-      .taskdesk .sprint-toggle:hover { background: var(--surface-2); color: var(--ink); }
+      .taskdesk .sprint-toggle:hover {
+        background: var(--surface-2);
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+      .taskdesk .sprint-toggle[aria-expanded="true"] {
+        border-color: rgba(14, 116, 122, 0.3);
+        background: var(--accent-soft);
+        color: var(--accent-ink);
+      }
       .taskdesk .st-arrow {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         width: 12px;
         height: 12px;
+        color: var(--muted);
         transition: transform 140ms ease;
       }
+      .taskdesk .sprint-toggle[aria-expanded="true"] .st-arrow { color: var(--accent-ink); }
       .taskdesk .st-arrow.open { transform: rotate(90deg); }
       .taskdesk .sprint-count {
         font-family: var(--mono);
+        font-size: 10px;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
       }
+      .taskdesk .sprint-toggle[aria-expanded="true"] .sprint-count { color: var(--accent-ink); }
       .taskdesk .sprint-kids {
         display: block;
-        margin: 0 0 0 24px;
+        margin: 0 0 0 16px;
         padding: 0;
-        border-left: 2px solid var(--line);
+        border-top: 1px solid var(--line);
+        border-left: 2px solid rgba(46, 42, 36, 0.18);
+        background: #faf7f0;
       }
+      .taskdesk .sprint-kids[hidden] { display: none; }
       .taskdesk .sprint-kids .job {
         padding-left: 14px;
-        background: #fcfaf4;
-        border-bottom: 1px solid var(--line);
+        background: transparent;
+        border-bottom: 0;
       }
-      .taskdesk .sprint-kids .job:last-child { border-bottom: 0; }
+      .taskdesk .sprint-kids .job + .job { border-top: 1px solid var(--line); }
+      .taskdesk .sprint-kids .job:hover { background: rgba(46, 42, 36, 0.025); }
       .taskdesk .sprint-kids .job-name { font-size: 13px; }
 
       /* ---------- 分页 ---------- */
@@ -1136,7 +1156,6 @@
           padding-top: 10px;
           border-top: 1px solid var(--line);
         }
-        .taskdesk .sprint-kids { margin-left: 16px; }
         .taskdesk .pagination { padding: 10px 14px; }
         .taskdesk .modal-box { padding: 16px; }
         .taskdesk .form-row { flex-direction: column; align-items: stretch; gap: 10px; }

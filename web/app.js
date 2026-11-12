@@ -796,8 +796,12 @@ function applyJobSnapshot(jobs) {
     cur.add(job.id);
     const card = document.querySelector(`.job[data-job-id="${CSS.escape(job.id)}"]`);
     if (card) {
+      const oldToggle = card.querySelector(".sprint-toggle");
+      const sprint = oldToggle
+        ? { count: Number(oldToggle.dataset.kids || 0), open: oldToggle.getAttribute("aria-expanded") === "true" }
+        : null;
       const tmp = document.createElement("div");
-      tmp.innerHTML = renderJobCard(job, now).trim();
+      tmp.innerHTML = renderJobCard(job, now, sprint).trim();
       const fresh = tmp.firstElementChild;
       if (fresh) card.replaceWith(fresh);
     } else {
@@ -813,7 +817,7 @@ function applyJobSnapshot(jobs) {
   if (needRefresh) loadJobs(state.page);
 }
 
-function renderJobCard(job, now) {
+function renderJobCard(job, now, sprint) {
   const payload = job.payload || {};
   const progress = job.progress || {};
   const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
@@ -862,6 +866,9 @@ function renderJobCard(job, now) {
       countdownCls += " ended";
     }
   }
+  const sprintToggle = sprint && sprint.count
+    ? `<button class="sprint-toggle" type="button" title="展开/收起轮次任务" aria-expanded="${sprint.open ? "true" : "false"}" aria-controls="sprint-kids-${escapeHtml(job.id)}" data-kids="${sprint.count}"><span class="st-arrow${sprint.open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>轮次 <span class="sprint-count">${sprint.count}</span></button>`
+    : "";
   return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
         <div class="job-main">
@@ -877,6 +884,7 @@ function renderJobCard(job, now) {
             ${sprintChild ? "" : `<span class="job-urls">${url ? `<a class="job-link" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener">官网<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a><a class="job-link" href="${escapeHtml(mirrorUrl)}" target="_blank" rel="noopener">国内<svg class="i i-xs" aria-hidden="true"><use href="#i-external"/></svg></a>` : `<span class="muted">无 URL</span>`}</span>`}
           </div>
           <div class="job-state">
+            ${sprintToggle}
             <span class="job-status"><span class="st-dot" aria-hidden="true"></span>${escapeHtml(statusZh)}</span>
             ${job.finishedAt && !preStartLabel ? `<span class="job-finished">${escapeHtml(fmtTime(job.finishedAt))}</span>` : ""}
             ${snapshotTs ? `<span class="job-snapshot">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> 北京时间</span>` : ""}
@@ -904,40 +912,41 @@ function renderJobCard(job, now) {
 }
 
 function renderJobs(jobs) {
-  const { page, totalPages, total } = state;
+  const { total } = state;
   $("#jobCount").textContent = `${total}`;
   const jl = $("#jobList");
   const now = Date.now();
+  if (!state._sprintOpen) state._sprintOpen = new Set();
   jl.innerHTML = jobs.map((job) => {
-    let html = renderJobCard(job, now);
     const kids = Array.isArray(job.sprintChildren) ? job.sprintChildren : [];
-    if (kids.length) {
-      if (!state._sprintOpen) state._sprintOpen = new Set();
-      const anyActive = kids.some((k) => k.status === "running" || k.status === "queued");
-      const open = state._sprintOpen.has(job.id) || anyActive;
-      html += `<div class="sprint-group" data-parent="${escapeHtml(job.id)}">
-        <button class="sprint-toggle" type="button"><span class="st-arrow${open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>轮次任务 <span class="sprint-count">${kids.length}</span></button>
-        <div class="sprint-kids" style="${open ? "" : "display:none"}">${kids.map((k) => renderJobCard(k, now)).join("")}</div>
-      </div>`;
-    }
-    return html;
+    if (!kids.length) return renderJobCard(job, now);
+    const anyActive = kids.some((k) => k.status === "running" || k.status === "queued");
+    const open = state._sprintOpen.has(job.id) || anyActive;
+    const card = renderJobCard(job, now, { count: kids.length, open });
+    return `<div class="sprint-group" data-parent="${escapeHtml(job.id)}">${card}<div class="sprint-kids" id="sprint-kids-${escapeHtml(job.id)}"${open ? "" : " hidden"}>${kids.map((k) => renderJobCard(k, now)).join("")}</div></div>`;
   }).join("") || `<div class="empty box">没有任务。</div>`;
-  jl.querySelectorAll(".sprint-toggle").forEach((btn) => {
-    btn.addEventListener("click", function () {
-      if (!state._sprintOpen) state._sprintOpen = new Set();
-      const group = this.closest(".sprint-group");
-      const pid = group ? group.dataset.parent : "";
-      const kids = this.parentElement.querySelector(".sprint-kids");
-      const arrow = this.querySelector(".st-arrow");
-      const open = kids.style.display !== "none";
-      kids.style.display = open ? "none" : "";
-      if (arrow) arrow.classList.toggle("open", !open);
-      if (pid) { if (open) state._sprintOpen.delete(pid); else state._sprintOpen.add(pid); }
-    });
-  });
 
   renderPagination();
 }
+
+$("#jobList").addEventListener("click", (event) => {
+  const btn = event.target.closest(".sprint-toggle");
+  if (!btn) return;
+  const group = btn.closest(".sprint-group");
+  const kids = group ? group.querySelector(".sprint-kids") : null;
+  if (!kids) return;
+  if (!state._sprintOpen) state._sprintOpen = new Set();
+  const pid = group.dataset.parent || "";
+  const nextOpen = kids.hasAttribute("hidden");
+  kids.toggleAttribute("hidden", !nextOpen);
+  btn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+  const arrow = btn.querySelector(".st-arrow");
+  if (arrow) arrow.classList.toggle("open", nextOpen);
+  if (pid) {
+    if (nextOpen) state._sprintOpen.add(pid);
+    else state._sprintOpen.delete(pid);
+  }
+});
 
 function renderPagination() {
   const { page, totalPages, total } = state;
