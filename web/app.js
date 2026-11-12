@@ -867,7 +867,7 @@ function renderJobCard(job, now, sprint) {
     }
   }
   const sprintToggle = sprint && sprint.count
-    ? `<div class="job-sprint"><button class="sprint-toggle" type="button" title="展开/收起轮次任务" aria-expanded="${sprint.open ? "true" : "false"}" aria-controls="sprint-kids-${escapeHtml(job.id)}" data-kids="${sprint.count}"><span class="st-arrow${sprint.open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span><span class="st-text"><span class="st-label">${sprint.open ? "收起" : "展开"}</span> <span class="sprint-count">${sprint.count}</span> 个轮次</span></button></div>`
+    ? `<div class="job-sprint"><button class="sprint-toggle" type="button" title="展开/收起轮次任务" aria-expanded="${sprint.open ? "true" : "false"}" aria-controls="sprint-kids-${escapeHtml(job.id)}" data-kids="${sprint.count}"><span class="st-action"><span class="st-arrow${sprint.open ? " open" : ""}"><svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-right"/></svg></span><span class="st-text"><span class="st-label">${sprint.open ? "收起" : "展开"}</span> <span class="sprint-count">${sprint.count}</span> 个轮次</span></span></button></div>`
     : "";
   return `
       <article class="job ${statusClass}${expiredClass}" data-job-id="${escapeHtml(job.id)}">
@@ -888,7 +888,6 @@ function renderJobCard(job, now, sprint) {
             ${job.finishedAt && !preStartLabel ? `<span class="job-finished">${escapeHtml(fmtTime(job.finishedAt))}</span>` : ""}
             ${snapshotTs ? `<span class="job-snapshot">数据时间 <b>${escapeHtml(fmtSnapshotTs(snapshotTs))}</b> 北京时间</span>` : ""}
           </div>
-          ${sprintToggle}
         </div>
         <div class="job-actions">
           ${job.status === "running" || job.status === "queued"
@@ -907,6 +906,7 @@ function renderJobCard(job, now, sprint) {
         </div>` : ""}
         ${errorReason ? `<div class="job-error">${escapeHtml(errorReason)}</div>` : ""}
         ${job.stderr ? `<details class="stderr"><summary>详情</summary><pre>${escapeHtml(job.stderr.slice(-900))}</pre></details>` : ""}
+        ${sprintToggle}
       </article>
     `;
 }

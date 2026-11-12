@@ -729,32 +729,41 @@
       /* ---------- 轮次任务折叠 ---------- */
       .taskdesk .sprint-group { margin: 0; border-bottom: 1px solid var(--line); }
       .taskdesk .sprint-group > .job { border-bottom: 0; }
-      .taskdesk .job-sprint { margin-top: 9px; }
+      .taskdesk .job-sprint {
+        grid-column: 1 / -1;
+        margin-top: 10px;
+        border-top: 1px solid var(--line);
+      }
       .taskdesk .sprint-toggle {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 6px;
-        min-height: 28px;
+        justify-content: flex-start;
+        width: 100%;
+        min-height: 36px;
         margin: 0;
-        padding: 0 11px 0 8px;
-        border: 1px solid rgba(14, 116, 122, 0.28);
-        border-radius: var(--r-ctl);
-        background: var(--accent-soft);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
         color: var(--accent-ink);
         font-size: 12px;
         font-weight: 500;
-        line-height: 1;
-        white-space: nowrap;
+        line-height: 1.4;
+        text-align: left;
         cursor: pointer;
-        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+        transition: color 140ms ease;
       }
-      .taskdesk .sprint-toggle:hover {
-        background: rgba(14, 116, 122, 0.16);
-        border-color: var(--accent);
+      .taskdesk .sprint-toggle:hover { background: transparent; color: var(--accent); }
+      .taskdesk .st-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
       }
-      .taskdesk .sprint-toggle[aria-expanded="true"] {
-        background: rgba(14, 116, 122, 0.16);
-        border-color: var(--accent);
+      .taskdesk .st-text { display: inline-block; }
+      .taskdesk .sprint-toggle:hover .st-text {
+        text-decoration: underline;
+        text-underline-offset: 3px;
       }
       .taskdesk .st-arrow {
         display: inline-flex;
@@ -766,7 +775,6 @@
         transition: transform 140ms ease;
       }
       .taskdesk .st-arrow.open { transform: rotate(90deg); }
-      .taskdesk .st-text { display: inline-block; white-space: nowrap; }
       .taskdesk .sprint-count {
         font-family: var(--mono);
         font-size: 11px;
