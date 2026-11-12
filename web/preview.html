@@ -6,213 +6,477 @@
 <title>排行榜预览</title>
 <link rel="stylesheet" href="/css888/styles.css?v=20260704d" />
 <style>
-  body { padding: 14px; }
-  .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
-  .preview-head p { color: var(--muted); font-size: 12px; margin-top: 5px; }
-  .preview-meta { color: var(--muted); font-size: 12px; }
-  .preview-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-  .stats-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 0 auto; }
-  .stats-panel h3, .reward-panel h3 { margin: 0; padding: 6px 16px; font-size: 12px; text-transform: uppercase; background: #eee7d9; color: var(--accent); cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.03em; }
-  .stats-panel h3::after, .reward-panel h3::after { content: "▾ 收起"; font-size: 11px; font-weight: 400; }
-  .stats-panel.collapsed h3::after, .reward-panel.collapsed h3::after { content: "▸ 展开"; }
-  .stats-panel.collapsed > :not(h3), .reward-panel.collapsed > :not(h3) { display: none !important; }
-  .stats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .stats-table th, .stats-table td { font-size: 13px; }
-  .stats-table th { font-weight: 700; position: static; background: #eee7d9; color: var(--accent); text-transform: uppercase; }
-  .stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .stats-table .c-rank { width: 9%; } .stats-table .c-total { width: 12%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; } .stats-table .c-avg { width: 16%; } .stats-table .c-median { width: 14%; } .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 14%; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th, td { border-bottom: 1px solid rgba(46,42,36,0.1); padding: 10px 12px; text-align: left; white-space: nowrap; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
-  th { padding: 6px 12px; }
-  th { position: sticky; top: 0; z-index: 1; background: #eee7d9; color: var(--accent); font-size: 12px; text-transform: uppercase; }
-  .col-rank { width: 6%; } .col-rank-change { width: 6%; } .col-nick { width: 18%; } .col-user { width: 14%; }
-  .col-score { width: 12%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
-  .rank { font-weight: 900; }
-  .team-tag { font-size: 10px; color: #fff; font-weight: 700; margin-left: 3px; vertical-align: super; background: #4a7c8c; padding: 1px 5px; border-radius: 4px; line-height: 1.4; }
-  .maddog-stars { font-size: 11px; color: #e67e22; font-weight: 700; margin-left: 3px; vertical-align: super; letter-spacing: -1px; }
-  .md-step { display: inline-flex; min-height: 0; font-size: 11px; font-weight: 700; margin-left: 2px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 4px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; opacity: 0; transition: opacity .1s; }
-  tr:hover .md-step { opacity: 1; }
-  .md-step:hover { background: #a0988a; }
-  .table-wrap thead th { position: sticky; top: 0; background: #eee7d9; z-index: 2; box-shadow: 0 1px 0 var(--line); }
-  .vspacer td { padding: 0; border: 0; line-height: 0; }
-  .row-market { background: #f5f0e6; }
-  .row-prediction { background: #e8f0f5; }
-  .add-team-btn { display: inline-flex; min-height: 0; font-size: 12px; font-weight: 700; margin-left: 3px; vertical-align: super; background: #c8c2b8; color: #fff; padding: 0 5px; border-radius: 4px; line-height: 1.4; cursor: pointer; user-select: none; }
-  .add-team-btn:hover { background: #a0988a; }
-  .add-team-btn:focus-visible, .pager-btn:focus-visible, .df-btn:focus-visible, .trend-tier-btn:focus-visible, .modal-close:focus-visible, .modal-close-btn:focus-visible, th[role="button"]:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
-  .chg-up { color: #c0392b; font-weight: 700; } .chg-down { color: #27ae60; font-weight: 700; } .chg-flat { color: #999; }
-  .chg-new { color: #c0392b; font-weight: 700; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .tl { text-align: left; }
-  th.num { text-align: right; }
-  .downloads { display: flex; flex-wrap: wrap; gap: 8px; }
-  .downloads a { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 16px; cursor: pointer; font-weight: 900; font-size: 12px; text-decoration: none; }
-  .downloads a:hover { background: #e1f3f6; color: var(--accent-2); }
-  .err { color: var(--bad); font-weight: 900; }
-  .empty { color: var(--muted); text-align: center; padding: 18px; }
-  #searchInput { width: calc(100% - 20px); border: none; background: transparent; color: var(--accent); padding: 0; outline: none; font: inherit; font-size: 12px; text-transform: none; vertical-align: middle; }
-  #teamFilter { background: transparent; border: none; color: var(--accent); font-weight: 700; font-size: 12px; outline: none; cursor: pointer; }
-  hr.sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
-  .info-icon { cursor: help; font-size: 11px; opacity: 0.5; } .info-icon:hover { opacity: 1; }
-  .sort-icon { font-size: 14px; opacity: 0.5; }
-  .search-icon { font-size: 11px; margin-right: 4px; opacity: 0.5; }
-  .search-clear { background: none; border: none; cursor: pointer; padding: 0 4px; font-size: 13px; color: var(--muted); line-height: 1; display: none; vertical-align: middle; }
-  .search-clear:hover { color: var(--ink); }
-  .pager { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--muted); }
-  .pager-info { font-weight: 700; color: var(--ink); }
-  .pager-sep { opacity: 0.4; }
-  .pager-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; border: 1px solid var(--line); border-radius: 999px; background: #eee7d9; color: var(--ink); padding: 0 14px; cursor: pointer; font-weight: 700; font-size: 12px; }
-  .pager-btn:hover:not(:disabled) { background: #e1f3f6; color: var(--accent-2); }
-  .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  #pageSize { width: auto; flex-shrink: 0; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; color: var(--ink); font-size: 12px; padding: 0 4px; }
-  .pager-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-  .compare-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .compare-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--muted); user-select: none; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s; }
-  .compare-btn:hover { background: #f5f0e8; }
-  .compare-btn input { display: none; }
-  .compare-btn:has(input:checked) { background: #e1f3f6; color: var(--accent-2); border-color: var(--accent-2); font-weight: 700; }
-  .snapshot-section { display: inline-flex; align-items: center; gap: 8px; }
-  .compare-section { display: inline-flex; align-items: center; gap: 8px; padding-left: 14px; margin-left: 4px; border-left: 1px solid var(--line); }
-  .reward-panel { border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; overflow-x: auto; width: 67%; margin: 10px auto 0; }
-  .reward-panel h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: #eee7d9; color: var(--accent); }
-  .reward-body { padding: 12px 16px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-  .reward-item { font-size: 13px; }
-  .reward-item .label { color: var(--muted); font-size: 11px; }
-  .reward-item .value { font-weight: 700; font-size: 15px; }
-  .reward-item .value.usd { color: var(--good); }
-  .reward-total-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0; }
-  .reward-tier-usd { color: var(--good); font-weight: 700; }
-  @media (max-width: 640px) {
-    body { padding: 6px; }
-    .panel[style] { padding: 6px !important; }
-    .stats-panel { width: 100%; }
-    .stats-table th, .stats-table td { padding: 6px 4px; font-size: 11px; }
-    .stats-table .c-rank { width: 8%; } .stats-table .c-total { width: 13%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; } .stats-table .c-avg { width: 17%; } .stats-table .c-median { width: 14%; }   .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 13%; }
-    table th, table td { padding: 6px 4px; font-size: 11px; }
-    .col-rank { width: 7%; } .col-rank-change { width: 7%; } .col-nick { width: 16%; } .col-user { width: 16%; }
-    .col-score { width: 14%; } .col-volume { width: 16%; } .col-delta { width: 12%; } .col-region { width: 12%; }
-    .preview-meta span { display: inline-block; }
-    .reward-panel { width: 100%; }
-    .downloads a { font-size: 11px; padding: 0 10px; min-height: 28px; }
-    #meta span { font-size: 13px !important; }
-    #meta b { font-size: 14px !important; }
+  /* ============================================================
+     排行榜预览 · 设计标尺
+     纸 + 墨：暖纸底、细墨线、等宽数字。颜色只用于语义与一处重点。
+     ============================================================ */
+  :root {
+    --paper: #f3f0e8;
+    --surface: #fffdf8;
+    --surface-2: #f7f2e7;
+    --ink: #2b2721;
+    --ink-2: #574e43;
+    --muted: #6b6255;
+    --line: rgba(46, 42, 36, 0.12);
+    --line-strong: rgba(46, 42, 36, 0.24);
+    --accent: #0e747a;
+    --accent-ink: #0a5d62;
+    --accent-soft: rgba(14, 116, 122, 0.09);
+    --up: #b02a24;
+    --down: #1a7f4b;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    --r-card: 12px;
+    --r-ctl: 6px;
+    --r-tag: 4px;
   }
-  .df-btn { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; min-height: auto; font-weight: 700; vertical-align: middle; }
-  .df-btn:hover { background: #f5f0e8; }
-  .df-btn.active { background: #4a7c8c; color: #fff; border-color: #4a7c8c; }
-  .modal-overlay { position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
-  .modal-box { background:#fffdf8; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,.25); min-width:360px; max-width:520px; max-height:75vh; display:flex; flex-direction:column; }
-  .modal-header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; background:#eee7d9; border-radius:8px 8px 0 0; }
-  .modal-header h3 { margin:0; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; color:var(--accent); }
-  .modal-close { background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:0 4px; line-height:1; }
-  .modal-close:hover { color:#333; }
-  .modal-body { padding:6px 14px; overflow-y:auto; flex:1; }
-  .modal-footer { padding:8px 14px; border-top:1px solid rgba(46,42,36,0.08); display:flex; justify-content:flex-end; }
-  .modal-footer .modal-close-btn { font-size:12px; padding:5px 18px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; font-weight:700; }
-  .modal-footer .modal-close-btn:hover { background:#f5f0e8; }
-  .snap-item { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(46,42,36,0.08); }
-  .snap-item:last-child { border-bottom:none; }
-  .snap-item .snap-info { font-size:12px; }
-  .snap-item .snap-delete { color:#b34a4a; cursor:pointer; font-size:10px; border:1px solid #e0c8b0; border-radius:4px; padding:6px 14px; background:none; font-weight:700; line-height:1.2; min-height:0; }
-  .trend-body { padding:10px 16px 14px; }
-  .trend-tier-bar { display:flex; gap:6px; flex-wrap:wrap; }
-  .trend-tier-btn { font-size:12px; padding:3px 12px; border:1px solid var(--line); border-radius:999px; background:#fff; color:var(--muted); cursor:pointer; font-weight:700; }
-  .trend-tier-btn:hover { background:#f5f0e8; }
-  .trend-tier-btn.active { background:#81c784; color:#fff; border-color:#81c784; }
-  #deltaStatBar { display:none; margin-left:auto; gap:6px; }
-  .trend-chart-wrap { width:100%; overflow-x:auto; }
-  .trend-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--muted); }
-  .trend-legend .tl-item { display:inline-flex; align-items:center; gap:4px; }
-  .trend-legend button.tl-item { cursor:pointer; padding:2px 6px; border:1px solid transparent; border-radius:4px; background:transparent; font:inherit; color:inherit; }
-  .trend-legend button.tl-item:hover { background:#f5f0e8; }
-  .trend-legend button.tl-item.tl-hidden { opacity:.45; text-decoration:line-through; }
-  .trend-legend .tl-dot { width:10px; height:10px; border-radius:2px; display:inline-block; flex-shrink:0; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* styles.css 把 label 设成 900 + uppercase，这里统一收回 */
+  label { display: inline-block; font-weight: 500; text-transform: none; letter-spacing: 0; }
+
+  .sprite { display: none; }
+  .i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .i-sm { width: 14px; height: 14px; }
+
+  .shell { width: min(1600px, 100%); margin: 0 auto; padding: 0 24px 48px; }
+
+  /* ---------- 页头 ---------- */
+  .page-head { display: flex; gap: 24px; justify-content: space-between; align-items: flex-start; padding: 24px 0 16px; }
+  .head-main { min-width: 0; }
+  .head-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 500; color: var(--ink); }
+  .head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .head-meta:empty { display: none; }
+  .head-meta .sep { color: var(--line-strong); }
+  .head-meta .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); text-decoration: none; }
+  .back-link:hover { color: var(--accent-ink); }
+  .link-quiet { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-ink); text-decoration: none; }
+  .link-quiet:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .link-quiet .i { width: 13px; height: 13px; }
+  .head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex: none; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+  .status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-tag); font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .status.live { border-color: rgba(14, 116, 122, 0.35); background: var(--accent-soft); color: var(--accent-ink); }
+  .status.urgent { border-color: rgba(176, 42, 36, 0.35); background: rgba(176, 42, 36, 0.08); color: var(--up); }
+
+  /* ---------- 指标条 ---------- */
+  .stat-strip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px; margin: 0 0 16px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .stat-strip .stat { display: inline-flex; align-items: baseline; gap: 8px; }
+  .stat-strip b { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stat-strip .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 吸顶子导航 ---------- */
+  .subnav { position: sticky; top: 0; z-index: 30; display: flex; align-items: stretch; gap: 24px; height: 44px; margin: 0 0 24px; background: var(--paper); border-bottom: 1px solid var(--line); }
+  .subnav a { display: inline-flex; align-items: center; height: 44px; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; }
+  .subnav a:hover { color: var(--ink); }
+  .subnav a.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .snap-stamp { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .snap-stamp::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+
+  /* ---------- 快照选择条 ---------- */
+  .snapshot-bar { display: none; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 8px 12px; margin: 0 0 16px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--surface); font-size: 12px; }
+  .snapshot-bar label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: none; }
+  .snapshot-section, .compare-section { display: inline-flex; align-items: center; gap: 8px; }
+  .compare-section { padding-left: 16px; border-left: 1px solid var(--line); }
+  .snapshot-bar select { max-width: 320px; }
+  #compareSelect { max-width: 260px; }
+  .compare-section { min-width: 0; flex: 1 1 auto; }
+
+  /* ---------- 分组与卡片 ---------- */
+  .section { display: flex; flex-direction: column; gap: 12px; margin: 0 0 32px; }
+  .section:last-child { margin-bottom: 0; }
+  .split { display: flex; gap: 12px; align-items: stretch; }
+  .split > * { flex: 1 1 0; min-width: 0; }
+  .split > .wide { flex: 1.8 1 0; }
+
+  .card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+  .card-head, .card > h3 {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0; padding: 0 16px; min-height: 40px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px; font-weight: 500; color: var(--ink);
+    background: transparent;
+  }
+  .card > h3 { cursor: pointer; user-select: none; }
+  .card > h3::after { content: "收起"; margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted); }
+  .card.collapsed > h3::after { content: "展开"; }
+  .card.collapsed > :not(h3) { display: none !important; }
+  .card-note { font-size: 11px; font-weight: 400; color: var(--muted); font-family: var(--mono); }
+  .card-pad { padding: 12px 16px; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; min-width: 0; border-collapse: collapse; table-layout: fixed; }
+  th, td { border-bottom: 1px solid var(--line); padding: 0 12px; text-align: left; white-space: nowrap; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  th { height: 34px; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--surface-2); text-transform: none; letter-spacing: 0; }
+  td { height: 36px; color: var(--ink); }
+  tbody tr:last-child td { border-bottom: 0; }
+  th.num, td.num, .num { text-align: right; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+  th.num { font-family: inherit; }
+  .stats-table { table-layout: fixed; }
+  .stats-table th, .stats-table td { padding: 0 12px; }
+  .table-wrap { position: relative; max-height: min(68vh, 720px); overflow: auto; background: var(--surface); border: 0; border-radius: 0; }
+  .table-wrap thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--line); }
+  .table-wrap thead input, .table-wrap thead select { height: 26px; font-size: 12px; }
+  .vspacer td { padding: 0; border: 0; line-height: 0; }
+  .row-market { background: #f6efdf; }
+  .row-prediction { background: var(--accent-soft); }
+  .rank { font-family: var(--mono); font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .empty { height: auto; padding: 28px 16px; color: var(--muted); text-align: center; }
+  .err { color: var(--up); font-weight: 500; }
+  .stats-table b, .reward-body b { font-weight: 500; }
+  .stats-table tr.total-row { font-weight: 500; }
+  .stats-table tr.total-row td { border-top: 1px solid var(--line-strong); color: var(--ink); }
+  .stats-table td.prize-total { font-weight: 500; color: var(--ink); }
+
+  /* 行内小标记：安静的文字，不再用白字色块 */
+  .team-tag { margin-left: 6px; padding: 0 4px; border-radius: var(--r-tag); background: var(--accent-soft); color: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: 1px; }
+  .maddog-stars { margin-left: 6px; color: var(--ink-2); font-size: 11px; font-weight: 500; letter-spacing: 0; vertical-align: 1px; }
+  .md-step, .add-team-btn { display: inline-flex; align-items: center; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 500; line-height: 16px; vertical-align: 1px; cursor: pointer; user-select: none; }
+  .md-step { opacity: 0; transition: opacity 120ms ease; }
+  .add-team-btn { padding: 0 6px; }
+  tr:hover .md-step, .md-step:focus-visible { opacity: 1; }
+  .md-step:hover, .add-team-btn:hover { border-color: var(--line-strong); background: var(--paper); color: var(--ink); }
+
+  .chg-up { color: var(--up); font-weight: 500; }
+  .chg-down { color: var(--down); font-weight: 500; }
+  .chg-flat { color: var(--muted); }
+  .chg-new { color: var(--up); font-weight: 500; }
+
+  /* ---------- 分页 ---------- */
+  .pager { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .pager-info { font-weight: 500; color: var(--ink); }
+  .pager-sep { color: var(--line-strong); }
+  .pager-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pager-btn { min-height: 28px; padding: 0 10px; font-size: 12px; }
+  .pager-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--accent-ink); border-color: var(--line-strong); }
+  .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ---------- 控件 ---------- */
+  button, .downloads a {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 32px; padding: 0 12px;
+    border: 1px solid var(--line); border-radius: var(--r-ctl);
+    background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 12px; font-weight: 500;
+    text-decoration: none; cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+  button:hover, .downloads a:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary, #calcBtn, #loadDeltaBtn, #refreshRewardBtn, #refreshPrizeBtn, #pickerConfirm { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover, #calcBtn:hover, #loadDeltaBtn:hover, #refreshRewardBtn:hover, #refreshPrizeBtn:hover, #pickerConfirm:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+
+  input, select {
+    height: 32px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: var(--r-ctl);
+    background: var(--surface); color: var(--ink);
+    font-family: inherit; font-size: 13px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input::placeholder { color: var(--muted); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 工具栏小按钮 */
+  .df-btn, .trend-tier-btn { min-height: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--r-tag); background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; }
+  .df-btn:hover, .trend-tier-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .df-btn.active, .trend-tier-btn.active { border-color: rgba(14, 116, 122, 0.35); background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+  .toolbar-label { font-size: 11px; font-weight: 400; color: var(--muted); margin-right: 4px; }
+  .info-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin: 0 2px; color: var(--muted); vertical-align: -2px; cursor: help; }
+  .info-icon .i { width: 13px; height: 13px; }
+  .sort-icon { display: inline-flex; align-items: center; margin-left: 4px; color: var(--muted); vertical-align: -2px; }
+  .sort-icon .i { width: 12px; height: 12px; }
+  .search-icon { display: inline-flex; align-items: center; margin-right: 6px; color: var(--muted); }
+  .search-icon .i { width: 14px; height: 14px; }
+  .search-clear { display: none; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .search-clear:hover { color: var(--ink); background: none; }
+  #searchInput { width: auto; flex: 1; min-width: 0; max-width: 180px; border: 0; background: transparent; padding: 0; font-size: 12px; }
+  #searchInput:focus { box-shadow: none; border: 0; }
+  #teamFilter { border: 0; background: transparent; padding: 0; height: 26px; font-size: 12px; font-weight: 500; color: var(--ink); cursor: pointer; max-width: 100%; }
+  #pageSize { width: auto; height: 28px; font-size: 12px; padding: 0 4px; }
+  #pageJump { width: 56px; height: 28px; font-size: 12px; }
+
+  /* ---------- 奖励 ---------- */
+  .reward-body { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 16px; }
+  .reward-total-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .reward-item .label { color: var(--muted); font-size: 11px; }
+  .reward-item .value { font-family: var(--mono); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .reward-tier-usd { font-family: var(--mono); }
+  #rewardPanel .card-note, #prizeBoardToken, #rewardPanelToken { font-family: var(--mono); }
+
+  /* ---------- 趋势图 ---------- */
+  .trend-body { padding: 12px 16px 16px; }
+  .trend-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .trend-tier-bar { display: flex; gap: 4px; flex-wrap: wrap; }
+  .trend-chart-wrap { width: 100%; overflow-x: auto; }
+  .trend-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .trend-legend .tl-item { display: inline-flex; align-items: center; gap: 6px; }
+  .trend-legend button.tl-item { cursor: pointer; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--r-tag); background: transparent; font: inherit; color: inherit; }
+  .trend-legend button.tl-item:hover { background: var(--surface-2); }
+  .trend-legend button.tl-item.tl-hidden { opacity: 0.45; text-decoration: line-through; }
+  .trend-legend .tl-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+  .legend-note { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); padding: 4px 0 0; }
+  .legend-note .spacer { margin-left: auto; }
+  .legend-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: 1px; margin-right: 6px; }
+
+  .sep { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-overlay { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; background: rgba(30, 26, 20, 0.4); }
+  .modal-box { display: flex; flex-direction: column; min-width: 360px; max-width: 520px; max-height: 75vh; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: 0 12px 40px rgba(30, 26, 20, 0.18); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; min-height: 44px; border-bottom: 1px solid var(--line); }
+  .modal-header h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink); }
+  .modal-close { width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .modal-close:hover { background: var(--surface-2); color: var(--ink); }
+  .modal-body { padding: 8px 16px; overflow-y: auto; flex: 1; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .snap-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .snap-item:last-child { border-bottom: 0; }
+  .snap-item .snap-info { font-size: 12px; }
+  .snap-item .snap-delete { min-height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-tag); background: none; color: var(--up); font-size: 11px; font-weight: 500; }
+  .snap-item .snap-delete:hover { border-color: rgba(176, 42, 36, 0.4); background: rgba(176, 42, 36, 0.06); }
+
+  /* ---------- 表格列宽 / 工具条 ---------- */
+  .col-rank { width: 6%; } .col-rank-change { width: 7%; } .col-nick { width: 18%; } .col-user { width: 14%; }
+  .col-score { width: 11%; } .col-volume { width: 18%; } .col-delta { width: 14%; } .col-region { width: 12%; }
+  .stats-table .c-rank { width: 9%; } .stats-table .c-total { width: 12%; } .stats-table .c-pct { width: 10%; } .stats-table .c-dratio { width: 11%; }
+  .stats-table .c-avg { width: 16%; } .stats-table .c-median { width: 14%; } .stats-table .c-q1 { width: 14%; } .stats-table .c-last { width: 14%; }
+  #deltaStatBar { display: none; margin-left: auto; gap: 4px; align-items: center; }
+  .sortable { cursor: pointer; }
+  .thead-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .field-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: none; }
+  .muted-note { font-size: 12px; color: var(--muted); }
+  .delta-chart { display: flex; gap: 6px; align-items: flex-end; min-height: 140px; padding: 4px 0; overflow-x: auto; }
+  .calc-result { padding: 0 16px 12px; font-size: 12px; color: var(--ink-2); }
+  .calc-tier-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: none; }
+  .calc-tier-input { width: 88px; }
+  .calc-result:empty { display: none; }
+  .btn-secondary { background: var(--surface); }
+  .page-head.expired h1 { color: var(--muted); }
+  .page-head.expired #meta { opacity: .6; }
+  .section, .subnav a { scroll-margin-top: 52px; }
+  html { scroll-behavior: smooth; }
+  .modal-close-btn, .modal-footer button { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 500; cursor: pointer; }
+  .modal-close-btn:hover, .modal-footer button:hover { background: var(--surface-2); }
+  .modal-body select, .modal-body input { width: 100%; }
+  .modal-box.sm { min-width: 0; width: 360px; }
+  .modal-footer .btn-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .modal-footer .btn-primary:hover { border-color: var(--accent-ink); background: var(--accent-ink); }
+
+  /* styles.css 的 sprint chip 是胶囊，这里收回成小标签 */
+  #sprintChips { gap: 6px; }
+  .sprint-chip { display: inline-flex; align-items: center; height: 22px; margin: 0; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 500; text-decoration: none; }
+  a.sprint-chip:hover { border-color: var(--line-strong); color: var(--ink); }
+  .sprint-chip.on { border-color: rgba(14, 116, 122, 0.35); background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+  .sprint-group, .sprint-toggle { display: none; }
+
+  /* ---------- 窄屏 ---------- */
+  @media (max-width: 1080px) {
+    .split { flex-direction: column; }
+    .split > .wide { flex: 1 1 auto; }
+  }
+  @media (max-width: 640px) {
+    .shell { padding: 0 12px 32px; }
+    .page-head { flex-direction: column; gap: 12px; padding: 16px 0 12px; }
+    .head-actions { align-items: flex-start; }
+    .downloads { justify-content: flex-start; }
+    h1 { font-size: 18px; }
+    .subnav { gap: 16px; }
+    .snap-stamp { display: none; }
+    th, td { padding: 0 8px; font-size: 12px; }
+    td { height: 32px; }
+    .stats-table th, .stats-table td { padding: 0 8px; }
+    .card-pad { padding: 10px 12px; }
+    .trend-body { padding: 10px 12px 12px; }
+    .reward-body { padding: 10px 12px; }
+    .reward-total-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .stats-panel { overflow-x: auto; }
+    .stats-table { min-width: 620px; }
+    .reward-body { overflow-x: auto; }
+    .reward-body > .stats-table { min-width: 760px; }
+    .modal-box { min-width: 0; width: calc(100vw - 24px); max-width: none; }
+  }
 </style>
 </head>
 <body>
-  <div class="panel" style="padding:14px">
-    <div class="preview-head">
-      <div>
-        <h2 style="font-size:18px;margin:0;display:inline" id="title">排行榜预览</h2>
-        <a href="/" style="font-size:12px;font-weight:400;color:var(--accent-2);margin-left:8px">← 返回主页</a>
-        <span id="sprintChips" style="margin-left:6px"></span>
-        <div id="actTime" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
-        <div id="limitedRounds" style="font-size:12px;color:var(--accent-2);margin-top:4px;display:none"></div>
-        <p class="preview-meta" id="meta">加载中...</p>
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/></symbol>
+  <symbol id="i-sort-down" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="m6 14 6 6 6-6"/></symbol>
+  <symbol id="i-sort-up" viewBox="0 0 24 24"><path d="M12 20V4"/><path d="m6 10 6-6 6 6"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chevrons-left" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+  <symbol id="i-chevrons-right" viewBox="0 0 24 24"><path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+</svg>
+
+<div class="shell">
+  <header class="page-head">
+    <div class="head-main">
+      <div class="head-line">
+        <h1 id="title">排行榜预览</h1>
+        <span id="titleStatus" class="status" hidden></span>
+        <span id="countdownChip" class="status" hidden></span>
       </div>
-      <div class="downloads" id="downloadLinks">
-      </div>
+      <div id="titleMeta" class="head-meta"></div>
+      <div id="actTime" class="head-meta"></div>
+      <div id="limitedRounds" class="head-meta" style="display:none"></div>
+      <div id="sprintChips" class="head-meta"></div>
+      <a href="/" class="back-link"><svg class="i i-sm" aria-hidden="true"><use href="#i-arrow-left"/></svg>返回主页</a>
     </div>
-    <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
-    <hr class="sep" id="snapSep" style="margin:6px 0 14px 0" />
-    <div class="preview-body">
-      <div class="stats-panel">
-        <h3 style="display:flex;align-items:center;gap:8px">
-          基础统计
-          <span id="deltaFmtToggle" style="font-size:11px;font-weight:400">
-            <span style="color:var(--muted);margin-right:4px">环比增量显示</span>
-            <button class="df-btn" data-fmt="pct">%</button>
-            <button class="df-btn" data-fmt="abs">绝对值</button>
-          </span>
-        </h3>
-        <table class="stats-table">
-          <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
-          <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title="">ⓘ</span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
-          <tbody id="statsBody"></tbody>
+    <div class="head-actions">
+      <div class="downloads" id="downloadLinks"></div>
+    </div>
+  </header>
+
+  <div id="meta" class="stat-strip">加载中</div>
+
+  <nav class="subnav" aria-label="页面导航">
+    <a href="#tableSection" class="active">榜单</a>
+    <a href="#statsSection">统计</a>
+    <a href="#trendSection">趋势</a>
+    <a href="#rewardSection">奖励</a>
+    <span class="snap-stamp" id="snapStamp"></span>
+  </nav>
+
+  <div id="snapshotBar" class="snapshot-bar" style="display:none"></div>
+
+  <section class="section" id="tableSection">
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
+          <thead><tr>
+            <th><select id="teamFilter"><option value="">全部</option></select></th>
+            <th><div class="thead-tools"><span class="search-icon" aria-hidden="true"><svg class="i i-sm"><use href="#i-search"/></svg></span><input id="searchInput" placeholder="昵称搜索" /><button id="searchClearBtn" class="search-clear" type="button" aria-label="清空搜索"><svg class="i i-sm" aria-hidden="true"><use href="#i-x"/></svg></button></div></th>
+            <th>User ID</th>
+            <th class="num">分数</th>
+            <th class="num sortable" id="volumeSort" aria-sort="none">真实成交量 <span class="sort-icon" id="volumeSortIcon" aria-hidden="true"></span></th>
+            <th class="num sortable sort-delta" aria-sort="none"><span class="info-icon" title=""><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span> 增量 <span class="sort-icon" id="deltaSortIcon" aria-hidden="true"></span></th>
+            <th class="num sortable" id="rankChangeSort" aria-sort="none"><span class="info-icon" title=""><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span> 排名变化 <span class="sort-icon" id="rcSortIcon" aria-hidden="true"></span></th>
+            <th class="num">Region</th>
+          </tr></thead>
+          <tbody id="rows"><tr><td colspan="8" class="empty">加载中</td></tr></tbody>
         </table>
       </div>
-    <div id="deltaAnalysisPanel" class="stats-panel" style="margin-top:10px">
-      <h3>增量分析 <span id="deltaAnalysisSub" style="font-weight:400;font-size:12px;color:var(--muted)"></span></h3>
-      <div style="padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <label style="font-size:12px;color:var(--muted)">Symbol</label>
-        <input id="deltaSymbol" value="" style="width:280px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="CELOUSDT" />
-        <button id="loadDeltaBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">加载市场数据</button>
-        <span id="deltaLoadStatus" style="font-size:12px;color:var(--muted)"></span>
+      <div id="pager" class="pager">
+        <span id="pagerInfo" class="pager-info">共 0 行</span>
+        <span class="pager-sep">·</span>
+        <span class="pager-item">每页 <select id="pageSize">
+          <option value="100" selected>100</option>
+          <option value="50">50</option>
+          <option value="200">200</option>
+          <option value="500">500</option>
+          <option value="0">全部</option>
+        </select></span>
+        <button id="pageFirst" class="pager-btn" type="button" title="首页" aria-label="首页"><svg class="i i-sm" aria-hidden="true"><use href="#i-chevrons-left"/></svg></button>
+        <button id="pagePrev" class="pager-btn" type="button" title="上一页" aria-label="上一页"><svg class="i i-sm" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+        <span id="pagerPage">第 1 / 1 页</span>
+        <button id="pageNext" class="pager-btn" type="button" title="下一页" aria-label="下一页"><svg class="i i-sm" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+        <button id="pageLast" class="pager-btn" type="button" title="末页" aria-label="末页"><svg class="i i-sm" aria-hidden="true"><use href="#i-chevrons-right"/></svg></button>
+        <span class="pager-sep">·</span>
+        <span class="pager-item">跳至 <input id="pageJump" type="number" min="1" aria-label="跳到页码" /> 页</span>
       </div>
-      <div id="deltaResults" style="padding:0 16px 12px;display:none">
-        <table class="stats-table" style="margin-bottom:10px">
+    </div>
+  </section>
+
+  <section class="section" id="statsSection">
+    <div class="card stats-panel">
+      <h3>基础统计
+        <span id="deltaFmtToggle" class="toolbar">
+          <span class="toolbar-label">环比增量</span>
+          <button class="df-btn" data-fmt="pct">%</button>
+          <button class="df-btn" data-fmt="abs">绝对值</button>
+        </span>
+      </h3>
+      <table class="stats-table">
+        <colgroup><col class="c-rank" /><col class="c-total" /><col class="c-pct" /><col class="c-dratio" /><col class="c-avg" /><col class="c-median" /><col class="c-q1" /><col class="c-last" /></colgroup>
+        <thead><tr><th>排名</th><th class="num">总成交量</th><th class="num">占比</th><th class="num"><span class="info-icon" title=""><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span> 增量占比</th><th class="num">平均</th><th class="num">中位数</th><th class="num">Q1 位</th><th class="num">末位</th></tr></thead>
+        <tbody id="statsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card stats-panel" id="deltaAnalysisPanel">
+      <h3>增量分析 <span id="deltaAnalysisSub" class="card-note"></span></h3>
+      <div class="card-pad toolbar">
+        <label class="field-label" for="deltaSymbol">Symbol</label>
+        <input id="deltaSymbol" value="" placeholder="CELOUSDT" style="width:220px" />
+        <button id="loadDeltaBtn" class="btn-primary" type="button">加载市场数据</button>
+        <span id="deltaLoadStatus" class="muted-note"></span>
+      </div>
+      <div id="deltaResults" style="display:none">
+        <table class="stats-table">
           <colgroup><col style="width:15%" /><col style="width:13%" /><col style="width:13%" /><col style="width:13%" /><col style="width:18%" /><col style="width:13%" /><col style="width:15%" /></colgroup>
           <thead><tr>
             <th>快照对</th>
             <th class="num">之前总和</th>
             <th class="num">之后总和</th>
             <th class="num">排行榜增量</th>
-            <th class="num">市场成交量(quote)</th>
-            <th class="num">增量/成交量</th>
-            <th class="num">K线数</th>
+            <th class="num">市场成交量 (quote)</th>
+            <th class="num">增量 / 成交量</th>
+            <th class="num">K 线数</th>
           </tr></thead>
           <tbody id="deltaBody"></tbody>
         </table>
-        <div id="deltaChart" style="display:flex;gap:6px;align-items:flex-end;min-height:140px;padding:4px 0;overflow-x:auto"></div>
-        <div style="display:flex;gap:18px;font-size:11px;color:var(--muted);padding:2px 0">
-          <span><span style="display:inline-block;width:12px;height:12px;background:#4a7c8c;border-radius:3px;vertical-align:middle;margin-right:4px"></span>排行榜增量</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#d4933a;border-radius:3px;vertical-align:middle;margin-right:4px"></span>市场成交量(quote)</span>
-          <span style="margin-left:auto">* 当前未完成小时</span>
-          <span style="font-style:italic;opacity:0.6">浅色=预测值</span>
+        <div id="deltaChart" class="delta-chart"></div>
+        <div class="legend-note" style="padding:8px 16px 12px">
+          <span><span class="legend-swatch" style="background:#0e747a"></span>排行榜增量</span>
+          <span><span class="legend-swatch" style="background:${CHART.vol}"></span>市场成交量 (quote)</span>
+          <span class="spacer">* 当前未完成小时</span>
+          <span style="opacity:.65">浅色 = 预测值</span>
         </div>
       </div>
     </div>
-      <div class="stats-panel" id="calcToolPanel" style="margin-top:6px;display:none">
-        <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent)">计算工具</h3>
-        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-left:16px">
-          <label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">总成交量 (M)
-            <input id="calcTotalVol" type="text" inputmode="numeric" pattern="[0-9]*" style="width:140px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none" placeholder="100" />
-          </label>
-          <div id="calcTierInputs" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-          <button id="calcBtn" type="button" style="height:32px;padding:0 16px;border:1px solid var(--line);border-radius:6px;background:#4a7c8c;color:#fff;font-size:12px;font-weight:700;cursor:pointer">计算预估均值</button>
-        </div>
-        <div id="calcResult" style="margin-top:8px;margin-left:16px;font-size:13px;color:var(--accent);font-weight:400"></div>
+
+    <div class="card stats-panel" id="calcToolPanel" style="display:none">
+      <h3>计算工具</h3>
+      <div class="card-pad toolbar">
+        <label class="field-label" for="calcTotalVol" style="align-self:center">总成交量 (M)</label>
+        <input id="calcTotalVol" type="text" inputmode="numeric" pattern="[0-9]*" style="width:120px" placeholder="100" />
+        <div id="calcTierInputs" class="toolbar"></div>
+        <button id="calcBtn" class="btn-primary" type="button">计算预估均值</button>
       </div>
-      <div class="stats-panel" id="trendPanel">
-        <h3 style="display:flex;align-items:center;gap:8px">趋势图
-          <span id="trendModeToggle" style="font-size:11px;font-weight:400">
+      <div id="calcResult" class="calc-result"></div>
+    </div>
+  </section>
+
+  <div class="section" id="trendSection">
+    <div class="split">
+      <div class="card stats-panel wide" id="trendPanel">
+        <h3>趋势图
+          <span id="trendModeToggle" class="toolbar">
             <button class="df-btn active" data-mode="volume">成交量</button>
             <button class="df-btn" data-mode="pct">占比</button>
             <button class="df-btn" data-mode="delta">增量</button>
           </span>
         </h3>
         <div class="trend-body">
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+          <div class="trend-toolbar">
             <div class="trend-tier-bar" id="trendTierBar"></div>
             <div id="deltaStatBar">
               <button class="trend-tier-btn active" data-stat="avg">均价</button>
@@ -222,22 +486,34 @@
             </div>
           </div>
           <div class="trend-chart-wrap">
-            <svg id="trendSvg" viewBox="0 0 800 320" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;overflow:visible"></svg>
+            <svg id="trendSvg" viewBox="0 0 1000 340" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;overflow:visible"></svg>
           </div>
           <div class="trend-legend" id="trendLegend"></div>
         </div>
       </div>
+
+      <div class="card stats-panel" id="teamStatsPanel" style="display:none">
+        <h3>分团队统计</h3>
+        <table class="stats-table">
+          <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
+          <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
+          <tbody id="teamStatsBody"></tbody>
+        </table>
+      </div>
     </div>
-    <div id="rewardPanel" class="reward-panel" style="display:none">
-      <h3>奖励计算 <span id="rewardPanelToken" style="font-weight:400;font-size:12px">—</span></h3>
-      <div class="reward-body" id="rewardBody" style="flex-direction:column;align-items:stretch">
-        <table class="stats-table" id="rewardTiersTable" style="width:100%;min-width:auto">
+  </div>
+
+  <section class="section" id="rewardSection">
+    <div class="card reward-panel" id="rewardPanel" style="display:none">
+      <h3>奖励计算 <span id="rewardPanelToken" class="card-note">—</span></h3>
+      <div class="reward-body" id="rewardBody">
+        <table class="stats-table" id="rewardTiersTable">
           <colgroup>
-            <col style="width:120px" />
-            <col style="width:150px" />
-            <col style="width:80px" />
-            <col style="width:160px" />
-            <col style="width:160px" />
+            <col style="width:14%" />
+            <col style="width:10%" />
+            <col style="width:20%" />
+            <col style="width:26%" />
+            <col style="width:30%" />
           </colgroup>
           <thead>
             <tr><th>名次</th><th class="num">人数</th><th class="num">总奖励数量</th><th class="num">每人奖励</th><th class="num">USD 价值</th></tr>
@@ -252,36 +528,37 @@
             <div class="reward-item"><div class="label">每一万交易量奖励</div><div class="value" id="rewardPerMDisplay">—</div></div>
           </div>
         </div>
-        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:4px">
+        <div class="toolbar">
           <div class="reward-item"><div class="label">奖励币种</div><div class="value" id="rewardTokenDisplay">—</div></div>
           <div class="reward-item"><div class="label">当前价格</div><div class="value" id="rewardPriceDisplay">—</div></div>
-          <button id="refreshRewardBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+          <button id="refreshRewardBtn" class="btn-secondary" type="button">刷新价格</button>
         </div>
       </div>
     </div>
-    <div id="prizeBoardPanel" class="reward-panel" style="display:none">
-      <h3>实时奖金榜 <span id="prizeBoardToken" style="font-weight:400;font-size:12px">—</span></h3>
-      <div class="reward-body" id="prizeBoardBody" style="flex-direction:column;align-items:stretch">
-        <div id="prizeBoardMeta" style="font-size:12px;color:var(--muted);margin-bottom:6px"></div>
-        <table class="stats-table" id="prizeBoardTable" style="width:100%;min-width:auto">
+
+    <div class="card reward-panel" id="prizeBoardPanel" style="display:none">
+      <h3>实时奖金榜 <span id="prizeBoardToken" class="card-note">—</span></h3>
+      <div class="reward-body" id="prizeBoardBody">
+        <div id="prizeBoardMeta" class="muted-note"></div>
+        <table class="stats-table" id="prizeBoardTable">
           <colgroup>
-            <col style="width:56px" />
-            <col style="width:180px" />
-            <col style="width:100px" />
-            <col style="width:70px" />
-            <col style="width:100px" />
-            <col style="width:70px" />
-            <col style="width:100px" />
-            <col style="width:110px" />
-            <col style="width:110px" />
+            <col style="width:6%" />
+            <col style="width:18%" />
+            <col style="width:12%" />
+            <col style="width:9%" />
+            <col style="width:11%" />
+            <col style="width:9%" />
+            <col style="width:11%" />
+            <col style="width:12%" />
+            <col style="width:12%" />
           </colgroup>
           <thead>
             <tr>
               <th>名次</th><th>昵称</th>
               <th class="num">总成交量</th>
-              <th class="num">第1轮</th>
+              <th class="num">第 1 轮</th>
               <th class="num">成交量</th>
-              <th class="num">第2轮</th>
+              <th class="num">第 2 轮</th>
               <th class="num">成交量</th>
               <th class="num">合计</th>
               <th class="num">合计 USD</th>
@@ -289,48 +566,15 @@
           </thead>
           <tbody id="prizeBoardRows"></tbody>
         </table>
-        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-top:4px">
-          <div class="reward-item"><div class="label">前20名奖金总额</div><div class="value" id="prizeBoardTotal">—</div></div>
+        <div class="toolbar">
+          <div class="reward-item"><div class="label">前 20 名奖金总额</div><div class="value" id="prizeBoardTotal">—</div></div>
           <div class="reward-item"><div class="label">当前价格</div><div class="value" id="prizeBoardPrice">—</div></div>
-          <button id="refreshPrizeBtn" type="button" style="padding:6px 18px;border:1px solid var(--line);border-radius:6px;background:#eee7d9;color:var(--ink);font-weight:700;font-size:13px;cursor:pointer">刷新</button>
+          <button id="refreshPrizeBtn" class="btn-secondary" type="button">刷新价格</button>
         </div>
       </div>
     </div>
-    <div id="teamStatsPanel" class="stats-panel" style="display:none;margin-top:10px">
-      <h3>分团队统计</h3>
-      <table class="stats-table">
-        <colgroup><col style="width:30%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /><col style="width:17.5%" /></colgroup>
-        <thead><tr><th>团队</th><th class="num">人数</th><th class="num">总成交量</th><th class="num">占比</th><th class="num">增量占比</th></tr></thead>
-        <tbody id="teamStatsBody"></tbody>
-      </table>
-    </div>
-    <hr class="sep" />
-    <div class="table-wrap" style="max-height:calc(100vh - 180px);overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fffdf8">
-      <table>
-        <colgroup><col class="col-rank" /><col class="col-nick" /><col class="col-user" /><col class="col-score" /><col class="col-volume" /><col class="col-delta" /><col class="col-rank-change" /><col class="col-region" /></colgroup>
-        <thead><tr>        <th><select id="teamFilter"><option value="">全部</option></select></th><th><div style="display:flex;align-items:center;gap:2px"><span class="search-icon">🔍</span><input id="searchInput" placeholder="昵称搜索" style="flex:1;min-width:0;width:auto;max-width:180px" /><button id="searchClearBtn" class="search-clear" type="button">✕</button></div></th><th>User ID</th><th class="num">分数</th><th class="num" style="cursor:pointer" id="volumeSort">真实成交量 <span class="sort-icon" id="volumeSortIcon"></span></th><th class="num sort-delta" style="cursor:pointer"><span class="info-icon" title="">ⓘ</span> 增量 <span class="sort-icon" id="deltaSortIcon"></span></th><th class="num" style="cursor:pointer" id="rankChangeSort"><span class="info-icon" title="">ⓘ</span> 排名变化 <span class="sort-icon" id="rcSortIcon"></span></th><th class="num">Region</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="8" class="empty">加载中...</td></tr></tbody>
-      </table>
-    </div>
-    <div id="pager" class="pager">
-      <span id="pagerInfo" class="pager-info">共 0 行</span>
-      <span class="pager-sep">·</span>
-      <span class="pager-item">每页 <select id="pageSize">
-        <option value="100" selected>100</option>
-        <option value="50">50</option>
-        <option value="200">200</option>
-        <option value="500">500</option>
-        <option value="0">全部</option>
-      </select></span>
-      <button id="pageFirst" class="pager-btn" type="button" title="首页">«</button>
-      <button id="pagePrev" class="pager-btn" type="button" title="上一页">‹</button>
-      <span id="pagerPage">第 1 / 1 页</span>
-      <button id="pageNext" class="pager-btn" type="button" title="下一页">›</button>
-      <button id="pageLast" class="pager-btn" type="button" title="末页">»</button>
-      <span class="pager-sep">·</span>
-      <span>跳至 <input id="pageJump" type="number" min="1" style="width:56px;height:26px;border:1px solid var(--line);border-radius:6px;background:#fffdf8;color:var(--ink);padding:0 6px;font-size:12px" /> 页</span>
-    </div>
-  </div>
+  </section>
+</div>
 <script>
 const DOMAIN = { OFFICIAL: "www.binance.com", MIRROR: "www.bsmkweb.cc" };
 function escapeHtml(v) { return String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -348,7 +592,7 @@ function withDomain(value, host) {
 function showToast(msg, ms) {
   const el = document.createElement("div");
   el.textContent = msg;
-  el.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(46,42,36,.92);color:#fff;font-size:13px;padding:8px 20px;border-radius:6px;white-space:nowrap;line-height:1.4";
+  el.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(43,39,33,.94);color:#fff;font-size:13px;padding:8px 20px;border-radius:6px;white-space:nowrap;line-height:1.4";
   document.body.appendChild(el);
   setTimeout(() => el.remove(), ms || 3000);
 }
@@ -425,9 +669,16 @@ function renderScrapingState(jobId, hint) {
   const metaEl = document.getElementById("meta");
   const setMeta = (html) => { if (metaEl) metaEl.innerHTML = html; };
   setMeta(
-    `<span style="font-size:14px">⏳ 正在执行抓取，请稍候…${hint ? `<br><span style="color:#8a8171;font-size:12px">${escapeHtml(hint)}</span>` : ""}</span>` +
-    `<br><span id="scrapeProg" style="font-size:12px;color:#8a8171">正在等待任务启动…</span>`
+    `<span class="stat"><b>抓取中</b><span>正在执行抓取，请稍候</span></span>` +
+    (hint ? `<span class="stat"><span>${escapeHtml(hint)}</span></span>` : "") +
+    `<span class="stat"><span id="scrapeProg">正在等待任务启动</span></span>`
   );
+  const st = document.getElementById("titleStatus");
+  if (st) { st.hidden = true; st.textContent = ""; }
+  const cd = document.getElementById("countdownChip");
+  if (cd) { cd.hidden = true; cd.textContent = ""; }
+  const stamp = document.getElementById("snapStamp");
+  if (stamp) stamp.textContent = "";
   const _dl = document.getElementById("downloadLinks");
   if (_dl) _dl.innerHTML = "";
   const _bar = document.getElementById("snapshotBar");
@@ -438,22 +689,22 @@ function renderScrapingState(jobId, hint) {
   watchScrapeJob(jobId, {
     onProgress: (data) => {
       const prog = (data && data.progress) || {};
-      const label = prog.label || "正在抓取…";
+      const label = prog.label || "正在抓取";
       const pct = typeof prog.percent === "number" ? prog.percent : null;
       const el = document.getElementById("scrapeProg");
-      if (el) el.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "");
+      if (el) el.textContent = label + (pct != null ? ` ${pct}%` : "");
     },
     onDone: _finish,
     onFailed: () => {
       setMeta(
-        `<span style="font-size:14px">❌ 抓取失败，请前往主页查看日志。</span><br>` +
-        `<a href="#" id="scrapeRetry" style="font-size:13px">🔄 重新加载</a>`
+        `<span class="stat"><b class="err">抓取失败</b><span>请前往主页查看日志</span></span>` +
+        `<a href="#" id="scrapeRetry" class="link-quiet">重新加载</a>`
       );
       const retryBtn = document.getElementById("scrapeRetry");
       if (retryBtn) retryBtn.addEventListener("click", () => location.reload());
     },
     onTimeout: () => {
-      setMeta(`<span style="font-size:14px">抓取超时，请前往主页查看任务状态。</span>`);
+      setMeta(`<span class="stat"><b>抓取超时</b><span>请前往主页查看任务状态</span></span>`);
     },
   });
 }
@@ -484,7 +735,7 @@ function setSprintChips(preview) {
       : `<a class="sprint-chip" href="preview.html?job=${encodeURIComponent(e.jobId)}" title="切换到${e.label}">${e.label}</a>`);
   el.innerHTML = out.join("");
 }
-function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
+function fmtDeltaPct(v) { return v != null ? ` <span style="color:${v > 0 ? 'var(--up)' : v < 0 ? 'var(--down)' : 'var(--muted)'}">${v >= 0 ? "+" : ""}${v.toFixed(2)}%</span>` : ""; }
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 let _deltaShowAbs = false;
@@ -496,16 +747,29 @@ let _trendTierIdx = -1;
 let _trendMode = "volume";
 let _trendHidden = new Set();
 let _trendEmphasize = null;
+/* 图表只用一条 accent 主线 + 中性阶梯 + 灰色参考线，不再按档位轮换色相 */
+const CHART = {
+  accent: "#0e747a",
+  ink: "#2b2721",
+  ink2: "#574e43",
+  muted: "#6b6255",
+  faint: "#8b8172",
+  grid: "#e7e1d5",
+  ref: "#b9b1a2",
+  pred: "#94a5a3",
+  vol: "#9a8f7c",
+  volPred: "#cfc7b8",
+};
 const TREND_SERIES = {
-  total: { label: "总成交量", color: "#4a90d9", shape: "circle", dash: false },
-  avg:   { label: "均价",     color: "#c0392b", shape: "diamond", dash: true },
-  med:   { label: "中位数",   color: "#8e44ad", shape: "square", dash: true },
-  q1:    { label: "Q1",       color: "#e67e22", shape: "triangle", dash: true },
-  last:  { label: "末位",     color: "#7f8c8d", shape: "plus", dash: true },
+  total: { label: "总成交量", color: CHART.accent, shape: "circle", dash: false },
+  avg:   { label: "均价",     color: CHART.ink,    shape: "diamond", dash: true },
+  med:   { label: "中位数",   color: CHART.ink2,   shape: "square", dash: true },
+  q1:    { label: "Q1",       color: CHART.muted,  shape: "triangle", dash: true },
+  last:  { label: "末位",     color: CHART.faint,  shape: "plus", dash: true },
 };
 let _deltaStat = "avg"; // "avg" | "med" | "q1" | "last"
 let _calcTiers = [];
-const _pctPalette = ["#4a7c8c","#d4933a","#8e44ad","#27ae60","#c0392b","#2980b9","#f39c12","#16a085","#e67e22","#7f8c8d"];
+const _pctPalette = [CHART.accent];
 
 let pageSize = parseInt(localStorage.getItem("previewPageSize") || "100", 10);
 if (![50, 100, 200, 500, 0].includes(pageSize)) pageSize = 100;
@@ -574,7 +838,7 @@ function renderRewardPanel(data, rows, forceShow) {
           const usdCell = usd != null
             ? "$" + usd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2})
             : "—";
-          const usdStyle = capped ? ' style="color:var(--bad)"' : "";
+          const usdStyle = capped ? ' style="color:var(--up)"' : "";
           const usdTip = capped
             ? ` title="每万U奖励超出个人上限，USD 价值按上限 ${capNum.toLocaleString("en-US", {maximumFractionDigits:6})} 计算"`
             : "";
@@ -636,7 +900,7 @@ function renderRewardPanel(data, rows, forceShow) {
         price = rewardPriceUsd;
       }
       if (price == null) {
-        rewardPriceDisplay.textContent = "加载中...";
+        rewardPriceDisplay.textContent = "加载中";
         const symbol = rewardToken + "USDT";
         try {
           const resp = await fetch("/api/ticker/" + encodeURIComponent(symbol));
@@ -659,7 +923,7 @@ function renderRewardPanel(data, rows, forceShow) {
       const isLiveLabel = label === "实时";
       const labelHtml = label
         ? (isLiveLabel
-          ? '<span style="color:#c0392b;font-weight:700">(' + label + ')</span> '
+          ? '<span style="color:var(--accent-ink);font-weight:500">(' + label + ')</span> '
           : '(' + label + ') ')
         : "";
       rewardPriceDisplay.innerHTML = labelHtml + "$" + price.toLocaleString("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 8 });
@@ -691,7 +955,7 @@ function initPrizeBoard(jobId) {
     async function load() {
       panel.style.display = "";
       document.getElementById("prizeBoardRows").innerHTML =
-        '<tr><td colspan="9" class="empty">加载中...</td></tr>';
+        '<tr><td colspan="9" class="empty">加载中</td></tr>';
       let data;
       try {
         const resp = await fetch("/api/jobs/" + encodeURIComponent(jobId) + "/prize-board");
@@ -722,7 +986,7 @@ function initPrizeBoard(jobId) {
           + `<td class="num">${fmtVol(round1 && round1.grade)}</td>`
           + `<td class="num">${fmtRound(round2)}</td>`
           + `<td class="num">${fmtVol(round2 && round2.grade)}</td>`
-          + `<td class="num" style="font-weight:700">${fmtNum(r.total, 2)}</td>`
+          + `<td class="num prize-total">${fmtNum(r.total, 2)}</td>`
           + `<td class="num">${usd != null ? "$" + usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>`
           + `</tr>`;
       }).join("");
@@ -750,6 +1014,46 @@ function initPrizeBoard(jobId) {
     load();
   }
 
+function stripIdSuffix(text) { return String(text || "").replace(/\s*\[\d{5,}\]\s*$/, ""); }
+function renderTitle(heading, url, opts = {}) {
+  const clean = stripIdSuffix(heading) || "排行榜预览";
+  document.title = clean + " — 排行榜预览";
+  const titleEl = document.getElementById("title");
+  if (titleEl) titleEl.textContent = clean;
+  const st = document.getElementById("titleStatus");
+  if (st) {
+    if (opts.status) {
+      st.hidden = false;
+      st.textContent = opts.status;
+      st.className = "status" + (opts.kind ? " " + opts.kind : "");
+    } else {
+      st.hidden = true;
+      st.textContent = "";
+      st.className = "status";
+    }
+  }
+  const meta = document.getElementById("titleMeta");
+  if (meta) {
+    const parts = [];
+    if (url) {
+      parts.push(`<a class="link-quiet" href="${escapeHtml(withDomain(url, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-external"/></svg>官网</a>`);
+      parts.push(`<a class="link-quiet" href="${escapeHtml(withDomain(url, DOMAIN.MIRROR))}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-external"/></svg>国内镜像</a>`);
+    }
+    if (opts.resourceId) parts.push(`<span class="mono">ID ${escapeHtml(opts.resourceId)}</span>`);
+    meta.innerHTML = parts.join("");
+    meta.hidden = !parts.length;
+  }
+  return clean;
+}
+function setCountdown(text, urgent) {
+  const el = document.getElementById("countdownChip");
+  if (!el) return;
+  if (!text) { el.hidden = true; el.textContent = ""; el.className = "status"; return; }
+  el.hidden = false;
+  el.textContent = text;
+  el.className = "status " + (urgent ? "urgent" : "live");
+}
+
 (async () => {
   const params = new URLSearchParams(location.search);
   const jobId = params.get("job");
@@ -776,17 +1080,23 @@ function initPrizeBoard(jobId) {
     const allRows = preview.rows || [];
     if (preview.noData) {
       const ndHeading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || "排行榜预览";
-      document.title = ndHeading + " — 排行榜预览";
+      const ndRunning = preview.status && preview.status !== "completed";
       const ndUrl = preview.url;
-      document.getElementById("title").innerHTML = `${escapeHtml(ndHeading)}${ndUrl ? ` <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(ndUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
+      renderTitle(ndHeading, ndUrl, {
+        resourceId: preview.resourceId,
+        status: ndRunning ? "任务进行中" : "暂无数据",
+        kind: ndRunning ? "live" : "",
+      });
       const ndActS = preview.activityStart, ndActE = preview.activityEnd;
-      document.getElementById("actTime").textContent = (ndActS || ndActE) ? `活动时间：${ndActS || "—"} ~ ${ndActE || "—"}` : "";
+      document.getElementById("actTime").textContent = (ndActS || ndActE) ? `活动时间 ${ndActS || "—"} ~ ${ndActE || "—"}` : "";
       setLimitedRounds(preview);
       setSprintChips(preview);
-      const ndMsg = preview.status && preview.status !== "completed" ? "任务进行中，暂无快照数据。" : "没有快照数据。请在主页重新抓取，或上传快照文件。";
-      document.getElementById("meta").innerHTML = `<span style="font-size:14px">${ndMsg}</span>`;
+      const ndMsg = ndRunning ? "任务进行中，暂无快照数据。" : "没有快照数据。请在主页重新抓取，或上传快照文件。";
+      document.getElementById("meta").innerHTML = `<span class="stat"><span>${ndMsg}</span></span>`;
+      const stampEl = document.getElementById("snapStamp");
+      if (stampEl) stampEl.textContent = "";
       document.getElementById("downloadLinks").innerHTML = preview.resourceId
-        ? `<a href="#" id="scrapeBtn">🔄 抓取</a>`
+        ? `<a href="#" id="scrapeBtn"><svg class="i i-sm" aria-hidden="true"><use href="#i-refresh"/></svg>抓取</a>`
         : "";
       const bar = document.getElementById("snapshotBar");
       bar.style.display = "none";
@@ -834,15 +1144,14 @@ function initPrizeBoard(jobId) {
     const updated = preview.meta?.updatedTime ? new Date(Number(preview.meta.updatedTime)).toLocaleString("zh-CN", { hour12: false }) : "—";
     const restoredSum = "";
     const heading = preview.taskName || [preview.market, preview.token || (Array.isArray(preview.symbol) ? preview.symbol[0] : preview.symbol)].filter(Boolean).join(" ") || preview.name || "排行榜预览";
-    document.title = heading + " — 排行榜预览";
     const _actUrl = preview.url;
-    document.getElementById("title").innerHTML = `${escapeHtml(heading)}${_actUrl ? ` <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🔗官网</a> / <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400">🇨🇳国内</a>` : ""}`;
+    renderTitle(heading, _actUrl, { resourceId: preview.resourceId });
     const actS = preview.activityStart, actE = preview.activityEnd;
     const actTimeEl = document.getElementById("actTime");
     const now = Date.now();
-    actTimeEl.textContent = (actS || actE) ? `活动时间：${actS || "—"} ~ ${actE || "—"}` : "";
+    actTimeEl.textContent = (actS || actE) ? `活动时间 ${actS || "—"} ~ ${actE || "—"}` : "";
     setLimitedRounds(preview);
-      setSprintChips(preview);
+    setSprintChips(preview);
     let endDt = null;
     if (actE) {
       endDt = new Date(actE.replace(" ", "T") + "+08:00");
@@ -854,47 +1163,41 @@ function initPrizeBoard(jobId) {
         const m = Math.floor((diff % 36e5) / 6e4);
         cd = d > 0 ? `剩余 ${d}d ${h}h` : h > 0 ? `剩余 ${h}h ${m}m` : `剩余 ${m}m`;
       }
-      if (cd) {
-        const el = document.createElement("span");
-        const urgent = diff <= 864e5;
-        el.style.cssText = `margin-left:8px;font-size:12px;font-weight:700;color:${urgent ? "#fff" : "#e67e22"};border:1px solid ${urgent ? "#d0312d" : "#e67e22"};border-radius:3px;padding:0 4px${urgent ? ";background:#d0312d" : ""}`;
-        el.textContent = cd;
-        document.getElementById("title").appendChild(el);
-      }
+      if (cd) setCountdown(cd, diff <= 864e5);
     }
     const expired = endDt && endDt <= new Date(now - 86400000);
     if (expired) {
-      document.getElementById("title").innerHTML = `<span style="color:#999">${escapeHtml(heading)}</span>${_actUrl ? ` <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.OFFICIAL))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🔗官网</a> / <a href="${escapeHtml(withDomain(_actUrl, DOMAIN.MIRROR))}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#999">🇨🇳国内</a>` : ""} <span style="color:#999;font-size:13px;font-weight:400">(已到期)</span>`;
-      actTimeEl.style.color = "#999";
-      document.getElementById("meta").style.opacity = "0.5";
-      const endedEl = document.createElement("span");
-      endedEl.style.cssText = "margin-left:8px;font-size:12px;font-weight:700;color:#bbb;border:1px solid #999;border-radius:3px;padding:0 4px;background:#666";
-      endedEl.textContent = "已结束";
-      document.getElementById("title").appendChild(endedEl);
+      document.querySelector(".page-head")?.classList.add("expired");
+      setCountdown("", false);
+      renderTitle(heading, _actUrl, { resourceId: preview.resourceId, status: "已结束" });
     }
     const eligibleVolume = preview.meta?.eligibleTradingVolume;
     const eligibleText = eligibleVolume ? fmtNumber(eligibleVolume) : "—";
     const totalUsers = preview.meta?.total;
-    document.getElementById("meta").innerHTML = `
-      <span style="font-weight:700;font-size:15px">${updated}</span>
-      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
-      <span style="font-size:15px">合格交易量 <b style="font-size:16px">${eligibleText}</b></span>
-      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
-      <span style="font-size:15px">合格用户 <b style="font-size:16px">${totalUsers ?? "—"}</b></span>
-      <span style="opacity:0.4;margin:0 8px;font-size:15px">|</span>
-      <span style="opacity:0.5;font-size:13px">${preview.count || allRows.length || 0} 行 · resourceId ${preview.resourceId || "—"}${restoredSum}</span>
-    `;
+    document.getElementById("meta").innerHTML = [
+      `<span class="stat"><span>更新</span><b>${escapeHtml(updated)}</b></span>`,
+      `<span class="stat"><span>合格交易量</span><b>${eligibleText}</b></span>`,
+      `<span class="stat"><span>合格用户</span><b>${totalUsers ?? "—"}</b></span>`,
+      `<span class="stat"><span>行数</span><b>${preview.count || allRows.length || 0}</b>${restoredSum}</span>`,
+    ].join("");
 
     const _hasRid = !!preview.resourceId;
     document.getElementById("downloadLinks").innerHTML = [
-      _hasRid ? `<a href="#" id="scrapeBtn">🔄 抓取</a>` : "",
-      `<a href="team.html?job=${encodeURIComponent(jobId)}">📊 团队检测</a>`,
-      preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}">下载 XLSX</a>` : "",
-      preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}">下载 CSV</a>` : "",
+      _hasRid ? `<a href="#" id="scrapeBtn"><svg class="i i-sm" aria-hidden="true"><use href="#i-refresh"/></svg>抓取</a>` : "",
+      `<a href="team.html?job=${encodeURIComponent(jobId)}"><svg class="i i-sm" aria-hidden="true"><use href="#i-users"/></svg>团队检测</a>`,
+      preview.xlsxUrl ? `<a href="${escapeHtml(preview.xlsxUrl)}"><svg class="i i-sm" aria-hidden="true"><use href="#i-download"/></svg>下载 XLSX</a>` : "",
+      preview.csvUrl ? `<a href="${escapeHtml(preview.csvUrl)}"><svg class="i i-sm" aria-hidden="true"><use href="#i-download"/></svg>下载 CSV</a>` : "",
       preview.jsonUrl ? `<a href="${escapeHtml(preview.jsonUrl)}">查看 JSON</a>` : "",
     ].filter(Boolean).join("");
 
     const snaps = preview.snapshots || [];
+    const stampEl = document.getElementById("snapStamp");
+    if (stampEl) {
+      const stampTs = snapshotParam || (snaps.length ? snaps[snaps.length - 1].timestamp : "");
+      stampEl.textContent = stampTs
+        ? `快照 ${fmtSnapshotTs(stampTs).slice(5, 16)} · ${allRows.length}/${preview.meta?.total ?? allRows.length}`
+        : "";
+    }
     const snapBar = document.getElementById("snapshotBar");
     // manage snapshots link
     let _snapDirty = false;
@@ -902,7 +1205,7 @@ function initPrizeBoard(jobId) {
       const a = document.createElement("a");
       a.href = "#";
       a.id = "manageSnapBtn";
-      a.textContent = "📸 管理快照";
+      a.innerHTML = `<svg class="i i-sm" aria-hidden="true"><use href="#i-camera"/></svg>管理快照`;
       document.getElementById("downloadLinks").appendChild(a);
     }
     let _showSnapBar = false;
@@ -925,15 +1228,14 @@ function initPrizeBoard(jobId) {
            </select>
         </div>
         <div class="compare-section">
-          <label style="font-size:12px;color:var(--muted);white-space:nowrap">对比快照</label>
-          <div class="compare-group">
+          <label for="compareSelect">对比快照</label>
+          <select id="compareSelect">
             ${revSnaps.filter(s => s.timestamp !== selected).map(s => `
-              <label class="compare-btn">
-                <input type="radio" name="compare" value="${escapeHtml(s.timestamp)}" ${s.timestamp === compareVal ? "checked" : ""}>
-                <span>${escapeHtml(fmtSnapshotTs(s.timestamp))}</span>
-              </label>
+              <option value="${escapeHtml(s.timestamp)}" ${s.timestamp === compareVal ? "selected" : ""}>
+                ${escapeHtml(fmtSnapshotTs(s.timestamp))}
+              </option>
             `).join("")}
-          </div>
+          </select>
         </div>
       `;
       function goWithParams(snap, comp) {
@@ -945,13 +1247,10 @@ function initPrizeBoard(jobId) {
         location.href = url.href;
       }
       document.getElementById("snapshotSelect").addEventListener("change", (e) => {
-        const checked = document.querySelector("input[name='compare']:checked");
-        goWithParams(e.target.value, checked ? checked.value : "");
+        goWithParams(e.target.value, document.getElementById("compareSelect").value);
       });
-      document.querySelectorAll("input[name='compare']").forEach(input => {
-        input.addEventListener("change", (e) => {
-          goWithParams(document.getElementById("snapshotSelect").value, e.target.value);
-        });
+      document.getElementById("compareSelect").addEventListener("change", (e) => {
+        goWithParams(document.getElementById("snapshotSelect").value, e.target.value);
       });
     }
 
@@ -964,11 +1263,14 @@ function initPrizeBoard(jobId) {
       const scrapeBtn = document.getElementById("scrapeBtn");
       let _scraping = false;
       const _initialSnapCount = (preview.snapshots || []).length;
+      const setScrapeLabel = (text) => {
+        scrapeBtn.innerHTML = `<svg class="i i-sm" aria-hidden="true"><use href="#i-refresh"/></svg>${escapeHtml(text)}`;
+      };
       scrapeBtn.addEventListener("click", async (e) => {
         e.preventDefault();
         if (_scraping) return;
         _scraping = true;
-        scrapeBtn.textContent = "🔄 抓取中...";
+        setScrapeLabel("抓取中");
         scrapeBtn.style.opacity = "0.6";
         try {
           const resp = await fetch("/api/scrape/jobs", {
@@ -992,13 +1294,13 @@ function initPrizeBoard(jobId) {
           const jobData = await resp.json();
           const scrapeJobId = jobData?.job?.id;
           if (!scrapeJobId) throw new Error("后端未返回 job id");
-          scrapeBtn.textContent = "⏳ 等待抓取结果...";
+          setScrapeLabel("等待抓取结果");
           watchScrapeJob(scrapeJobId, {
             onProgress: (data) => {
               const prog = (data && data.progress) || {};
-              const label = prog.label || "正在抓取…";
+              const label = prog.label || "正在抓取";
               const pct = typeof prog.percent === "number" ? prog.percent : null;
-              scrapeBtn.textContent = "⏳ " + label + (pct != null ? ` ${pct}%` : "") + "…";
+              setScrapeLabel(label + (pct != null ? ` ${pct}%` : ""));
             },
             onDone: async () => {
               let newCount = _initialSnapCount;
@@ -1013,26 +1315,26 @@ function initPrizeBoard(jobId) {
                 location.href = location.pathname + "?job=" + encodeURIComponent(scrapeJobId);
                 return;
               }
-              scrapeBtn.textContent = "🔄 抓取";
+              setScrapeLabel("抓取");
               scrapeBtn.style.opacity = "";
               _scraping = false;
               showToast("数据无变化（抓取已完成）", 4000);
             },
             onFailed: () => {
-              scrapeBtn.textContent = "🔄 抓取";
+              setScrapeLabel("抓取");
               scrapeBtn.style.opacity = "";
               _scraping = false;
               showToast("抓取失败，请前往主页查看日志。", 5000);
             },
             onTimeout: () => {
-              scrapeBtn.textContent = "🔄 抓取";
+              setScrapeLabel("抓取");
               scrapeBtn.style.opacity = "";
               _scraping = false;
               showToast("抓取超时，请前往主页查看。", 4000);
             },
           }, 5 * 60 * 1000);
         } catch (err) {
-          scrapeBtn.textContent = "🔄 抓取";
+          setScrapeLabel("抓取");
           scrapeBtn.style.opacity = "";
           _scraping = false;
           showToast("抓取失败: " + err.message, 5000);
@@ -1138,7 +1440,7 @@ function initPrizeBoard(jobId) {
         const dr = _totalDelCache ? (s.sumDelta / _totalDelCache * 100).toFixed(2) + "%" : "—";
         return `<tr><td>${escapeHtml(s.label)}</td><td class="num">${fmtVolume(s.total)}</td><td class="num">${pct}</td><td class="num">${dr}</td><td class="num">${fmtVolume(s.avg)}${fmt(s.avgDelta, s.avgDeltaPct)}</td><td class="num">${fmtVolume(s.med)}${fmt(s.medDelta, s.medDeltaPct)}</td><td class="num">${fmtVolume(s.q1)}${fmt(s.q1Delta, s.q1DeltaPct)}</td><td class="num">${fmtVolume(s.last)}${fmt(s.lastDelta, s.lastDeltaPct)}</td></tr>`;
       }).join("") + `
-         <tr style="font-weight:700;border-top:2px solid rgba(46,42,36,0.15)"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+         <tr class="total-row"><td>合计</td><td class="num">${fmtVolume(_totalVolCache)}</td><td class="num">100%</td><td class="num">${_totalDelCache != null ? "100%" : "—"}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
     }
 
     function fmtVolume(v) {
@@ -1160,7 +1462,7 @@ function initPrizeBoard(jobId) {
         return { label: s.label, pct };
       });
     }
-    function fmtDeltaAbs(v) { return v != null ? ` <span style="color:${v > 0 ? '#d0312d' : v < 0 ? '#2e8b57' : '#999'}">${v >= 0 ? "+" : ""}${fmtVolume(Math.abs(v))}</span>` : ""; }
+    function fmtDeltaAbs(v) { return v != null ? ` <span style="color:${v > 0 ? 'var(--up)' : v < 0 ? 'var(--down)' : 'var(--muted)'}">${v >= 0 ? "+" : ""}${fmtVolume(Math.abs(v))}</span>` : ""; }
 
     function _calcReward() {
       const tvEl = document.getElementById("calcTotalVol");
@@ -1186,10 +1488,10 @@ function initPrizeBoard(jobId) {
         const medEst = avg * 0.9;
         const q1Est = avg * 0.8;
         const target = (medEst + q1Est) / 2;
-        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\" style=\"color:#d0312d;font-weight:700\">" + fmtVolume(target) + "</td></tr>");
+        rows.push("<tr><td>" + t.name + "</td><td class=\"num\">" + pct + "%</td><td class=\"num\">" + fmtVolume(avg) + "</td><td class=\"num\">" + fmtVolume(medEst) + "</td><td class=\"num\">" + fmtVolume(q1Est) + "</td><td class=\"num\" style=\"color:var(--accent-ink);font-weight:500\">" + fmtVolume(target) + "</td></tr>");
       }
       let html =
-        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num" style="color:#d0312d;font-weight:700">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
+        '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">均值</th><th class="num">中位预估</th><th class="num">Q1预估</th><th class="num" style="color:var(--accent-ink);font-weight:500">目标值</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>";
 
       if (useLastVol && lastTier) {
         const el = document.getElementById(lastTier.inputId);
@@ -1216,13 +1518,13 @@ function initPrizeBoard(jobId) {
         ].filter(Boolean).join(" · ") + (needVol != null ? ` → 达到上限需成交 ${nf(needVol, 0)} U` : "");
         html +=
           '<div style="margin:10px 0 4px;font-size:12px;color:var(--muted)">末档（按量奖励）：按预测档位总量与个人上限反推所需成交量</div>' +
-          '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">预测档位总量</th><th class="num">每万U奖励</th><th class="num">USD价值</th><th class="num">个人上限</th><th class="num" style="color:#d0312d;font-weight:700">所需成交量</th></tr></thead><tbody>' +
+          '<table class="stats-table" style="width:auto;min-width:0"><thead><tr><th>分档</th><th class="num">占比</th><th class="num">预测档位总量</th><th class="num">每万U奖励</th><th class="num">USD价值</th><th class="num">个人上限</th><th class="num" style="color:var(--accent-ink);font-weight:500">所需成交量</th></tr></thead><tbody>' +
           `<tr title="${escapeHtml(tip)}"><td>${escapeHtml(lastTier.name)}</td><td class="num">${pct}%</td>` +
           `<td class="num">${fmtVolume(tierVol)}</td>` +
           `<td class="num">${nf(per10k, 4)} ${escapeHtml(token)}</td>` +
           `<td class="num">${per10kUsd != null ? "$" + nf(per10kUsd, 2) : "—"}</td>` +
           `<td class="num">${nf(lastCap, 6)} ${escapeHtml(token)}</td>` +
-          `<td class="num" style="color:#d0312d;font-weight:700">${fmtVolume(needVol)}</td></tr>` +
+          `<td class="num" style="color:var(--accent-ink);font-weight:500">${fmtVolume(needVol)}</td></tr>` +
           "</tbody></table>";
       }
       document.getElementById("calcResult").innerHTML = html;
@@ -1511,10 +1813,14 @@ function initPrizeBoard(jobId) {
       return !!(q || teamFilter);
     }
 
+    function sortIcon(dir) {
+      const id = dir === "down" ? "#i-sort-down" : dir === "up" ? "#i-sort-up" : "#i-sort";
+      return `<svg class="i i-sm" aria-hidden="true"><use href="${id}"/></svg>`;
+    }
     function updateSortIcons() {
-      document.getElementById("volumeSortIcon").innerHTML = volumeSort ? "▼" : "↕";
-      document.getElementById("deltaSortIcon").innerHTML = deltaSort ? "▼" : "↕";
-      document.getElementById("rcSortIcon").innerHTML = rankChangeSort ? (rankChangeSort === "up" ? "▼" : "▲") : "↕";
+      document.getElementById("volumeSortIcon").innerHTML = sortIcon(volumeSort ? "down" : "");
+      document.getElementById("deltaSortIcon").innerHTML = sortIcon(deltaSort ? "down" : "");
+      document.getElementById("rcSortIcon").innerHTML = sortIcon(rankChangeSort === "up" ? "down" : rankChangeSort === "down" ? "up" : "");
       document.getElementById("volumeSort").setAttribute("aria-sort", volumeSort ? "descending" : "none");
       document.querySelector(".sort-delta").setAttribute("aria-sort", deltaSort ? "descending" : "none");
       document.getElementById("rankChangeSort").setAttribute("aria-sort", rankChangeSort === "up" ? "descending" : rankChangeSort === "down" ? "ascending" : "none");
@@ -1613,7 +1919,7 @@ function initPrizeBoard(jobId) {
     async function loadDeltaAnalysis() {
       const symbol = deltaSymbolInput.value.trim().toUpperCase();
       if (!symbol) { deltaStatus.textContent = "请输入 Symbol"; return; }
-      deltaStatus.textContent = "加载中...";
+      deltaStatus.textContent = "加载中";
       loadDeltaBtn.disabled = true;
       try {
         const ctrl = new AbortController();
@@ -1677,7 +1983,7 @@ function initPrizeBoard(jobId) {
         const volTitle = symVolTooltip ? ` title="${escapeHtml(symVolTooltip)}"` : rawTitle;
         const ratio = (p.leaderboardDeltaRatio != null ? (Number(p.leaderboardDeltaRatio) * 100).toFixed(4) + "%" : "—");
         const klines = p.klines || (p.error ? "—" : 0);
-        const errHtml = p.error ? `<span style="color:#b34a4a;font-size:11px">${escapeHtml(p.error)}</span>` : "";
+        const errHtml = p.error ? `<span style="color:var(--up);font-size:11px">${escapeHtml(p.error)}</span>` : "";
         const rowCls = isMarket ? ' class="row-market"' : isPred ? ' class="row-prediction"' : "";
         return `<tr${rowCls}>
           <td>${escapeHtml(label)}${labelSuffix}${errHtml ? '<br>' + errHtml : ''}</td>
@@ -1703,14 +2009,14 @@ function initPrizeBoard(jobId) {
         const dVal = p.leaderboardDelta != null ? fmtVolume(d) : "—";
         const vVal = p.marketQuoteVolume != null ? fmtVolume(v) : "—";
         const barStyle = isPred ? "opacity:0.55" : "";
-        const deltaColor = isPred ? "#6a9aaa" : "#4a7c8c";
-        const volColor = isPred ? "#e0b060" : "#d4933a";
+        const deltaColor = isPred ? CHART.pred : CHART.accent;
+        const volColor = isPred ? CHART.volPred : CHART.vol;
         return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px">
           <div style="display:flex;gap:3px;align-items:flex-end;height:120px">
-            <div style="width:20px;background:${deltaColor};border-radius:4px 4px 0 0;height:${Math.max(dPct, 4)}%;transition:height 0.3s;${barStyle}" title="排行榜增量 ${dVal}${isPred ? " (预测)" : ""}"></div>
-            <div style="width:20px;background:${volColor};border-radius:4px 4px 0 0;height:${Math.max(vPct, 4)}%;transition:height 0.3s;${barStyle}" title="市场成交量 ${vVal}${isPred ? " (预测)" : ""}"></div>
+            <div style="width:20px;background:${deltaColor};border-radius:4px 4px 0 0;height:${Math.max(dPct, 4)}%;${barStyle}" title="排行榜增量 ${dVal}${isPred ? " (预测)" : ""}"></div>
+            <div style="width:20px;background:${volColor};border-radius:4px 4px 0 0;height:${Math.max(vPct, 4)}%;${barStyle}" title="市场成交量 ${vVal}${isPred ? " (预测)" : ""}"></div>
           </div>
-          <span style="font-size:10px;color:var(--muted);text-align:center">${escapeHtml(label)}${labelSuffix}</span>
+          <span style="font-size:11px;color:var(--muted);text-align:center">${escapeHtml(label)}${labelSuffix}</span>
         </div>`;
       }).join("");
 
@@ -1827,7 +2133,7 @@ function initPrizeBoard(jobId) {
       const snaps = _trendData.snapshots;
       const labels = _trendData.rangeLabels || [];
       const timestamps = snaps.map(s => s.timestamp);
-      const W = 800, H = 320, PL = 65, PR = 55, PT = 25, PB = 40;
+      const W = 1000, H = 340, PL = 72, PR = 60, PT = 28, PB = 44;
       const CW = W - PL - PR, CH = H - PT - PB;
 
       function fmtCountdown(ms) {
@@ -1864,11 +2170,11 @@ function initPrizeBoard(jobId) {
         let html = "";
         for (let gi = 0; gi <= 4; gi++) {
           const yy = PT + gi / 4 * CH;
-          html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="#e0ddd5" stroke-width="1"/>`;
+          html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="${CHART.grid}" stroke-width="1"/>`;
           const lv = tMax - gi / 4 * tRange;
-          html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="#999">${fmtShort(lv)}</text>`;
+          html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${CHART.muted}">${fmtShort(lv)}</text>`;
           const pv = pctMax - gi / 4 * pctRange;
-          html += `<text x="${W - PR + 6}" y="${yy + 4}" text-anchor="start" font-size="10" fill="#999">${pv.toFixed(1)}%</text>`;
+          html += `<text x="${W - PR + 6}" y="${yy + 4}" text-anchor="start" font-size="11" fill="${CHART.muted}">${pv.toFixed(1)}%</text>`;
         }
         for (let i = 0; i < points.length; i++) {
           const xx = xPos(i);
@@ -1880,7 +2186,7 @@ function initPrizeBoard(jobId) {
           } else {
             label = fmtSnapshotTs(timestamps[i]).slice(5, _isUm ? 10 : 16);
           }
-          html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
+          html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}" font-size="11" fill="${CHART.muted}" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
         }
 
         // total volume reference (gray dashed)
@@ -1889,7 +2195,7 @@ function initPrizeBoard(jobId) {
           return (v != null && Number.isFinite(v)) ? `${xPos(i)},${yLPos(v)}` : null;
         }).filter(Boolean);
         if (tvPts.length >= 2) {
-          html += `<polyline points="${tvPts.join(" ")}" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="3,3"/>`;
+          html += `<polyline points="${tvPts.join(" ")}" fill="none" stroke="${CHART.ref}" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="3,3"/>`;
         }
 
         // selected tier's pct line
@@ -1914,7 +2220,7 @@ function initPrizeBoard(jobId) {
         bindTrendTips(svg);
 
         document.getElementById("trendLegend").innerHTML =
-          '<span class="tl-item"><span class="tl-dot" style="background:#ccc;border-radius:0;height:2px"></span>总成交量(ref)</span>' +
+          '<span class="tl-item"><span class="tl-dot" style="background:#b9b1a2;border-radius:0;height:2px"></span>总成交量(ref)</span>' +
           `<span class="tl-item"><span class="tl-dot" style="background:${color}"></span>${escapeHtml(tierLabel)} 占比</span>`;
         return;
       }
@@ -1926,17 +2232,17 @@ function initPrizeBoard(jobId) {
         if (rawPoints.length < 3) { svg.innerHTML = ""; return; }
 
         const stats = [
-          { key: "avg", label: "均价", color: "#c0392b" },
-          { key: "med", label: "中位数", color: "#8e44ad" },
-          { key: "q1", label: "Q1", color: "#e67e22" },
-          { key: "last", label: "末位", color: "#7f8c8d" },
+          { key: "avg", label: "均价", color: CHART.ink },
+          { key: "med", label: "中位数", color: CHART.ink2 },
+          { key: "q1", label: "Q1", color: CHART.muted },
+          { key: "last", label: "末位", color: CHART.faint },
         ];
 
         const STAT_META = {
-          avg: { label: "均价", color: "#c0392b" },
-          med: { label: "中位数", color: "#8e44ad" },
-          q1: { label: "Q1", color: "#e67e22" },
-          last: { label: "末位", color: "#7f8c8d" },
+          avg: { label: "均价", color: CHART.ink },
+          med: { label: "中位数", color: CHART.ink2 },
+          q1: { label: "Q1", color: CHART.muted },
+          last: { label: "末位", color: CHART.faint },
         };
         const sel = STAT_META[_deltaStat];
         // Compute deltas: delta[i] = val[i+1] - val[i]
@@ -1965,18 +2271,18 @@ function initPrizeBoard(jobId) {
         // Grid + Y axis
         for (let gi = 0; gi <= 4; gi++) {
           const yy = PT + gi / 4 * CH;
-          html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="#e0ddd5" stroke-width="1"/>`;
+          html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="${CHART.grid}" stroke-width="1"/>`;
           const lv = dMax - gi / 4 * dRange;
-          html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="#999">${fmtShort(lv)}</text>`;
+          html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${CHART.muted}">${fmtShort(lv)}</text>`;
         }
         // Zero reference line
         const zy = yPos(0);
-        html += `<line x1="${PL}" y1="${zy}" x2="${W - PR}" y2="${zy}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>`;
+        html += `<line x1="${PL}" y1="${zy}" x2="${W - PR}" y2="${zy}" stroke="${CHART.ref}" stroke-width="1" stroke-dasharray="4,3"/>`;
         // Average line
         const ay = yPos(avgDelta);
         const prefix = avgDelta >= 0 ? "+" : "";
-        html += `<line x1="${PL}" y1="${ay}" x2="${W - PR}" y2="${ay}" stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>`;
-        html += `<text x="${W - PR}" y="${ay + 4}" text-anchor="end" font-size="10" fill="#666">均值: ${prefix}${fmtShort(avgDelta)}</text>`;
+        html += `<line x1="${PL}" y1="${ay}" x2="${W - PR}" y2="${ay}" stroke="${CHART.ink2}" stroke-width="1" stroke-dasharray="2,3"/>`;
+        html += `<text x="${W - PR}" y="${ay + 4}" text-anchor="end" font-size="11" fill="${CHART.ink2}">均值: ${prefix}${fmtShort(avgDelta)}</text>`;
 
         // X-axis labels (snapshot positions 0..N-1)
         for (let i = 0; i < snaps.length; i++) {
@@ -1989,7 +2295,7 @@ function initPrizeBoard(jobId) {
           } else {
             label = fmtSnapshotTs(timestamps[i]).slice(5, _isUm ? 10 : 16);
           }
-          html += `<text x="${xx}" y="${H - PB + 14}" text-anchor="end" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - PB + 14})">${escapeHtml(label)}</text>`;
+          html += `<text x="${xx}" y="${H - PB + 14}" text-anchor="end" font-size="11" fill="${CHART.muted}" transform="rotate(-30,${xx},${H - PB + 14})">${escapeHtml(label)}</text>`;
         }
 
         // Selected stat delta line
@@ -2014,8 +2320,8 @@ function initPrizeBoard(jobId) {
         bindTrendTips(svg);
 
         document.getElementById("trendLegend").innerHTML =
-          '<span class="tl-item"><span class="tl-dot" style="background:#bbb;border-radius:0;height:2px"></span>0 参考线</span>' +
-          `<span class="tl-item"><span class="tl-dot" style="background:#666;border-radius:0;height:2px"></span>均值</span>` +
+          '<span class="tl-item"><span class="tl-dot" style="background:#b9b1a2;border-radius:0;height:2px"></span>0 参考线</span>' +
+          `<span class="tl-item"><span class="tl-dot" style="background:#574e43;border-radius:0;height:2px"></span>均值</span>` +
           `<span class="tl-item"><span class="tl-dot" style="background:${sel.color}"></span>${escapeHtml(sel.label)} 增量</span>`;
         return;
       }
@@ -2027,9 +2333,9 @@ function initPrizeBoard(jobId) {
       let html = "";
       for (let gi = 0; gi <= 4; gi++) {
         const yy = PT + gi / 4 * CH;
-        html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="#e0ddd5" stroke-width="1"/>`;
+        html += `<line x1="${PL}" y1="${yy}" x2="${W - PR}" y2="${yy}" stroke="${CHART.grid}" stroke-width="1"/>`;
         const lv = tMax - gi / 4 * tRange;
-        html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="10" fill="#999">${fmtShort(lv)}</text>`;
+        html += `<text x="${PL - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${CHART.muted}">${fmtShort(lv)}</text>`;
       }
       for (let i = 0; i < snaps.length; i++) {
         const xx = xPos(i);
@@ -2041,7 +2347,7 @@ function initPrizeBoard(jobId) {
         } else {
           label = fmtSnapshotTs(timestamps[i]).slice(5, _isUm ? 10 : 16);
         }
-        html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === snaps.length - 1 ? 'end' : 'middle'}" font-size="9" fill="#999" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
+        html += `<text x="${xx}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === snaps.length - 1 ? 'end' : 'middle'}" font-size="11" fill="${CHART.muted}" transform="rotate(-30,${xx},${H - 8})">${escapeHtml(label)}</text>`;
       }
 
       // total volume line (left axis, key "total")
@@ -2052,12 +2358,12 @@ function initPrizeBoard(jobId) {
           return `${xPos(i)},${yLPos(v)}`;
         }).filter(Boolean);
         if (tPts.length >= 2) {
-          html += `<polyline points="${tPts.join(" ")}" fill="none" stroke="#4a90d9" stroke-width="2" stroke-linejoin="round" opacity=".85" data-key="total"/>`;
+          html += `<polyline points="${tPts.join(" ")}" fill="none" stroke="${CHART.accent}" stroke-width="2" stroke-linejoin="round" opacity=".85" data-key="total"/>`;
           for (let i = 0; i < snaps.length; i++) {
             const v = snaps[i].totalVol;
             if (v == null || !Number.isFinite(v)) continue;
             const cx = xPos(i), cy = yLPos(v);
-            html += trendMarker("circle", cx, cy, "#4a90d9", escapeHtml("总成交量: " + fmtShort(v)), "total");
+            html += trendMarker("circle", cx, cy, CHART.accent, escapeHtml("总成交量: " + fmtShort(v)), "total");
           }
         }
       }
@@ -2067,10 +2373,10 @@ function initPrizeBoard(jobId) {
       const points = snaps.map(s => s.ranges.find(r => r.label === tierLabel) || null);
       if (points.filter(Boolean).length >= 2) {
         const rightStats = [
-          { key: "avg", label: "均价", color: "#c0392b" },
-          { key: "med", label: "中位数", color: "#8e44ad" },
-          { key: "q1", label: "Q1", color: "#e67e22" },
-          { key: "last", label: "末位", color: "#7f8c8d" },
+          { key: "avg", label: "均价", color: CHART.ink },
+          { key: "med", label: "中位数", color: CHART.ink2 },
+          { key: "q1", label: "Q1", color: CHART.muted },
+          { key: "last", label: "末位", color: CHART.faint },
         ];
         let rMin = Infinity, rMax = -Infinity;
         for (const st of rightStats) {
@@ -2086,7 +2392,7 @@ function initPrizeBoard(jobId) {
           function yRPos(v) { return PT + CH - (v - rMin) / rRange * CH; }
           for (let gi = 0; gi <= 4; gi++) {
             const rv = rMax - gi / 4 * rRange;
-            html += `<text x="${W - PR + 6}" y="${PT + gi / 4 * CH + 4}" text-anchor="start" font-size="10" fill="#999">${fmtShort(rv)}</text>`;
+            html += `<text x="${W - PR + 6}" y="${PT + gi / 4 * CH + 4}" text-anchor="start" font-size="11" fill="${CHART.muted}">${fmtShort(rv)}</text>`;
           }
           for (const st of rightStats) {
             if (_trendHidden.has(st.key)) continue;
@@ -2146,7 +2452,7 @@ function initPrizeBoard(jobId) {
     window.showTrendTip = function(evt, text) {
       if (!_trendTipEl) {
         _trendTipEl = document.createElement("div");
-        _trendTipEl.style.cssText = "position:fixed;background:rgba(46,42,36,.92);color:#fff;font-size:12px;padding:5px 12px;border-radius:4px;pointer-events:none;z-index:9999;white-space:nowrap;line-height:1.4";
+        _trendTipEl.style.cssText = "position:fixed;background:rgba(43,39,33,.94);color:#fff;font-size:12px;padding:5px 12px;border-radius:4px;pointer-events:none;z-index:9999;white-space:nowrap;line-height:1.4";
         document.body.appendChild(_trendTipEl);
       }
       _trendTipEl.textContent = text;
@@ -2167,7 +2473,6 @@ function initPrizeBoard(jobId) {
     loadTrend();
 
     // --- Collapsible panels ---
-    localStorage.setItem("collapse_trendPanel", "1");
     document.querySelectorAll(".stats-panel, .reward-panel").forEach((panel, index) => {
       if (!panel.id) panel.id = "preview-panel-" + index;
       const h3 = panel.querySelector("h3");
@@ -2243,7 +2548,7 @@ function initPrizeBoard(jobId) {
         const isLast = !!(lastRewardCfg && t.rankMin === lastRewardCfg.rankMin && t.rankMax === lastRewardCfg.rankMax);
         _calcTiers.push({ name, min: t.rankMin, max: t.rankMax, inputId: id, isLast, pool: parseFloat(t.amount) || 0 });
         const label = document.createElement("label");
-        label.style.cssText = "font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px";
+        label.className = "calc-tier-label";
         label.innerHTML = name + "占比%";
         const input = document.createElement("input");
         input.id = id;
@@ -2252,7 +2557,7 @@ function initPrizeBoard(jobId) {
         input.min = "0";
         input.max = "100";
         input.value = pct.toFixed(1);
-        input.style.cssText = "width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none";
+        input.className = "calc-tier-input";
         label.appendChild(input);
         calcTierContainer.appendChild(label);
       }
@@ -2269,7 +2574,7 @@ function initPrizeBoard(jobId) {
         const id = "calcPct_" + t.min + "_" + t.max;
         _calcTiers.push({ name: t.name, min: t.min, max: t.max, inputId: id });
         const label = document.createElement("label");
-        label.style.cssText = "font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px";
+        label.className = "calc-tier-label";
         label.innerHTML = t.name + "占比%";
         const input = document.createElement("input");
         input.id = id;
@@ -2278,7 +2583,7 @@ function initPrizeBoard(jobId) {
         input.min = "0";
         input.max = "100";
         input.value = pct.toFixed(1);
-        input.style.cssText = "width:80px;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);outline:none";
+        input.className = "calc-tier-input";
         label.appendChild(input);
         calcTierContainer.appendChild(label);
       }
@@ -2406,13 +2711,30 @@ function initPrizeBoard(jobId) {
     }
   }
 })();
+
+// --- 吸顶子导航高亮 ---
+(() => {
+  const links = [...document.querySelectorAll(".subnav a")];
+  const targets = links.map(a => document.querySelector(a.getAttribute("href")));
+  const sync = () => {
+    let idx = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const el = targets[i];
+      if (el && el.offsetParent !== null && el.getBoundingClientRect().top <= 80) idx = i;
+    }
+    links.forEach((a, i) => a.classList.toggle("active", i === idx));
+  };
+  addEventListener("scroll", sync, { passive: true });
+  addEventListener("resize", sync);
+  sync();
+})();
 </script>
 
 <div id="snapshotModal" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-header">
       <h3>管理快照</h3>
-      <button id="snapModalClose" type="button" class="modal-close">✕</button>
+      <button id="snapModalClose" type="button" class="modal-close" aria-label="关闭"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>
     <div class="modal-body" id="snapModalBody"></div>
     <div class="modal-footer">
@@ -2422,18 +2744,18 @@ function initPrizeBoard(jobId) {
 </div>
 
 <div id="teamPickerModal" class="modal-overlay" style="display:none">
-  <div class="modal-box" style="min-width:300px;max-width:360px">
+  <div class="modal-box sm">
     <div class="modal-header">
       <h3>添加到团队</h3>
-      <button id="pickerClose" type="button" class="modal-close">✕</button>
+      <button id="pickerClose" type="button" class="modal-close" aria-label="关闭"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>
     <div class="modal-body">
-      <p style="font-size:13px;margin:6px 0" id="pickerNickDisplay"></p>
-      <select id="pickerTeamSelect" style="width:100%;height:34px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fffdf8;color:var(--ink);padding:0 8px"></select>
+      <p class="muted-note" id="pickerNickDisplay"></p>
+      <select id="pickerTeamSelect"></select>
     </div>
     <div class="modal-footer">
       <button id="pickerCancel" type="button" class="modal-close-btn">取消</button>
-      <button id="pickerConfirm" type="button" style="margin-left:8px;font-size:12px;padding:5px 18px;border:1px solid var(--line);border-radius:6px;background:#4a7c8c;color:#fff;cursor:pointer;font-weight:700">确认</button>
+      <button id="pickerConfirm" type="button" class="btn-primary">确认</button>
     </div>
   </div>
 </div>
