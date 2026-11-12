@@ -830,7 +830,18 @@ body.rewards .jobs-header {
   font-size: 13px;
   font-weight: 500;
 }
+body.rewards .jobs-header { flex-wrap: wrap; gap: 8px 12px; }
+body.rewards .paid-tabs { flex: none; }
+body.rewards .paid-tabs button { gap: 4px; }
+body.rewards .paid-tabs .tab-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+body.rewards .paid-tabs button.active .tab-count { color: var(--accent-ink); }
 body.rewards #jobCount {
+  margin-left: auto;
   min-width: 22px;
   height: 20px;
   padding: 0 6px;

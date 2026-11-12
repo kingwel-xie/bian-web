@@ -151,6 +151,10 @@
     <section class="panel jobs-panel">
       <div class="jobs-header">
         <span>奖励记录</span>
+        <span class="seg paid-tabs" id="paidTabs" role="tablist" aria-label="发放状态">
+          <button type="button" class="active" data-paid="pending" role="tab" aria-selected="true" aria-controls="jobList">待发放 <span class="tab-count" id="pendingCount">0</span></button>
+          <button type="button" data-paid="paid" role="tab" aria-selected="false" aria-controls="jobList">已发放 <span class="tab-count" id="paidCount">0</span></button>
+        </span>
         <b id="jobCount">0</b>
       </div>
       <div class="filter-bar">
@@ -241,6 +245,7 @@ let _modalTeam = "";
 let _modalIsEdit = false;
 let _modalTiers = {};
 let _allRecords = {};
+let _paidTab = "pending";
 let _totalCandidates = null;
 let _teamsCache = [];
 let _teamsMembers = {};
@@ -288,10 +293,18 @@ async function loadAll() {
 function renderJobs() {
   const entries = Object.entries(_allRecords);
   const q = searchInput.value.trim().toLowerCase();
-  let filtered = entries.filter(([jid, jRecords]) => {
+  const searched = entries.filter(([jid, jRecords]) => {
     if (!q) return true;
     return (jRecords.jobName || "").toLowerCase().includes(q);
   });
+  const isPaid = (r) => (r.totalRecords || 0) > 0 && !!r.allPaid;
+  const pending = searched.filter(([, r]) => !isPaid(r));
+  const paid = searched.filter(([, r]) => isPaid(r));
+  const pendingCountEl = document.getElementById("pendingCount");
+  if (pendingCountEl) pendingCountEl.textContent = pending.length;
+  const paidCountEl = document.getElementById("paidCount");
+  if (paidCountEl) paidCountEl.textContent = paid.length;
+  const filtered = (_paidTab === "paid" ? paid : pending).slice();
   jobCountEl.textContent = filtered.length;
   filtered.sort((a, b) => {
     const endA = a[1].activityEnd || "";
@@ -299,7 +312,8 @@ function renderJobs() {
     return endB.localeCompare(endA);
   });
   if (!filtered.length) {
-    jobListEl.innerHTML = '<div class="empty-state">' + (q ? "没有匹配的任务。" : "暂无奖励记录") + "</div>";
+    const emptyText = q ? "没有匹配的任务。" : (_paidTab === "paid" ? "暂无已发放奖励记录" : "暂无待发放奖励记录");
+    jobListEl.innerHTML = '<div class="empty-state">' + emptyText + "</div>";
     return;
   }
   let html = "";
@@ -606,6 +620,20 @@ function renderJobs() {
 }
 
 searchInput.addEventListener("input", renderJobs);
+
+document.querySelectorAll("#paidTabs button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const next = btn.dataset.paid;
+    if (next === _paidTab) return;
+    _paidTab = next;
+    document.querySelectorAll("#paidTabs button").forEach((b) => {
+      const on = b === btn;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    renderJobs();
+  });
+});
 
 // --- Modal ---
 let _modalRate = null;
