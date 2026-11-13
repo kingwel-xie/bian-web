@@ -149,7 +149,7 @@
   /* 行内小标记：安静的文字，不再用白字色块 */
   .team-tag { margin-left: 6px; padding: 0 4px; border-radius: var(--r-tag); background: var(--accent-soft); color: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: 1px; }
   .team-tag-btn {
-    display: inline-flex; align-items: center; gap: 3px;
+    display: inline-flex; align-items: center; gap: 0;
     height: 19px; min-height: 0; padding: 0 5px;
     border: 1px solid transparent; border-radius: var(--r-tag);
     background: var(--accent-soft); color: var(--accent-ink);
@@ -157,7 +157,15 @@
     vertical-align: 1px; cursor: pointer;
   }
   .team-tag-btn:hover { border-color: rgba(14, 116, 122, 0.35); background: rgba(14, 116, 122, 0.14); color: var(--accent-ink); }
-  .team-tag-btn .i { width: 10px; height: 10px; opacity: 0.7; }
+  .team-tag-btn .i {
+    width: 0; height: 10px; margin-left: 0; opacity: 0;
+    transition: width 120ms ease, margin-left 120ms ease, opacity 120ms ease;
+  }
+  tr:hover .team-tag-btn .i,
+  .team-tag-btn:focus-visible .i { width: 10px; margin-left: 3px; opacity: 0.7; }
+  @media (hover: none) {
+    .team-tag-btn .i { width: 10px; margin-left: 3px; opacity: 0.7; }
+  }
   .team-menu {
     position: fixed; z-index: 600; width: 220px; max-height: 280px; overflow-y: auto;
     padding: 4px; border: 1px solid var(--line); border-radius: 8px;
