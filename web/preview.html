@@ -149,11 +149,46 @@
   /* 行内小标记：安静的文字，不再用白字色块 */
   .team-tag { margin-left: 6px; padding: 0 4px; border-radius: var(--r-tag); background: var(--accent-soft); color: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: 1px; }
   .maddog-stars { margin-left: 6px; color: var(--ink-2); font-size: 11px; font-weight: 500; letter-spacing: 0; vertical-align: 1px; }
-  .md-step, .add-team-btn { display: inline-flex; align-items: center; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 500; line-height: 16px; vertical-align: 1px; cursor: pointer; user-select: none; }
-  .md-step { opacity: 0; transition: opacity 120ms ease; }
-  .add-team-btn { padding: 0 6px; }
+  .md-step { display: inline-flex; align-items: center; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 500; line-height: 16px; vertical-align: 1px; cursor: pointer; user-select: none; opacity: 0; transition: opacity 120ms ease; }
   tr:hover .md-step, .md-step:focus-visible { opacity: 1; }
-  .md-step:hover, .add-team-btn:hover { border-color: var(--line-strong); background: var(--paper); color: var(--ink); }
+  .md-step:hover { border-color: var(--line-strong); background: var(--paper); color: var(--ink); }
+  td.nick-cell { position: relative; padding-right: 34px; }
+  .add-team-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--muted);
+    box-shadow: 0 1px 3px rgba(43, 39, 33, 0.18);
+    opacity: 0;
+    transform: translateY(-50%) scale(0.92);
+    transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  }
+  .add-team-btn .i { width: 12px; height: 12px; }
+  tr:hover .add-team-btn,
+  .add-team-btn:focus-visible,
+  .nick-cell:focus-within .add-team-btn { opacity: 1; transform: translateY(-50%) scale(1); }
+  .add-team-btn:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(14, 116, 122, 0.28);
+  }
+  @media (hover: none) {
+    td.nick-cell { padding-right: 38px; }
+    .add-team-btn { width: 24px; height: 24px; opacity: 1; transform: translateY(-50%) scale(1); }
+  }
 
   .chg-up { color: var(--up); font-weight: 500; }
   .chg-down { color: var(--down); font-weight: 500; }
@@ -340,6 +375,7 @@
   <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
   <symbol id="i-sort" viewBox="0 0 24 24"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/></symbol>
   <symbol id="i-sort-down" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="m6 14 6 6 6-6"/></symbol>
@@ -1790,13 +1826,13 @@ function setCountdown(text, urgent) {
         ? `${escapeHtml(r.nickname || "—")}${tagHtml}${starsHtml}${stepperHtml}`
         : teamName
           ? `${escapeHtml(r.nickname || "—")}${tagHtml}`
-          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}">+</button>`;
+          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}"><svg class="i i-xs" aria-hidden="true"><use href="#i-plus"/></svg></button>`;
       const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
         : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
         : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
         : `<span class="chg-flat">-</span>`;
       return `<tr><td>${escapeHtml(r.rank)}</td>
-        <td class="tl">${nickHtml}</td>
+        <td class="tl nick-cell">${nickHtml}</td>
         <td class="tl">${escapeHtml(r.userId || "—")}</td>
         <td class="num">${fmtNumber(r._g)}</td>
         <td class="num">${fmtNumber(r._v)}</td>
