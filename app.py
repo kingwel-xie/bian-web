@@ -5125,6 +5125,13 @@ def _team_member_key(m: dict) -> str:
     return (m.get("nickname") or "").strip().lower()
 
 
+def _team_member_matches(m: dict, nickname_key: str, user_id: str) -> bool:
+    member_uid = str(m.get("userId") or "").strip()
+    if user_id and member_uid:
+        return member_uid == user_id
+    return bool(nickname_key) and _team_member_key(m) == nickname_key
+
+
 def _team_item(member: dict, weight: int = 1) -> dict:
     return {
         "nickname": str(member.get("nickname") or ""),
@@ -5265,17 +5272,18 @@ def api_delete_member() -> Response:
     body = request.get_json(force=True)
     team_idx = body.get("teamIndex")
     nickname = str(body.get("nickname") or "").strip().lower()
+    user_id = str(body.get("userId") or "").strip()
     teams = db.get("teams") or []
     if team_idx is not None and 0 <= team_idx < len(teams):
         teams[team_idx]["members"] = [
             m for m in (teams[team_idx].get("members") or [])
-            if _team_member_key(m) != nickname
+            if not _team_member_matches(m, nickname, user_id)
         ]
     else:
         for team in teams:
             team["members"] = [
                 m for m in (team.get("members") or [])
-                if _team_member_key(m) != nickname
+                if not _team_member_matches(m, nickname, user_id)
             ]
     db["updatedAt"] = datetime.now(timezone.utc).isoformat()
     save_teams_db(db)
@@ -5313,6 +5321,15 @@ def api_add_member() -> Response:
     if team_idx < 0 or team_idx >= len(teams):
         return jsonify({"error": "团队索引无效"}), 400
     member = _team_item(body, weight=int(body.get("weight", 1)))
+    member_key = _team_member_key(member)
+    member_uid = str(member.get("userId") or "").strip()
+    # 成员限定在单个团队：加入新团队前先从其他团队移除（掩码昵称按 userId 识别）
+    if member_key or member_uid:
+        for other in teams:
+            other["members"] = [
+                m for m in (other.get("members") or [])
+                if not _team_member_matches(m, member_key, member_uid)
+            ]
     teams[team_idx].setdefault("members", []).append(member)
     db["updatedAt"] = datetime.now(timezone.utc).isoformat()
     save_teams_db(db)

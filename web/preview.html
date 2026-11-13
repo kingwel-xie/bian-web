@@ -148,6 +148,38 @@
 
   /* 行内小标记：安静的文字，不再用白字色块 */
   .team-tag { margin-left: 6px; padding: 0 4px; border-radius: var(--r-tag); background: var(--accent-soft); color: var(--accent-ink); font-family: var(--mono); font-size: 11px; font-weight: 500; vertical-align: 1px; }
+  .team-tag-btn {
+    display: inline-flex; align-items: center; gap: 3px;
+    height: 19px; min-height: 0; padding: 0 5px;
+    border: 1px solid transparent; border-radius: var(--r-tag);
+    background: var(--accent-soft); color: var(--accent-ink);
+    font-family: var(--mono); font-size: 11px; font-weight: 500; line-height: 1;
+    vertical-align: 1px; cursor: pointer;
+  }
+  .team-tag-btn:hover { border-color: rgba(14, 116, 122, 0.35); background: rgba(14, 116, 122, 0.14); color: var(--accent-ink); }
+  .team-tag-btn .i { width: 10px; height: 10px; opacity: 0.7; }
+  .team-menu {
+    position: fixed; z-index: 600; width: 220px; max-height: 280px; overflow-y: auto;
+    padding: 4px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); box-shadow: 0 12px 32px rgba(30, 26, 20, 0.18);
+  }
+  .team-menu[hidden] { display: none; }
+  .team-menu-head { padding: 6px 8px 4px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-menu-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; min-height: 28px; padding: 0 8px; border: 0; border-radius: 4px;
+    background: transparent; color: var(--ink); font-size: 12px; font-weight: 400; text-align: left;
+  }
+  .team-menu-item:hover { background: var(--surface-2); color: var(--ink); }
+  .team-menu-item.current { color: var(--accent-ink); }
+  .team-menu-flag { font-family: var(--mono); font-size: 10px; color: var(--accent-ink); }
+  .team-menu-remove {
+    display: flex; align-items: center; width: 100%; min-height: 30px; margin-top: 4px; padding: 0 8px;
+    border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    background: transparent; color: var(--up); font-size: 12px; font-weight: 400; text-align: left;
+  }
+  .team-menu-remove:hover { background: rgba(176, 42, 36, 0.06); color: var(--up); }
+  .team-menu-remove[hidden] { display: none; }
   .maddog-stars { margin-left: 6px; color: var(--ink-2); font-size: 11px; font-weight: 500; letter-spacing: 0; vertical-align: 1px; }
   .md-step { display: inline-flex; align-items: center; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 500; line-height: 16px; vertical-align: 1px; cursor: pointer; user-select: none; opacity: 0; transition: opacity 120ms ease; }
   tr:hover .md-step, .md-step:focus-visible { opacity: 1; }
@@ -210,8 +242,8 @@
   }
   button:hover, .downloads a:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: not-allowed; }
-  .btn-primary, #calcBtn, #loadDeltaBtn, #refreshRewardBtn, #refreshPrizeBtn, #pickerConfirm { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn-primary:hover, #calcBtn:hover, #loadDeltaBtn:hover, #refreshRewardBtn:hover, #refreshPrizeBtn:hover, #pickerConfirm:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+  .btn-primary, #calcBtn, #loadDeltaBtn, #refreshRewardBtn, #refreshPrizeBtn { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover, #calcBtn:hover, #loadDeltaBtn:hover, #refreshRewardBtn:hover, #refreshPrizeBtn:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
 
   input, select {
     height: 32px; padding: 0 10px;
@@ -374,6 +406,7 @@
   <symbol id="i-sort" viewBox="0 0 24 24"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/></symbol>
   <symbol id="i-sort-down" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="m6 14 6 6 6-6"/></symbol>
   <symbol id="i-sort-up" viewBox="0 0 24 24"><path d="M12 20V4"/><path d="m6 10 6-6 6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
   <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
   <symbol id="i-chevrons-left" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
@@ -1686,39 +1719,50 @@ function setCountdown(text, urgent) {
     }
     function resetScroll() { if (_vWrap) _vWrap.scrollTop = 0; }
 
-    // populate team filter
+    // team filter + stats（成员变更后就地刷新）
     const teamFilterEl = document.getElementById("teamFilter");
-    const allTeams = [...new Set(Object.values(teamOfUser))].sort();
-    teamFilterEl.innerHTML = '<option value="">全部</option>' + allTeams.map(t =>
-      `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`
-    ).join("");
-
-    // team stats
     const teamSizes = (preview.teamSizes || {});
-    const teamMap = {};
-    for (const r of allRows) {
-      const t = teamOf(r);
-      if (t) {
-        if (!teamMap[t]) teamMap[t] = { count: 0, totalGrade: 0, totalDelta: 0 };
-        teamMap[t].count++;
-        teamMap[t].totalGrade += r._g;
-        teamMap[t].totalDelta += r._dg;
-      }
-    }
-    const teamEntries = Object.entries(teamMap).sort((a, b) => b[1].count - a[1].count);
     const teamStatEl = document.getElementById("teamStatsPanel");
     const teamBody = document.getElementById("teamStatsBody");
-    if (teamEntries.length) {
-      teamStatEl.style.display = "";
-      teamBody.innerHTML = teamEntries.map(([name, st]) => {
-        const total = teamSizes[name] || st.count;
-        const pct = totalVolume ? (st.totalGrade / totalVolume * 100).toFixed(1) + "%" : "—";
-        const dpct = totalDelta ? (st.totalDelta / totalDelta * 100).toFixed(1) + "%" : "—";
-        return `<tr><td><b>${escapeHtml(name)}</b></td><td class="num">${st.count}/${total}</td><td class="num">${fmtVolume(st.totalGrade)}</td><td class="num">${pct}</td><td class="num">${dpct}</td></tr>`;
-      }).join("");
-    }
-
     let teamFilter = "";
+    function refreshTeamPanel() {
+      const prev = teamFilterEl.value;
+      const allTeams = [...new Set(Object.values(teamOfUser))].sort();
+      teamFilterEl.innerHTML = '<option value="">全部</option>' + allTeams.map(t =>
+        `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`
+      ).join("");
+      if ([...teamFilterEl.options].some(o => o.value === prev)) {
+        teamFilterEl.value = prev;
+      } else {
+        teamFilterEl.value = "";
+        teamFilter = "";
+      }
+      const teamMap = {};
+      for (const r of allRows) {
+        const t = teamOf(r);
+        if (t) {
+          if (!teamMap[t]) teamMap[t] = { count: 0, totalGrade: 0, totalDelta: 0 };
+          teamMap[t].count++;
+          teamMap[t].totalGrade += r._g;
+          teamMap[t].totalDelta += r._dg;
+        }
+      }
+      const teamEntries = Object.entries(teamMap).sort((a, b) => b[1].count - a[1].count);
+      if (teamEntries.length) {
+        teamStatEl.style.display = "";
+        teamBody.innerHTML = teamEntries.map(([name, st]) => {
+          const total = teamSizes[name] || st.count;
+          const pct = totalVolume ? (st.totalGrade / totalVolume * 100).toFixed(1) + "%" : "—";
+          const dpct = totalDelta ? (st.totalDelta / totalDelta * 100).toFixed(1) + "%" : "—";
+          return `<tr><td><b>${escapeHtml(name)}</b></td><td class="num">${st.count}/${total}</td><td class="num">${fmtVolume(st.totalGrade)}</td><td class="num">${pct}</td><td class="num">${dpct}</td></tr>`;
+        }).join("");
+      } else {
+        teamStatEl.style.display = "none";
+        teamBody.innerHTML = "";
+      }
+    }
+    refreshTeamPanel();
+
     let rankChangeSort = "";
 
     function updatePager(total, totalPages) {
@@ -1815,12 +1859,14 @@ function setCountdown(text, urgent) {
       const stepperHtml = isMD
         ? `<button type="button" class="md-step md-minus" data-nick="${escapeHtml(r.nickname)}" title="MadDog -1">−</button><button type="button" class="md-step md-plus" data-nick="${escapeHtml(r.nickname)}" title="MadDog +1">+</button>`
         : "";
-      const tagHtml = teamName ? `<sup class="team-tag">${escapeHtml(teamName)}</sup>` : "";
+      const tagHtml = teamName
+        ? `<button type="button" class="team-tag team-tag-btn" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}" data-team="${escapeHtml(teamName)}" title="更换或移出团队">${escapeHtml(teamName)}<svg class="i i-xs" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>`
+        : "";
       const nickHtml = isMD
         ? `${escapeHtml(r.nickname || "—")}${tagHtml}${starsHtml}${stepperHtml}`
         : teamName
           ? `${escapeHtml(r.nickname || "—")}${tagHtml}`
-          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" aria-label="添加 ${escapeHtml(r.nickname || "用户")} 到团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}"><svg class="i i-xs" aria-hidden="true"><use href="#i-plus"/></svg></button>`;
+          : `${escapeHtml(r.nickname || "—")}<button type="button" class="add-team-btn" title="加入团队" aria-label="将 ${escapeHtml(r.nickname || "用户")} 加入团队" data-nick="${escapeHtml(r.nickname)}" data-uid="${escapeHtml(r.userId || "")}"><svg class="i i-xs" aria-hidden="true"><use href="#i-plus"/></svg></button>`;
       const chgHtml = r._pr == null ? `<span class="chg-new">N</span>`
         : r._pr > r.rank ? `<span class="chg-up">↑${r._pr - r.rank}</span>`
         : r._pr < r.rank ? `<span class="chg-down">↓${r.rank - r._pr}</span>`
@@ -2656,64 +2702,167 @@ function setCountdown(text, urgent) {
       }
     }
     document.getElementById("calcBtn").addEventListener("click", _calcReward);
-    // --- Team picker ---
-    let _pickerNick = "", _pickerUid = "";
-    const pickerModal = document.getElementById("teamPickerModal");
-    const pickerNickDisplay = document.getElementById("pickerNickDisplay");
-    const pickerTeamSelect = document.getElementById("pickerTeamSelect");
-    const pickerConfirm = document.getElementById("pickerConfirm");
-    const pickerCancel = document.getElementById("pickerCancel");
-    const pickerClose = document.getElementById("pickerClose");
+    // --- Team quick menu（成员只能属于一个团队）---
+    const teamMenu = document.getElementById("teamMenu");
+    const teamMenuHead = document.getElementById("teamMenuHead");
+    const teamMenuList = document.getElementById("teamMenuList");
+    const teamMenuRemove = document.getElementById("teamMenuRemove");
+    let _teamMenuState = null;
 
-    function hidePicker() { pickerModal.style.display = "none"; }
-    pickerCancel.addEventListener("click", hidePicker);
-    pickerClose.addEventListener("click", hidePicker);
-    pickerModal.addEventListener("click", evt => { if (evt.target === pickerModal) hidePicker(); });
-
-    pickerConfirm.addEventListener("click", async () => {
-      const idx = parseInt(pickerTeamSelect.value);
-      if (isNaN(idx) || idx < 0) { showToast("请选择团队"); return; }
-      try {
-        const resp = await fetch("/api/teams/member", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ teamIndex: idx, nickname: _pickerNick, userId: _pickerUid, weight: 1 }),
-        });
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        const teamName = pickerTeamSelect.options[pickerTeamSelect.selectedIndex].text;
-        if (MASKED_NICK_RE.test((_pickerNick || "").trim())) teamOfUser[((_pickerUid || "").trim()) + "|" + (_pickerNick || "")] = teamName;
-        else teamOfUser[_pickerNick] = teamName;
-        hidePicker();
-        renderRows();
-      } catch (err) {
-        showToast("添加失败: " + err.message);
+    function teamMapKey(nick, uid) {
+      return MASKED_NICK_RE.test((nick || "").trim())
+        ? ((uid || "").trim() + "|" + nick)
+        : nick;
+    }
+    function closeTeamMenu(refocus) {
+      const st = _teamMenuState;
+      teamMenu.hidden = true;
+      _teamMenuState = null;
+      if (refocus && st && st.trigger) st.trigger.focus();
+    }
+    function findTeamMember(teams, nick, uid) {
+      const masked = MASKED_NICK_RE.test((nick || "").trim());
+      const ln = (nick || "").trim().toLowerCase();
+      const u = (uid || "").trim();
+      for (let ti = 0; ti < teams.length; ti++) {
+        for (const m of teams[ti].members || []) {
+          const mn = (m.nickname || "").trim();
+          if (masked) {
+            if (u && mn && String(m.userId || "").trim() === u && (mn[0] + "*****") === nick) return { ti, member: m };
+          } else if (mn.toLowerCase() === ln) {
+            return { ti, member: m };
+          }
+        }
       }
-    });
-
-    document.getElementById("rows").addEventListener("click", async evt => {
-      const btn = evt.target.closest(".add-team-btn");
-      if (!btn) return;
-      _pickerNick = btn.dataset.nick;
-      _pickerUid = btn.dataset.uid;
-      pickerNickDisplay.textContent = "将 " + _pickerNick + " 添加到团队";
+      return null;
+    }
+    function positionTeamMenu(trigger) {
+      const r = trigger.getBoundingClientRect();
+      const mw = teamMenu.offsetWidth || 220;
+      const mh = teamMenu.offsetHeight || 200;
+      let left = Math.min(r.left, window.innerWidth - mw - 8);
+      let top = r.bottom + 6;
+      if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+      teamMenu.style.left = Math.max(8, left) + "px";
+      teamMenu.style.top = Math.round(top) + "px";
+    }
+    function setTeamMenuBusy(busy) {
+      teamMenuList.querySelectorAll("button").forEach(b => { b.disabled = busy; });
+      teamMenuRemove.disabled = busy;
+    }
+    async function openTeamMenu(trigger) {
+      const nick = trigger.dataset.nick || "";
+      const uid = trigger.dataset.uid || "";
+      const current = trigger.dataset.team || "";
+      teamMenu.hidden = false;
+      teamMenuHead.textContent = "加载团队…";
+      teamMenuList.innerHTML = "";
+      teamMenuRemove.hidden = true;
+      positionTeamMenu(trigger);
       try {
         const resp = await fetch("/api/teams");
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
         const teams = (data.db && data.db.teams) || data.teams || [];
-        pickerTeamSelect.innerHTML = teams.map((t, i) =>
-          `<option value="${i}">${escapeHtml(t.name)}</option>`
-        ).join("");
         if (!teams.length) {
+          closeTeamMenu(false);
           showToast("没有团队，请先在团队管理页面创建");
           return;
         }
-        pickerModal._opener = document.activeElement;
-        pickerModal.style.display = "";
-        pickerTeamSelect.focus();
+        _teamMenuState = { teams, nick, uid, current, trigger };
+        teamMenuHead.textContent = nick + " 的团队";
+        teamMenuList.innerHTML = teams.map((t, i) => {
+          const cur = t.name === current;
+          return `<button type="button" class="team-menu-item${cur ? " current" : ""}" data-team-index="${i}" role="menuitemradio" aria-checked="${cur}"><span>${escapeHtml(t.name)}</span>${cur ? '<span class="team-menu-flag">当前</span>' : ""}</button>`;
+        }).join("");
+        teamMenuRemove.hidden = !current;
+        teamMenuRemove.disabled = false;
+        if (current) teamMenuRemove.textContent = "从「" + current + "」移出";
+        positionTeamMenu(trigger);
+        const first = teamMenuList.querySelector("button");
+        if (first) first.focus();
       } catch (err) {
+        closeTeamMenu(false);
         showToast("加载团队失败: " + err.message);
       }
+    }
+    async function chooseTeam(idx) {
+      const st = _teamMenuState;
+      if (!st) return;
+      const target = st.teams[idx];
+      if (!target) return;
+      if (target.name === st.current) { closeTeamMenu(true); return; }
+      const found = findTeamMember(st.teams, st.nick, st.uid);
+      const nickname = found ? found.member.nickname : st.nick;
+      const weight = found ? (Number(found.member.weight) || 1) : 1;
+      setTeamMenuBusy(true);
+      try {
+        const resp = await fetch("/api/teams/member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIndex: idx, nickname, userId: st.uid, weight }),
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const key = teamMapKey(st.nick, st.uid);
+        if (st.current) teamSizes[st.current] = Math.max(0, (teamSizes[st.current] || 1) - 1);
+        teamSizes[target.name] = (teamSizes[target.name] || 0) + 1;
+        teamOfUser[key] = target.name;
+        closeTeamMenu(true);
+        refreshTeamPanel();
+        _dirtyRows = true;
+        renderRows();
+        showToast("已加入 " + target.name);
+      } catch (err) {
+        setTeamMenuBusy(false);
+        showToast("操作失败: " + err.message);
+      }
+    }
+    async function removeTeamMembership() {
+      const st = _teamMenuState;
+      if (!st || !st.current) return;
+      const found = findTeamMember(st.teams, st.nick, st.uid);
+      const nickname = found ? found.member.nickname : st.nick;
+      setTeamMenuBusy(true);
+      try {
+        const resp = await fetch("/api/teams/member", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nickname, userId: st.uid }),
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        teamSizes[st.current] = Math.max(0, (teamSizes[st.current] || 1) - 1);
+        delete teamOfUser[teamMapKey(st.nick, st.uid)];
+        closeTeamMenu(true);
+        refreshTeamPanel();
+        _dirtyRows = true;
+        renderRows();
+        showToast("已移出 " + st.current);
+      } catch (err) {
+        setTeamMenuBusy(false);
+        showToast("操作失败: " + err.message);
+      }
+    }
+    teamMenuList.addEventListener("click", evt => {
+      const item = evt.target.closest(".team-menu-item");
+      if (item) chooseTeam(Number(item.dataset.teamIndex));
+    });
+    teamMenuRemove.addEventListener("click", removeTeamMembership);
+    document.addEventListener("pointerdown", evt => {
+      if (teamMenu.hidden) return;
+      if (teamMenu.contains(evt.target)) return;
+      if (evt.target.closest(".add-team-btn, .team-tag-btn")) return;
+      closeTeamMenu(false);
+    });
+    document.addEventListener("keydown", evt => {
+      if (evt.key === "Escape" && !teamMenu.hidden) closeTeamMenu(true);
+    });
+    _vWrap.addEventListener("scroll", () => { if (!teamMenu.hidden) closeTeamMenu(false); }, { passive: true });
+    window.addEventListener("resize", () => { if (!teamMenu.hidden) closeTeamMenu(false); });
+
+    document.getElementById("rows").addEventListener("click", evt => {
+      const trigger = evt.target.closest(".add-team-btn, .team-tag-btn");
+      if (!trigger) return;
+      openTeamMenu(trigger);
     });
 
     document.getElementById("rows").addEventListener("click", async evt => {
@@ -2769,7 +2918,6 @@ function setCountdown(text, urgent) {
       });
     }
     installModalAccessibility(document.getElementById("snapshotModal"));
-    installModalAccessibility(pickerModal);
   } catch (err) {
     if (String(err.message).includes("任务未完成")) {
       renderScrapingState(jobId, "任务正在抓取中，完成后将自动刷新。");
@@ -2810,21 +2958,11 @@ function setCountdown(text, urgent) {
   </div>
 </div>
 
-<div id="teamPickerModal" class="modal-overlay" style="display:none">
-  <div class="modal-box sm">
-    <div class="modal-header">
-      <h3>添加到团队</h3>
-      <button id="pickerClose" type="button" class="modal-close" aria-label="关闭"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <p class="muted-note" id="pickerNickDisplay"></p>
-      <select id="pickerTeamSelect"></select>
-    </div>
-    <div class="modal-footer">
-      <button id="pickerCancel" type="button" class="modal-close-btn">取消</button>
-      <button id="pickerConfirm" type="button" class="btn-primary">确认</button>
-    </div>
-  </div>
+<div id="teamMenu" class="team-menu" hidden role="menu" aria-label="选择团队">
+  <div class="team-menu-head" id="teamMenuHead"></div>
+  <div id="teamMenuList"></div>
+  <button type="button" class="team-menu-remove" id="teamMenuRemove" hidden></button>
+</div>
 </div>
 
 </body>
