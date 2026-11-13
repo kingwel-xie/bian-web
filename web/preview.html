@@ -152,33 +152,28 @@
   .md-step { display: inline-flex; align-items: center; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-tag); background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 500; line-height: 16px; vertical-align: 1px; cursor: pointer; user-select: none; opacity: 0; transition: opacity 120ms ease; }
   tr:hover .md-step, .md-step:focus-visible { opacity: 1; }
   .md-step:hover { border-color: var(--line-strong); background: var(--paper); color: var(--ink); }
-  td.nick-cell { position: relative; padding-right: 44px; }
   .add-team-btn {
-    position: absolute;
-    top: 50%;
-    right: 12px;
-    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 16px;
     height: 16px;
     min-height: 0;
-    margin: 0;
+    margin: 0 0 0 10px;
     padding: 0;
     border: 1px solid var(--line-strong);
     border-radius: 50%;
     background: var(--surface);
     color: var(--muted);
     box-shadow: 0 1px 2px rgba(43, 39, 33, 0.16);
+    vertical-align: -2px;
     opacity: 0;
-    transform: translateY(-50%) scale(0.9);
+    transform: translateY(1px) scale(0.9);
     transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
   }
   .add-team-btn .i { width: 10px; height: 10px; stroke-width: 2; }
   tr:hover .add-team-btn,
-  .add-team-btn:focus-visible,
-  .nick-cell:focus-within .add-team-btn { opacity: 1; transform: translateY(-50%) scale(1); }
+  .add-team-btn:focus-visible { opacity: 1; transform: translateY(0) scale(1); }
   .add-team-btn:hover {
     border-color: var(--accent);
     background: var(--accent);
@@ -186,8 +181,7 @@
     box-shadow: 0 2px 6px rgba(14, 116, 122, 0.28);
   }
   @media (hover: none) {
-    td.nick-cell { padding-right: 46px; }
-    .add-team-btn { width: 20px; height: 20px; opacity: 1; transform: translateY(-50%) scale(1); }
+    .add-team-btn { width: 20px; height: 20px; opacity: 1; transform: translateY(0) scale(1); }
   }
 
   .chg-up { color: var(--up); font-weight: 500; }
